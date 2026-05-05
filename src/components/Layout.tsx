@@ -281,6 +281,15 @@ export function Layout() {
                       {category.nome}
                     </Link>
                   ))}
+                  <Link
+                    to="/sorteios"
+                    className={cn(
+                      "text-sm font-semibold tracking-wide uppercase text-secondary hover:text-primary transition-colors py-3 flex items-center",
+                      location.pathname === '/sorteios' ? 'text-primary' : ''
+                    )}
+                  >
+                    Sorteios
+                  </Link>
                 </div>
               </nav>
            </div>
@@ -345,6 +354,13 @@ export function Layout() {
                 {category.nome}
               </Link>
             ))}
+            <Link
+              to="/sorteios"
+              onClick={closeMenu}
+              className="block px-3 py-3 text-sm font-semibold uppercase tracking-wide text-secondary hover:text-primary hover:bg-neutral-50 rounded-md"
+            >
+              Sorteios
+            </Link>
              <div className="border-t border-neutral-100 pt-4 mt-2 flex flex-col gap-4 px-3">
                <Link to="/account" onClick={closeMenu} className="flex items-center text-sm font-semibold uppercase text-secondary hover:text-primary">
                  <User className="w-4 h-4 mr-3" /> Minha Conta
