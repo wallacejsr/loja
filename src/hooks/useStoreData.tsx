@@ -1,6 +1,6 @@
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Product } from '../data/mockData';
-import { Banner, createBanner, createProduct, deleteBanner, deleteProduct, getBanners, getCategories, getInstagramFeed, getProducts, InstagramPost, ProductInput, StoreCategory, updateBannerPositions, updateProduct } from '../lib/storeApi';
+import { Banner, CategoryInput, createBanner, createCategory, createProduct, deleteBanner, deleteCategory, deleteProduct, getBanners, getCategories, getInstagramFeed, getProducts, InstagramPost, ProductInput, StoreCategory, updateBannerPositions, updateCategory, updateProduct } from '../lib/storeApi';
 
 interface StoreDataContextValue {
   products: Product[];
@@ -13,6 +13,9 @@ interface StoreDataContextValue {
   addProduct: (product: ProductInput) => Promise<void>;
   editProduct: (id: string, product: ProductInput) => Promise<void>;
   removeProduct: (id: string) => Promise<void>;
+  addCategory: (category: CategoryInput) => Promise<void>;
+  editCategory: (id: string, category: CategoryInput) => Promise<void>;
+  removeCategory: (id: string) => Promise<void>;
   addBanner: (banner: Pick<Banner, 'title' | 'desktop' | 'mobile' | 'link'>) => Promise<void>;
   removeBanner: (id: string) => Promise<void>;
   reorderBanners: (index: number, direction: 'up' | 'down') => Promise<void>;
@@ -80,6 +83,23 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
     await refresh();
   }, [refresh]);
 
+  const addCategory = useCallback(async (category: CategoryInput) => {
+    const created = await createCategory(category);
+    setCategories((current) => [...current, created].sort((a, b) => a.menuOrder - b.menuOrder || a.nome.localeCompare(b.nome)));
+  }, []);
+
+  const editCategory = useCallback(async (id: string, category: CategoryInput) => {
+    const updated = await updateCategory(id, category);
+    setCategories((current) => current
+      .map((item) => (item.id === id ? { ...item, ...updated } : item))
+      .sort((a, b) => a.menuOrder - b.menuOrder || a.nome.localeCompare(b.nome)));
+  }, []);
+
+  const removeCategory = useCallback(async (id: string) => {
+    await deleteCategory(id);
+    setCategories((current) => current.filter((category) => category.id !== id));
+  }, []);
+
   const removeBanner = useCallback(async (id: string) => {
     await deleteBanner(id);
     setBanners((current) => current.filter((banner) => banner.id !== id));
@@ -110,11 +130,14 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
       addProduct,
       editProduct,
       removeProduct,
+      addCategory,
+      editCategory,
+      removeCategory,
       addBanner,
       removeBanner,
       reorderBanners,
     }),
-    [products, categories, banners, instagramFeed, loading, error, refresh, addProduct, editProduct, removeProduct, addBanner, removeBanner, reorderBanners],
+    [products, categories, banners, instagramFeed, loading, error, refresh, addProduct, editProduct, removeProduct, addCategory, editCategory, removeCategory, addBanner, removeBanner, reorderBanners],
   );
 
   return <StoreDataContext.Provider value={value}>{children}</StoreDataContext.Provider>;

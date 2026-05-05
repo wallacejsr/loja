@@ -27,9 +27,14 @@ create table if not exists public.categories (
   slug text not null unique,
   imagem text default '',
   status text not null default 'Ativo',
+  show_in_menu boolean not null default false,
+  menu_order integer not null default 100,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.categories add column if not exists show_in_menu boolean not null default false;
+alter table public.categories add column if not exists menu_order integer not null default 100;
 
 create table if not exists public.banners (
   id uuid primary key default gen_random_uuid(),
@@ -82,7 +87,9 @@ alter table public.store_settings add column if not exists support_email text de
 alter table public.store_settings add column if not exists support_week_hours text default '';
 alter table public.store_settings add column if not exists support_saturday_hours text default '';
 
-create or replace view public.categories_with_product_count as
+drop view if exists public.categories_with_product_count;
+
+create view public.categories_with_product_count as
 select
   c.*,
   count(p.id)::integer as product_count

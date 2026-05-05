@@ -5,10 +5,12 @@ import { useCart } from '../context/CartContext';
 import { cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '../hooks/useSettings';
+import { useStoreData } from '../hooks/useStoreData';
 
 export function Layout() {
   const { t } = useTranslation();
   const { settings } = useSettings();
+  const { categories } = useStoreData();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
@@ -45,6 +47,13 @@ export function Layout() {
     { name: t('nav.shirts'), path: '/catalog?category=Camisas' },
     { name: 'Sorteios', path: '/sorteios' },
   ];
+
+  const activeCategories = categories
+    .filter((category) => category.status === 'Ativo')
+    .sort((a, b) => a.menuOrder - b.menuOrder || a.nome.localeCompare(b.nome));
+  const menuCategories = activeCategories.filter((category) => category.showInMenu);
+  const visibleMenuCategories = menuCategories.slice(0, 7);
+  const hiddenMenuCategories = activeCategories.filter((category) => !visibleMenuCategories.some((visible) => visible.id === category.id));
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-secondary font-sans selection:bg-primary/20 selection:text-primary">
@@ -240,24 +249,36 @@ export function Layout() {
         <div className="hidden lg:block bg-[#f6f2ec] border-t border-neutral-100">
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <nav className="flex items-center">
-                <div className="flex items-center gap-2 text-secondary font-bold py-3 pr-6 border-r border-[#e8dccb] cursor-pointer hover:text-primary transition-colors">
+                <div className="relative group/categories flex items-center gap-2 text-secondary font-bold py-3 pr-6 border-r border-[#e8dccb] cursor-pointer hover:text-primary transition-colors">
                   <Menu className="w-5 h-5 text-primary" />
                   <span className="text-sm font-bold uppercase tracking-wider">Todas as Categorias</span>
                   <ChevronDown className="w-4 h-4 ml-1 text-secondary/50" />
+                  <div className="absolute top-full left-0 w-72 bg-white rounded-b-md shadow-[0_14px_30px_-12px_rgba(0,0,0,0.18)] border border-neutral-100 opacity-0 invisible group-hover/categories:opacity-100 group-hover/categories:visible transition-all duration-200 z-50 py-3">
+                    {hiddenMenuCategories.length ? hiddenMenuCategories.map((category) => (
+                      <Link
+                        key={category.id}
+                        to={`/catalog?category=${encodeURIComponent(category.nome)}`}
+                        className="block px-4 py-2.5 text-[13px] font-semibold uppercase tracking-wide text-secondary hover:text-primary hover:bg-neutral-50 transition-colors"
+                      >
+                        {category.nome}
+                      </Link>
+                    )) : (
+                      <div className="px-4 py-3 text-[12px] font-medium text-neutral-400">Nenhuma categoria adicional.</div>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="flex items-center pl-6 space-x-6 xl:space-x-8">
-                  {navLinks.map((link) => (
+                  {visibleMenuCategories.map((category) => (
                     <Link
-                      key={link.name}
-                      to={link.path}
+                      key={category.id}
+                      to={`/catalog?category=${encodeURIComponent(category.nome)}`}
                       className={cn(
                         "text-sm font-semibold tracking-wide uppercase text-secondary hover:text-primary transition-colors py-3 flex items-center",
-                         location.search.includes(link.name) ? 'text-primary' : ''
+                         location.search.includes(category.nome) ? 'text-primary' : ''
                       )}
                     >
-                      {link.name}
-                      {link.hasDropdown && <ChevronDown className="w-3 h-3 ml-1 text-secondary/50" />}
+                      {category.nome}
                     </Link>
                   ))}
                 </div>
@@ -314,14 +335,14 @@ export function Layout() {
                </form>
             </div>
             
-            {navLinks.map((link) => (
+            {activeCategories.map((category) => (
               <Link
-                key={link.name}
-                to={link.path}
+                key={category.id}
+                to={`/catalog?category=${encodeURIComponent(category.nome)}`}
                 onClick={closeMenu}
                 className="block px-3 py-3 text-sm font-semibold uppercase tracking-wide text-secondary hover:text-primary hover:bg-neutral-50 rounded-md"
               >
-                {link.name}
+                {category.nome}
               </Link>
             ))}
              <div className="border-t border-neutral-100 pt-4 mt-2 flex flex-col gap-4 px-3">

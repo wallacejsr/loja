@@ -4,11 +4,22 @@ import { isSupabaseConfigured, supabase } from './supabase';
 
 export interface StoreCategory {
   id: string;
-  nome: Product['categoria'];
+  nome: string;
   imagem: string;
   slug: string;
   status: 'Ativo' | 'Inativo';
+  showInMenu: boolean;
+  menuOrder: number;
   productCount?: number;
+}
+
+export interface CategoryInput {
+  nome: string;
+  slug: string;
+  imagem?: string;
+  status: 'Ativo' | 'Inativo';
+  showInMenu: boolean;
+  menuOrder: number;
 }
 
 export interface Banner {
@@ -83,6 +94,8 @@ const toCategory = (row: any): StoreCategory => ({
   imagem: row.imagem || '',
   slug: row.slug || String(row.nome).toLowerCase().replace(/\s+/g, '-'),
   status: row.status || 'Ativo',
+  showInMenu: Boolean(row.show_in_menu),
+  menuOrder: Number(row.menu_order || 100),
   productCount: row.product_count,
 });
 
@@ -284,23 +297,106 @@ export async function deleteProduct(id: string): Promise<void> {
 
 export async function getCategories(): Promise<StoreCategory[]> {
   if (!isSupabaseConfigured || !supabase) {
-    return mockCategories.map((category) => ({
+    return mockCategories.map((category, index) => ({
       id: category.nome,
       nome: category.nome,
       imagem: category.imagem,
       slug: category.nome.toLowerCase().replace(/\s+/g, '-'),
       status: 'Ativo',
+      showInMenu: true,
+      menuOrder: index + 1,
       productCount: mockProducts.filter((product) => product.categoria === category.nome).length,
     }));
   }
 
   const { data, error } = await supabase
-    .from('categories_with_product_count')
+    .from('categories')
     .select('*')
     .order('nome', { ascending: true });
 
   if (error) throw error;
-  return (data || []).map(toCategory);
+  return (data || [])
+    .map(toCategory)
+    .sort((a, b) => a.menuOrder - b.menuOrder || a.nome.localeCompare(b.nome));
+}
+
+export async function createCategory(input: CategoryInput): Promise<StoreCategory> {
+  const category: StoreCategory = {
+    id: crypto.randomUUID(),
+    nome: input.nome,
+    slug: input.slug,
+    imagem: input.imagem || '',
+    status: input.status,
+    showInMenu: input.showInMenu,
+    menuOrder: input.menuOrder,
+    productCount: 0,
+  };
+
+  if (!isSupabaseConfigured || !supabase) return category;
+
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({
+      nome: input.nome,
+      slug: input.slug,
+      imagem: input.imagem || '',
+      status: input.status,
+      show_in_menu: input.showInMenu,
+      menu_order: input.menuOrder,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toCategory({ ...data, product_count: 0 });
+}
+
+export async function updateCategory(id: string, input: CategoryInput): Promise<StoreCategory> {
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      id,
+      nome: input.nome,
+      slug: input.slug,
+      imagem: input.imagem || '',
+      status: input.status,
+      showInMenu: input.showInMenu,
+      menuOrder: input.menuOrder,
+      productCount: 0,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('categories')
+    .update({
+      nome: input.nome,
+      slug: input.slug,
+      imagem: input.imagem || '',
+      status: input.status,
+      show_in_menu: input.showInMenu,
+      menu_order: input.menuOrder,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toCategory(data);
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+
+  const { error } = await supabase
+    .from('categories')
+    .update({
+      status: 'Inativo',
+      show_in_menu: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
 export async function getBanners({ onlyActive = true } = {}): Promise<Banner[]> {

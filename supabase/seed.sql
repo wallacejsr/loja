@@ -39,15 +39,24 @@ insert into public.store_settings (
   support_saturday_hours = excluded.support_saturday_hours,
   updated_at = now();
 
-insert into public.categories (nome, slug, imagem, status) values
-  ('Feminino', 'feminino', 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=800', 'Ativo'),
-  ('Masculino', 'masculino', 'https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&q=80&w=800', 'Ativo'),
-  ('Infantil', 'infantil', 'https://images.unsplash.com/photo-1519241047957-be31d7379a5d?auto=format&fit=crop&q=80&w=800', 'Ativo'),
-  ('Acessorios', 'acessorios', 'https://images.unsplash.com/photo-1509319117193-57bab727e09d?auto=format&fit=crop&q=80&w=800', 'Ativo')
+insert into public.categories (nome, slug, imagem, status, show_in_menu, menu_order) values
+  ('Lancamentos', 'lancamentos', '', 'Ativo', true, 1),
+  ('Ocasioes', 'ocasioes', '', 'Ativo', true, 2),
+  ('Linha Essencial', 'linha-essencial', '', 'Ativo', true, 3),
+  ('Jeans', 'jeans', '', 'Ativo', true, 4),
+  ('Nav.Vestidos', 'nav-vestidos', '', 'Ativo', true, 5),
+  ('Calcas', 'calcas', 'https://cdn.awsli.com.br/1140x850/2751/2751677/banner/calcas-l87gy6ydk4.png', 'Ativo', true, 6),
+  ('Camisas', 'camisas', '', 'Ativo', true, 7),
+  ('Feminino', 'feminino', 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=800', 'Ativo', true, 8),
+  ('Masculino', 'masculino', 'https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 9),
+  ('Infantil', 'infantil', 'https://images.unsplash.com/photo-1519241047957-be31d7379a5d?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 10),
+  ('Acessorios', 'acessorios', 'https://images.unsplash.com/photo-1509319117193-57bab727e09d?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 11)
 on conflict (nome) do update set
   slug = excluded.slug,
   imagem = excluded.imagem,
   status = excluded.status,
+  show_in_menu = excluded.show_in_menu,
+  menu_order = excluded.menu_order,
   updated_at = now();
 
 insert into public.banners (title, desktop_image, mobile_image, link, status, position) values
