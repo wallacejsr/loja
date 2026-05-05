@@ -13,6 +13,7 @@ import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
 import { CartProvider } from './context/CartContext';
 import { SettingsProvider } from './hooks/useSettings';
+import { StoreDataProvider } from './hooks/useStoreData';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -49,8 +50,9 @@ export default function App() {
     <Router>
       <ScrollToTop />
       <SettingsProvider>
-        <CartProvider>
-          <Routes>
+        <StoreDataProvider>
+          <CartProvider>
+            <Routes>
             {/* Admin Routes */}
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Dashboard />} />
@@ -85,8 +87,9 @@ export default function App() {
               <Route path="faq" element={<Institutional title="Perguntas Frequentes" />} />
               <Route path="shipping" element={<Institutional title="Prazos e Envios" />} />
             </Route>
-          </Routes>
-        </CartProvider>
+            </Routes>
+          </CartProvider>
+        </StoreDataProvider>
       </SettingsProvider>
     </Router>
   );

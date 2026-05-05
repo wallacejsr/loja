@@ -2,30 +2,29 @@ import React, { useState } from 'react';
 import { Plus, Edit, Trash2, MoveUp, MoveDown, Image as ImageIcon } from 'lucide-react';
 import { showToast } from '../../lib/adminUtils';
 import { BannerModal } from '../../components/admin/BannerModal';
+import { useStoreData } from '../../hooks/useStoreData';
 
 export function Banners() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [banners, setBanners] = useState([
-    { id: '1', title: 'Coleção Inverno 26', image: 'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=1600&q=80', link: '/catalog?category=inverno', status: 'Ativo' },
-    { id: '2', title: 'Liquidação Verão', image: 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&w=1600&q=80', link: '/catalog?sale=true', status: 'Ativo' },
-    { id: '3', title: 'Lançamentos', image: 'https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?auto=format&fit=crop&w=1600&q=80', link: '/catalog', status: 'Inativo' },
-  ]);
+  const { banners, addBanner, removeBanner, reorderBanners } = useStoreData();
 
   const handleAction = (action: string, title?: string) => {
     showToast(`${action}${title ? `: ${title}` : ''}`);
   };
 
   const moveBanner = (index: number, direction: 'up' | 'down') => {
-    const newBanners = [...banners];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    [newBanners[index], newBanners[targetIndex]] = [newBanners[targetIndex], newBanners[index]];
-    setBanners(newBanners);
+    reorderBanners(index, direction);
     showToast('Ordem do banner atualizada');
   };
 
-  const removeBanner = (id: string) => {
-    setBanners(banners.filter(b => b.id !== id));
+  const handleRemoveBanner = async (id: string) => {
+    await removeBanner(id);
     showToast('Banner removido');
+  };
+
+  const handleCreateBanner = async (banner: { title: string; desktop: string; mobile: string; link: string }) => {
+    await addBanner(banner);
+    showToast('Banner criado com sucesso!');
   };
 
   return (
@@ -35,7 +34,7 @@ export function Banners() {
           <h2 className="text-3xl font-serif text-neutral-900 tracking-tight">Banners (Carrossel Principal)</h2>
           <p className="text-neutral-500 text-[13px]">Gerencie os destaques da página inicial.</p>
         </div>
-        <button 
+        <button
           onClick={() => setIsModalOpen(true)}
           className="bg-[#0A0A0A] text-white px-5 py-3 font-semibold uppercase tracking-wider text-[11px] rounded-xl hover:bg-neutral-800 transition-all flex items-center shadow-[0_4px_14px_rgba(0,0,0,0.15)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.2)]"
         >
@@ -44,10 +43,9 @@ export function Banners() {
         </button>
       </div>
 
-      <BannerModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <BannerModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleCreateBanner} />
 
       <div className="bg-white rounded-2xl border border-neutral-200/40 shadow-[0_2px_10px_rgba(0,0,0,0.03)] overflow-hidden">
-        {/* Table/List */}
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -64,23 +62,23 @@ export function Banners() {
               {banners.map((banner, index) => (
                 <tr key={banner.id} className="hover:bg-neutral-50/50 transition-colors group cursor-pointer">
                   <td className="py-4 px-6">
-                     <div className="flex flex-col items-center gap-1.5 opacity-50 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          disabled={index === 0} 
-                          onClick={(e) => { e.stopPropagation(); moveBanner(index, 'up'); }}
-                          className="hover:text-black disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                           <MoveUp className="w-4 h-4" />
-                        </button>
-                        <span className="text-[11px] font-semibold">{index + 1}</span>
-                        <button 
-                          disabled={index === banners.length - 1} 
-                          onClick={(e) => { e.stopPropagation(); moveBanner(index, 'down'); }}
-                          className="hover:text-black disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                           <MoveDown className="w-4 h-4" />
-                        </button>
-                     </div>
+                    <div className="flex flex-col items-center gap-1.5 opacity-50 group-hover:opacity-100 transition-opacity">
+                      <button
+                        disabled={index === 0}
+                        onClick={(e) => { e.stopPropagation(); moveBanner(index, 'up'); }}
+                        className="hover:text-black disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <MoveUp className="w-4 h-4" />
+                      </button>
+                      <span className="text-[11px] font-semibold">{index + 1}</span>
+                      <button
+                        disabled={index === banners.length - 1}
+                        onClick={(e) => { e.stopPropagation(); moveBanner(index, 'down'); }}
+                        className="hover:text-black disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <MoveDown className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                   <td className="py-4 px-6">
                     <div className="w-32 h-16 bg-[#F5F5F7] rounded-xl overflow-hidden flex items-center justify-center border border-neutral-200/50 shadow-sm relative">
@@ -106,16 +104,16 @@ export function Banners() {
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); handleAction('Editar banner', banner.title); }}
-                        className="p-2 text-neutral-400 hover:text-neutral-900 transition-colors rounded-lg hover:bg-neutral-100" 
+                        className="p-2 text-neutral-400 hover:text-neutral-900 transition-colors rounded-lg hover:bg-neutral-100"
                         title="Editar"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); removeBanner(banner.id); }}
-                        className="p-2 text-neutral-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50" 
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleRemoveBanner(banner.id); }}
+                        className="p-2 text-neutral-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50"
                         title="Excluir"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -128,9 +126,9 @@ export function Banners() {
           </table>
         </div>
         {!banners.length && (
-           <div className="p-12 text-center text-neutral-500 text-[13px]">
-              Nenhum banner cadastrado. Adicione um novo para exibir na página inicial.
-           </div>
+          <div className="p-12 text-center text-neutral-500 text-[13px]">
+            Nenhum banner cadastrado. Adicione um novo para exibir na página inicial.
+          </div>
         )}
       </div>
     </div>

@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Filter, ChevronDown, Heart } from 'lucide-react';
-import { produtos, categorias } from '../data/mockData';
 import { cn } from '../lib/utils';
 import { useCart } from '../context/CartContext';
+import { useStoreData } from '../hooks/useStoreData';
 
 export function Catalog() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -14,9 +14,10 @@ export function Catalog() {
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const { toggleWishlist, wishlist } = useCart();
+  const { products, categories } = useStoreData();
 
   const filteredProducts = useMemo(() => {
-    let result = [...produtos];
+    let result = [...products];
 
     if (queryParam) {
       const lowerQuery = queryParam.toLowerCase();
@@ -42,7 +43,7 @@ export function Catalog() {
     }
 
     return result;
-  }, [categoryParam, sortParam, promoParam]);
+  }, [products, categoryParam, sortParam, promoParam, queryParam]);
 
   const handleSort = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
@@ -115,7 +116,7 @@ export function Catalog() {
                      Todos
                    </Link>
                  </li>
-                {categorias.map(cat => (
+                {categories.map(cat => (
                   <li key={cat.nome}>
                     <Link 
                       to={`/catalog?category=${cat.nome}`}

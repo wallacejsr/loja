@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Star, Heart, MessageCircle, ChevronRight, Ruler, Plus, Minus, Gift } from 'lucide-react';
-import { produtos, Product } from '../data/mockData';
 import { cn } from '../lib/utils';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../hooks/useSettings';
+import { useStoreData } from '../hooks/useStoreData';
 
 export function ProductDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const product = produtos.find(p => p.id === id);
+  const { products, loading } = useStoreData();
+  const product = products.find(p => p.id === id);
   const { addToCart, wishlist, toggleWishlist } = useCart();
   const { settings } = useSettings();
 
@@ -18,6 +19,10 @@ export function ProductDetails() {
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setMainImage(product?.imagens[0]);
+  }, [product?.id]);
 
   if (!product) {
     return (
@@ -51,8 +56,7 @@ export function ProductDetails() {
 
   const whatsappMessage = encodeURIComponent(`Olá! Tenho interesse no produto ${product.nome} (ID: ${product.id}). Vocês têm disponibilidade?`);
 
-  // Mock related products
-  const related = produtos.filter(p => p.categoria === product.categoria && p.id !== product.id).slice(0, 4);
+  const related = products.filter(p => p.categoria === product.categoria && p.id !== product.id).slice(0, 4);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">

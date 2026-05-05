@@ -1,39 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Star, Heart, CreditCard, BadgePercent, ShieldCheck } from 'lucide-react';
-import { produtos, categorias, instagramFeed } from '../data/mockData';
+import { ArrowRight, Heart, CreditCard, BadgePercent, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useCart } from '../context/CartContext';
+import { useStoreData } from '../hooks/useStoreData';
+import { Product } from '../data/mockData';
 
 export function Home() {
-  const lancamentos = produtos.filter(p => p.lancamento).slice(0, 4);
-  const maisVendidos = produtos.filter(p => p.maisVendido).slice(0, 4);
-
+  const { products, banners } = useStoreData();
+  const lancamentos = products.filter(p => p.lancamento).slice(0, 4);
+  const maisVendidos = products.filter(p => p.maisVendido).slice(0, 4);
   const [currentSlide, setCurrentSlide] = useState(0);
-
-  const slides = [
-    {
-      desktop: "https://cdn.awsli.com.br/1920x1920/2751/2751677/banner/18-0grlts3ju4.png",
-      mobile: "https://cdn.awsli.com.br/1920x1920/2751/2751677/banner/2-iwz6y4331u.png",
-      link: "/catalog"
-    },
-    {
-      desktop: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=1920&h=600",
-      mobile: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=800&h=1000",
-      link: "/catalog"
-    },
-    {
-      desktop: "https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&q=80&w=1920&h=600",
-      mobile: "https://images.unsplash.com/photo-1469334031218-e382a71b716b?auto=format&fit=crop&q=80&w=800&h=1000",
-      link: "/catalog"
-    }
-  ];
+  const slides = banners.length ? banners : [];
 
   useEffect(() => {
+    if (!slides.length) return;
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length);
     }, 5000);
     return () => clearInterval(timer);
+  }, [slides.length]);
+
+  useEffect(() => {
+    setCurrentSlide(0);
   }, [slides.length]);
 
   return (
@@ -141,7 +130,7 @@ export function Home() {
   );
 }
 
-function ProductSection({ title, products, link }: { title: string, products: any[], link: string }) {
+function ProductSection({ title, products, link }: { title: string, products: Product[], link: string }) {
   const { toggleWishlist, wishlist } = useCart();
 
   return (

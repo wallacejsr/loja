@@ -6,22 +6,31 @@ import { showToast } from '../../lib/adminUtils';
 interface BannerModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSave: (banner: { title: string; desktop: string; mobile: string; link: string }) => Promise<void>;
 }
 
-export function BannerModal({ isOpen, onClose }: BannerModalProps) {
+export function BannerModal({ isOpen, onClose, onSave }: BannerModalProps) {
   const [formData, setFormData] = useState({
     title: '',
-    image: '',
-    link: ''
+    desktop: '',
+    mobile: '',
+    link: '',
   });
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title || !formData.image) {
-      showToast('Por favor, preencha o título e a imagem.');
+    if (!formData.title || !formData.desktop) {
+      showToast('Por favor, preencha o título e a imagem desktop.');
       return;
     }
-    showToast('Banner criado com sucesso!');
+
+    await onSave({
+      title: formData.title,
+      desktop: formData.desktop,
+      mobile: formData.mobile || formData.desktop,
+      link: formData.link || '/catalog',
+    });
+    setFormData({ title: '', desktop: '', mobile: '', link: '' });
     onClose();
   };
 
@@ -36,14 +45,13 @@ export function BannerModal({ isOpen, onClose }: BannerModalProps) {
             onClick={onClose}
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
           />
-          
+
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden relative z-10 flex flex-col"
           >
-            {/* Header */}
             <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between bg-neutral-50/50">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-neutral-900 rounded-xl flex items-center justify-center text-white">
@@ -54,7 +62,7 @@ export function BannerModal({ isOpen, onClose }: BannerModalProps) {
                   <p className="text-xs text-neutral-500 font-medium uppercase tracking-wider">Destaques da Home</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={onClose}
                 className="p-2 hover:bg-neutral-200/50 rounded-full transition-colors text-neutral-400 hover:text-neutral-900"
               >
@@ -62,50 +70,62 @@ export function BannerModal({ isOpen, onClose }: BannerModalProps) {
               </button>
             </div>
 
-            {/* Content */}
             <form onSubmit={handleSave} className="p-8 space-y-6">
               <div className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-2">
                     <Type className="w-3 h-3" /> Título do Banner
                   </label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     required
                     value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="Ex: Coleção de Inverno 2024"
+                    onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
+                    placeholder="Ex: Coleção de Inverno 2026"
                     className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-2">
-                    <ImageIcon className="w-3 h-3" /> URL da Imagem
+                    <ImageIcon className="w-3 h-3" /> URL da Imagem Desktop
                   </label>
-                  <input 
-                    type="url" 
+                  <input
+                    type="url"
                     required
-                    value={formData.image}
-                    onChange={(e) => setFormData(prev => ({ ...prev, image: e.target.value }))}
-                    placeholder="https://images.unsplash.com/..."
+                    value={formData.desktop}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, desktop: e.target.value }))}
+                    placeholder="https://exemplo.com/banner-desktop.png"
                     className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
                   />
-                  {formData.image && (
+                  {formData.desktop && (
                     <div className="mt-2 aspect-[21/9] rounded-xl overflow-hidden border border-neutral-100 bg-neutral-50">
-                      <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
+                      <img src={formData.desktop} alt="Preview desktop" className="w-full h-full object-cover" />
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-2">
+                    <ImageIcon className="w-3 h-3" /> URL da Imagem Mobile
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.mobile}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, mobile: e.target.value }))}
+                    placeholder="Opcional. Se vazio, usa a imagem desktop."
+                    className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-2">
                     <LinkIcon className="w-3 h-3" /> Link de Destino
                   </label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={formData.link}
-                    onChange={(e) => setFormData(prev => ({ ...prev, link: e.target.value }))}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, link: e.target.value }))}
                     placeholder="/colecao/verao"
                     className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
                   />
@@ -113,16 +133,15 @@ export function BannerModal({ isOpen, onClose }: BannerModalProps) {
               </div>
             </form>
 
-            {/* Footer */}
             <div className="px-8 py-6 border-t border-neutral-100 flex justify-end gap-3 bg-neutral-50/50">
-              <button 
+              <button
                 type="button"
                 onClick={onClose}
                 className="px-6 py-2.5 text-[11px] font-bold uppercase tracking-wider text-neutral-500 hover:text-neutral-900 transition-colors"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 onClick={handleSave}
                 type="submit"
                 className="bg-neutral-950 text-white px-8 py-3 font-semibold uppercase tracking-wider text-[11px] rounded-xl hover:bg-neutral-800 transition-all flex items-center gap-2 shadow-lg shadow-neutral-900/10"

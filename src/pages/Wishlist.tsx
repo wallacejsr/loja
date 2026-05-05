@@ -2,13 +2,14 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { produtos } from '../data/mockData';
 import { cn } from '../lib/utils';
+import { useStoreData } from '../hooks/useStoreData';
 
 export function Wishlist() {
   const { wishlist, toggleWishlist } = useCart();
+  const { products } = useStoreData();
   
-  const wishlistProducts = produtos.filter(p => wishlist.includes(p.id));
+  const wishlistProducts = products.filter(p => wishlist.includes(p.id));
 
   if (wishlistProducts.length === 0) {
     return (

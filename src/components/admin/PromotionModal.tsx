@@ -3,7 +3,7 @@ import { X, Save, Percent, Calendar, Tag, Package, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { showToast } from '../../lib/adminUtils';
-import { produtos } from '../../data/mockData';
+import { useStoreData } from '../../hooks/useStoreData';
 
 interface PromotionModalProps {
   isOpen: boolean;
@@ -16,6 +16,7 @@ export function PromotionModal({ isOpen, onClose }: PromotionModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const { products } = useStoreData();
 
   const tabs = [
     { id: 'general', name: 'Geral', icon: Tag },
@@ -37,7 +38,7 @@ export function PromotionModal({ isOpen, onClose }: PromotionModalProps) {
     );
   };
 
-  const filteredProducts = produtos.filter(p => 
+  const filteredProducts = products.filter(p => 
     p.nome.toLowerCase().includes(searchTerm.toLowerCase())
   );
 

@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { Plus, Edit, Trash2, Search, Filter, Image as ImageIcon } from 'lucide-react';
-import { produtos } from '../../data/mockData';
 import { showToast } from '../../lib/adminUtils';
 import { ProductModal } from '../../components/admin/ProductModal';
+import { useStoreData } from '../../hooks/useStoreData';
 
 export function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { products } = useStoreData();
+  const filteredProducts = products.filter((produto) => (
+    produto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    produto.id.toLowerCase().includes(searchTerm.toLowerCase())
+  ));
 
   const handleAction = (action: string, name?: string) => {
     showToast(`${action}${name ? `: ${name}` : ''}`);
@@ -67,7 +72,7 @@ export function Products() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100/60">
-              {produtos.map((produto) => (
+              {filteredProducts.map((produto) => (
                 <tr key={produto.id} className="hover:bg-neutral-50/50 transition-colors group cursor-pointer">
                   <td className="py-4 px-6 flex items-center gap-4">
                     <div className="w-12 h-12 bg-[#F5F5F7] rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center border border-neutral-200/50">
@@ -119,7 +124,7 @@ export function Products() {
         
         {/* Pagination */}
         <div className="p-4 border-t border-neutral-100/60 flex items-center justify-between text-[13px] text-neutral-500 bg-white">
-          <div>Mostrando <span className="font-medium text-neutral-900">1</span> a <span className="font-medium text-neutral-900">{produtos.length}</span> de <span className="font-medium text-neutral-900">{produtos.length}</span> resultados</div>
+          <div>Mostrando <span className="font-medium text-neutral-900">{filteredProducts.length ? 1 : 0}</span> a <span className="font-medium text-neutral-900">{filteredProducts.length}</span> de <span className="font-medium text-neutral-900">{products.length}</span> resultados</div>
           <div className="flex gap-2">
             <button 
               onClick={() => handleAction('Navegar para página anterior')}

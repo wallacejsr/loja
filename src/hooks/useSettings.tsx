@@ -1,34 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { getStoreSettings, saveStoreSettings } from '../lib/storeApi';
+import { defaultSettings, StoreSettings } from '../types/settings';
 
 const SETTINGS_KEY = 'dani_brand_store_settings';
 
-export interface StoreSettings {
-  storeName: string;
-  logoUrl: string;
-  email: string;
-  phone: string;
-  instagram: string;
-  facebook: string;
-  tiktok: string;
-  description: string;
-  primaryColor: string;
-  secondaryColor: string;
-  pointsPerReal: number;
-}
-
-const defaultSettings: StoreSettings = {
-  storeName: 'Spaçodani',
-  logoUrl: 'https://cdn.awsli.com.br/400x300/2751/2751677/logo/logo-dani-morais-ky8ceccgy5.png',
-  email: 'contato@danibrand.com.br',
-  phone: '(11) 99999-9999',
-  instagram: 'https://instagram.com/danibrand',
-  facebook: 'https://facebook.com/',
-  tiktok: 'https://tiktok.com/@',
-  description: 'Loja oficial DANI Brand. Roupas minimalistas e exclusivas, feitas com algodão premium.',
-  primaryColor: '#ba884b',
-  secondaryColor: '#1a222b',
-  pointsPerReal: 1,
-};
+export type { StoreSettings };
 
 const SettingsContext = createContext<{
   settings: StoreSettings;
@@ -37,23 +13,16 @@ const SettingsContext = createContext<{
 
 function adjustColorIntensity(hex: string, amount: number): string {
   let usePound = false;
-  if (hex[0] == "#") {
-      hex = hex.slice(1);
-      usePound = true;
+  if (hex[0] === '#') {
+    hex = hex.slice(1);
+    usePound = true;
   }
-  let R = parseInt(hex.substring(0,2),16);
-  let G = parseInt(hex.substring(2,4),16);
-  let B = parseInt(hex.substring(4,6),16);
 
-  R = Math.max(0, Math.min(255, R + amount));
-  G = Math.max(0, Math.min(255, G + amount));
-  B = Math.max(0, Math.min(255, B + amount));
+  const r = Math.max(0, Math.min(255, parseInt(hex.substring(0, 2), 16) + amount));
+  const g = Math.max(0, Math.min(255, parseInt(hex.substring(2, 4), 16) + amount));
+  const b = Math.max(0, Math.min(255, parseInt(hex.substring(4, 6), 16) + amount));
 
-  let RR = ((R.toString(16).length==1)?"0"+R.toString(16):R.toString(16));
-  let GG = ((G.toString(16).length==1)?"0"+G.toString(16):G.toString(16));
-  let BB = ((B.toString(16).length==1)?"0"+B.toString(16):B.toString(16));
-
-  return (usePound?"#":"") + RR + GG + BB;
+  return `${usePound ? '#' : ''}${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
@@ -63,16 +32,29 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    // Apply theme colors to css variables
+    getStoreSettings()
+      .then((remoteSettings) => {
+        setSettings(remoteSettings);
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(remoteSettings));
+      })
+      .catch(() => {
+        // Keep the local copy when Supabase is not configured or temporarily unavailable.
+      });
+  }, []);
+
+  useEffect(() => {
     document.documentElement.style.setProperty('--theme-primary', settings.primaryColor);
-    document.documentElement.style.setProperty('--theme-primary-dark', adjustColorIntensity(settings.primaryColor, -20)); // darken primary
+    document.documentElement.style.setProperty('--theme-primary-dark', adjustColorIntensity(settings.primaryColor, -20));
     document.documentElement.style.setProperty('--theme-secondary', settings.secondaryColor);
   }, [settings.primaryColor, settings.secondaryColor]);
 
   const updateSettings = useCallback((newSettings: Partial<StoreSettings>) => {
-    setSettings(prev => {
+    setSettings((prev) => {
       const updated = { ...prev, ...newSettings };
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+      saveStoreSettings(updated).catch(() => {
+        // Local state remains updated; the next save can retry the remote write.
+      });
       return updated;
     });
   }, []);
@@ -91,4 +73,3 @@ export function useSettings() {
   }
   return context;
 }
-

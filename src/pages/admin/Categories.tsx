@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Plus, Edit, Trash2, Search, Link as LinkIcon } from 'lucide-react';
-import { categorias } from '../../data/mockData';
 import { showToast } from '../../lib/adminUtils';
 import { CategoryModal } from '../../components/admin/CategoryModal';
+import { useStoreData } from '../../hooks/useStoreData';
 
 export function Categories() {
-  const [searchTerm] = useState(''); // simplified from Categories original which had searchTerm setter but wasn't used in view
+  const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { categories } = useStoreData();
+  const filteredCategories = categories.filter((categoria) => categoria.nome.toLowerCase().includes(searchTerm.toLowerCase()));
 
   const handleAction = (action: string, name?: string) => {
     showToast(`${action}${name ? `: ${name}` : ''}`);
@@ -37,7 +39,8 @@ export function Categories() {
             <input
               type="text"
               placeholder="Buscar categorias..."
-              defaultValue={searchTerm}
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-neutral-200/60 rounded-xl focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 text-[13px] transition-all bg-neutral-50/50 hover:bg-neutral-50 focus:bg-white"
             />
             <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3" />
@@ -57,12 +60,12 @@ export function Categories() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100/60">
-              {categorias.map((categoria) => (
+              {filteredCategories.map((categoria) => (
                 <tr key={categoria.nome} className="hover:bg-neutral-50/50 transition-colors group cursor-pointer">
                   <td className="py-4 px-6 font-medium text-[13px] text-neutral-900 capitalize group-hover:text-blue-600 transition-colors">{categoria.nome}</td>
                   <td className="py-4 px-6 text-[13px] text-neutral-500 flex items-center mt-0.5">
                      <LinkIcon className="w-3.5 h-3.5 mr-1.5 text-neutral-400" />
-                     /{categoria.nome.toLowerCase().replace(/\s+/g, '-')}
+                     /{categoria.slug}
                   </td>
                   <td className="py-4 px-6">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600">
@@ -70,7 +73,7 @@ export function Categories() {
                     </span>
                   </td>
                   <td className="py-4 px-6 text-[13px] text-neutral-600">
-                     {Math.floor(Math.random() * 50) + 5} {/* Mock count */}
+                     {categoria.productCount || 0}
                   </td>
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
