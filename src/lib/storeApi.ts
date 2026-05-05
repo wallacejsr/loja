@@ -10,6 +10,10 @@ export interface StoreCategory {
   status: 'Ativo' | 'Inativo';
   showInMenu: boolean;
   menuOrder: number;
+  showOnHome: boolean;
+  homeSectionTitle: string;
+  homeSectionOrder: number;
+  homeSectionLimit: number;
   productCount?: number;
 }
 
@@ -20,6 +24,10 @@ export interface CategoryInput {
   status: 'Ativo' | 'Inativo';
   showInMenu: boolean;
   menuOrder: number;
+  showOnHome: boolean;
+  homeSectionTitle: string;
+  homeSectionOrder: number;
+  homeSectionLimit: number;
 }
 
 export interface Banner {
@@ -38,6 +46,29 @@ export interface InstagramPost {
   image: string;
   link?: string;
   position: number;
+}
+
+export type HomeSectionSource = 'category' | 'lancamentos' | 'mais_vendidos' | 'promocoes';
+
+export interface HomeSection {
+  id: string;
+  title: string;
+  sourceType: HomeSectionSource;
+  categoryName: string;
+  limitCount: number;
+  link: string;
+  position: number;
+  status: 'Ativo' | 'Inativo';
+}
+
+export interface HomeSectionInput {
+  title: string;
+  sourceType: HomeSectionSource;
+  categoryName: string;
+  limitCount: number;
+  link: string;
+  position: number;
+  status: 'Ativo' | 'Inativo';
 }
 
 export interface ProductInput {
@@ -96,6 +127,10 @@ const toCategory = (row: any): StoreCategory => ({
   status: row.status || 'Ativo',
   showInMenu: Boolean(row.show_in_menu),
   menuOrder: Number(row.menu_order || 100),
+  showOnHome: Boolean(row.show_on_home),
+  homeSectionTitle: row.home_section_title || row.nome || '',
+  homeSectionOrder: Number(row.home_section_order || row.menu_order || 100),
+  homeSectionLimit: Number(row.home_section_limit || 4),
   productCount: row.product_count,
 });
 
@@ -108,6 +143,17 @@ const toBanner = (row: any): Banner => ({
   link: row.link || '/catalog',
   status: row.status || 'Ativo',
   position: row.position || 0,
+});
+
+const toHomeSection = (row: any): HomeSection => ({
+  id: String(row.id),
+  title: row.title,
+  sourceType: row.source_type || 'category',
+  categoryName: row.category_name || '',
+  limitCount: Number(row.limit_count || 4),
+  link: row.link || '/catalog',
+  position: Number(row.position || 100),
+  status: row.status || 'Ativo',
 });
 
 const toSettings = (row: any): StoreSettings => ({
@@ -305,6 +351,10 @@ export async function getCategories(): Promise<StoreCategory[]> {
       status: 'Ativo',
       showInMenu: true,
       menuOrder: index + 1,
+      showOnHome: false,
+      homeSectionTitle: category.nome,
+      homeSectionOrder: index + 1,
+      homeSectionLimit: 4,
       productCount: mockProducts.filter((product) => product.categoria === category.nome).length,
     }));
   }
@@ -329,6 +379,10 @@ export async function createCategory(input: CategoryInput): Promise<StoreCategor
     status: input.status,
     showInMenu: input.showInMenu,
     menuOrder: input.menuOrder,
+    showOnHome: input.showOnHome,
+    homeSectionTitle: input.homeSectionTitle || input.nome,
+    homeSectionOrder: input.homeSectionOrder,
+    homeSectionLimit: input.homeSectionLimit,
     productCount: 0,
   };
 
@@ -343,6 +397,10 @@ export async function createCategory(input: CategoryInput): Promise<StoreCategor
       status: input.status,
       show_in_menu: input.showInMenu,
       menu_order: input.menuOrder,
+      show_on_home: input.showOnHome,
+      home_section_title: input.homeSectionTitle || input.nome,
+      home_section_order: input.homeSectionOrder,
+      home_section_limit: input.homeSectionLimit,
     })
     .select('*')
     .single();
@@ -361,6 +419,10 @@ export async function updateCategory(id: string, input: CategoryInput): Promise<
       status: input.status,
       showInMenu: input.showInMenu,
       menuOrder: input.menuOrder,
+      showOnHome: input.showOnHome,
+      homeSectionTitle: input.homeSectionTitle || input.nome,
+      homeSectionOrder: input.homeSectionOrder,
+      homeSectionLimit: input.homeSectionLimit,
       productCount: 0,
     };
   }
@@ -374,6 +436,10 @@ export async function updateCategory(id: string, input: CategoryInput): Promise<
       status: input.status,
       show_in_menu: input.showInMenu,
       menu_order: input.menuOrder,
+      show_on_home: input.showOnHome,
+      home_section_title: input.homeSectionTitle || input.nome,
+      home_section_order: input.homeSectionOrder,
+      home_section_limit: input.homeSectionLimit,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
@@ -408,6 +474,66 @@ export async function getBanners({ onlyActive = true } = {}): Promise<Banner[]> 
   const { data, error } = await query;
   if (error) throw error;
   return (data || []).map(toBanner);
+}
+
+export async function getHomeSections({ onlyActive = true } = {}): Promise<HomeSection[]> {
+  const fallback: HomeSection[] = [
+    {
+      id: 'lancamentos',
+      title: 'Lançamentos',
+      sourceType: 'lancamentos',
+      categoryName: '',
+      limitCount: 4,
+      link: '/catalog?sort=lancamentos',
+      position: 1,
+      status: 'Ativo',
+    },
+    {
+      id: 'mais-vendidos',
+      title: 'Mais Vendidos',
+      sourceType: 'mais_vendidos',
+      categoryName: '',
+      limitCount: 4,
+      link: '/catalog?sort=mais-vendidos',
+      position: 2,
+      status: 'Ativo',
+    },
+  ];
+
+  if (!isSupabaseConfigured || !supabase) return fallback;
+
+  let query = supabase.from('home_sections').select('*').order('position', { ascending: true });
+  if (onlyActive) query = query.eq('status', 'Ativo');
+
+  const { data, error } = await query;
+  if (error) return fallback;
+
+  const sections = (data || []).map(toHomeSection);
+  return sections.length ? sections : fallback;
+}
+
+export async function updateHomeSection(id: string, input: HomeSectionInput): Promise<HomeSection> {
+  const section: HomeSection = { id, ...input };
+  if (!isSupabaseConfigured || !supabase) return section;
+
+  const { data, error } = await supabase
+    .from('home_sections')
+    .upsert({
+      id,
+      title: input.title,
+      source_type: input.sourceType,
+      category_name: input.categoryName,
+      limit_count: input.limitCount,
+      link: input.link,
+      position: input.position,
+      status: input.status,
+      updated_at: new Date().toISOString(),
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toHomeSection(data);
 }
 
 export async function createBanner(input: Pick<Banner, 'title' | 'desktop' | 'mobile' | 'link'>): Promise<Banner> {

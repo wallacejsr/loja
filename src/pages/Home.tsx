@@ -5,13 +5,18 @@ import { cn } from '../lib/utils';
 import { useCart } from '../context/CartContext';
 import { useStoreData } from '../hooks/useStoreData';
 import { Product } from '../data/mockData';
+import { HomeSection as HomeSectionConfig } from '../lib/storeApi';
 
 export function Home() {
-  const { products, banners } = useStoreData();
-  const lancamentos = products.filter(p => p.lancamento).slice(0, 4);
-  const maisVendidos = products.filter(p => p.maisVendido).slice(0, 4);
+  const { products, banners, homeSections, categories } = useStoreData();
   const [currentSlide, setCurrentSlide] = useState(0);
   const slides = banners.length ? banners : [];
+  const activeHomeSections = homeSections
+    .filter((section) => section.status === 'Ativo')
+    .sort((a, b) => a.position - b.position);
+  const categoryHomeSections = categories
+    .filter((category) => category.status === 'Ativo' && category.showOnHome)
+    .sort((a, b) => a.homeSectionOrder - b.homeSectionOrder || a.nome.localeCompare(b.nome));
 
   useEffect(() => {
     if (!slides.length) return;
@@ -100,10 +105,12 @@ export function Home() {
          </div>
       </section>
 
-      {/* Lançamentos */}
-      <section className="py-16 bg-white">
-        <ProductSection title="Lançamentos" products={lancamentos} link="/catalog?sort=lancamentos" />
-      </section>
+      {activeHomeSections.slice(0, 1)
+        .map((section) => (
+          <React.Fragment key={section.id}>
+            <HomeProductSection section={section} products={products} />
+          </React.Fragment>
+        ))}
 
       {/* Destaques / Categories Banners */}
       <section className="py-10 bg-neutral-50">
@@ -121,12 +128,56 @@ export function Home() {
         </div>
       </section>
 
-      {/* Mais Vendidos */}
-      <section className="py-16 bg-white">
-        <ProductSection title="Mais Vendidos" products={maisVendidos} link="/catalog?sort=mais-vendidos" />
-      </section>
+      {activeHomeSections.slice(1)
+        .map((section) => (
+          <React.Fragment key={section.id}>
+            <HomeProductSection section={section} products={products} />
+          </React.Fragment>
+        ))}
+
+      {categoryHomeSections.map((category) => (
+        <React.Fragment key={category.id}>
+          <CategoryProductSection category={category} products={products} />
+        </React.Fragment>
+      ))}
 
     </div>
+  );
+}
+
+function CategoryProductSection({ category, products }: { category: { nome: string; homeSectionTitle: string; homeSectionLimit: number }, products: Product[] }) {
+  const filteredProducts = products
+    .filter((product) => product.categoria === category.nome)
+    .slice(0, category.homeSectionLimit);
+
+  if (!filteredProducts.length) return null;
+
+  return (
+    <section className="py-16 bg-white">
+      <ProductSection
+        title={category.homeSectionTitle || category.nome}
+        products={filteredProducts}
+        link={`/catalog?category=${encodeURIComponent(category.nome)}`}
+      />
+    </section>
+  );
+}
+
+function HomeProductSection({ section, products }: { section: HomeSectionConfig, products: Product[] }) {
+  const filteredProducts = products.filter((product) => {
+    if (section.sourceType === 'category') return product.categoria === section.categoryName;
+    if (section.sourceType === 'lancamentos') return Boolean(product.lancamento);
+    if (section.sourceType === 'mais_vendidos') return Boolean(product.maisVendido);
+    if (section.sourceType === 'promocoes') return Boolean(product.precoPromocional);
+    return false;
+  }).slice(0, section.limitCount);
+
+  if (!filteredProducts.length) return null;
+
+  return (
+    <section className="py-16 bg-white">
+      <ProductSection title={section.title} products={filteredProducts} link={section.link} />
+    </section>
   );
 }
 

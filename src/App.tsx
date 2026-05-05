@@ -41,6 +41,7 @@ import { Settings } from './pages/admin/Settings';
 import { Promotions } from './pages/admin/Promotions';
 import { AdminRaffles } from './pages/admin/Raffles';
 import { LayoutTheme } from './pages/admin/LayoutTheme';
+import { HomeSections } from './pages/admin/HomeSections';
 
 // Simple placeholder components for other routes
 const Institutional = ({ title }: { title: string }) => <div className="flex justify-center py-32 text-xl font-bold uppercase">{title}</div>;
@@ -61,6 +62,7 @@ export default function App() {
               <Route path="categories" element={<Categories />} />
               <Route path="customers" element={<Customers />} />
               <Route path="banners" element={<Banners />} />
+              <Route path="home" element={<HomeSections />} />
               <Route path="settings" element={<Settings />} />
               <Route path="promotions" element={<Promotions />} />
               <Route path="raffles" element={<AdminRaffles />} />

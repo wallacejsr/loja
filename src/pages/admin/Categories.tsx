@@ -177,6 +177,7 @@ export function Categories() {
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Slug</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Menu</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Ordem</th>
+                <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Home</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Status</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Produtos</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">Ações</th>
@@ -208,6 +209,17 @@ export function Categories() {
                     )}
                   </td>
                   <td className="py-4 px-6 text-[13px] text-neutral-600">{categoria.menuOrder}</td>
+                  <td className="py-4 px-6">
+                    {categoria.showOnHome ? (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700">
+                        Exibir
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-neutral-100 text-neutral-500">
+                        Não
+                      </span>
+                    )}
+                  </td>
                   <td className="py-4 px-6">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${categoria.status === 'Ativo' ? 'bg-emerald-50 text-emerald-600' : 'bg-neutral-100 text-neutral-600'}`}>
                       {categoria.status}

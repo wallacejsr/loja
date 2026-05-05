@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   Tag,
   Trophy,
-  Palette
+  Palette,
+  Home as HomeIcon
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -42,6 +43,7 @@ export function AdminLayout() {
     { name: 'Sorteios', href: '/admin/raffles', icon: Trophy },
     { name: 'Promoções', href: '/admin/promotions', icon: Tag },
     { name: 'Banners', href: '/admin/banners', icon: ImageIcon },
+    { name: 'Home', href: '/admin/home', icon: HomeIcon },
     { name: 'Layout', href: '/admin/layout', icon: Palette },
     { name: 'Configurações', href: '/admin/settings', icon: Settings },
   ];

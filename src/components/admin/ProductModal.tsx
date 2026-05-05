@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Save, Box, DollarSign, Image as ImageIcon, Info, Plus, Trash2 } from 'lucide-react';
+import { X, Save, Box, DollarSign, Image as ImageIcon, Info, Plus, Trash2, SwatchBook } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { showToast } from '../../lib/adminUtils';
@@ -13,7 +13,7 @@ interface ProductModalProps {
   product?: Product | null;
 }
 
-type TabType = 'info' | 'pricing' | 'media';
+type TabType = 'info' | 'pricing' | 'variations' | 'media';
 
 interface PendingImage {
   id: string;
@@ -22,10 +22,17 @@ interface PendingImage {
   existingUrl?: string;
 }
 
+const defaultSizes = ['PP', 'P', 'M', 'G', 'GG', 'XG', '34', '36', '38', '40', '42', '44', '46'];
+
 export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('info');
   const [isSaving, setIsSaving] = useState(false);
   const [images, setImages] = useState<PendingImage[]>([]);
+  const [isOneSize, setIsOneSize] = useState(false);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [customSize, setCustomSize] = useState('');
+  const [colors, setColors] = useState<{ nome: string; hex: string }[]>([]);
+  const [colorDraft, setColorDraft] = useState({ nome: '', hex: '#E3CAA5' });
   const [formData, setFormData] = useState({
     nome: '',
     descricao: '',
@@ -42,6 +49,7 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
   const tabs = [
     { id: 'info', name: 'Informações', icon: Info },
     { id: 'pricing', name: 'Preços & Estoque', icon: DollarSign },
+    { id: 'variations', name: 'Variações', icon: SwatchBook },
     { id: 'media', name: 'Mídia', icon: ImageIcon },
   ];
 
@@ -65,6 +73,11 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
       precoPromocional: '',
       estoque: '',
     });
+    setIsOneSize(false);
+    setSelectedSizes([]);
+    setCustomSize('');
+    setColors([]);
+    setColorDraft({ nome: '', hex: '#E3CAA5' });
     setActiveTab('info');
   };
 
@@ -83,6 +96,11 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
         precoPromocional: '',
         estoque: '',
       });
+      setIsOneSize(false);
+      setSelectedSizes([]);
+      setCustomSize('');
+      setColors([]);
+      setColorDraft({ nome: '', hex: '#E3CAA5' });
       setActiveTab('info');
       return;
     }
@@ -101,6 +119,11 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
       precoPromocional: product.precoPromocional ? String(product.precoPromocional) : '',
       estoque: String(product.estoque),
     });
+    setIsOneSize(product.tamanhos.length === 1 && ['Único', 'Unico', 'Tamanho Único', 'Tamanho Unico'].includes(product.tamanhos[0]));
+    setSelectedSizes(product.tamanhos.length ? product.tamanhos : []);
+    setCustomSize('');
+    setColors(product.cores || []);
+    setColorDraft({ nome: '', hex: '#E3CAA5' });
     setActiveTab('info');
   }, [isOpen, product?.id]);
 
@@ -131,6 +154,33 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
     });
   };
 
+  const toggleSize = (size: string) => {
+    setIsOneSize(false);
+    setSelectedSizes((current) => current.includes(size) ? current.filter((item) => item !== size) : [...current, size]);
+  };
+
+  const addCustomSize = () => {
+    const size = customSize.trim();
+    if (!size) return;
+    setIsOneSize(false);
+    setSelectedSizes((current) => current.includes(size) ? current : [...current, size]);
+    setCustomSize('');
+  };
+
+  const addColor = () => {
+    const name = colorDraft.nome.trim();
+    if (!name) {
+      showToast('Informe o nome da cor.');
+      return;
+    }
+    setColors((current) => [...current, { nome: name, hex: colorDraft.hex }]);
+    setColorDraft({ nome: '', hex: '#E3CAA5' });
+  };
+
+  const removeColor = (index: number) => {
+    setColors((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -143,6 +193,13 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
     if (!images.length) {
       showToast('Adicione pelo menos uma imagem do produto.');
       setActiveTab('media');
+      return;
+    }
+
+    const sizesToSave = isOneSize ? ['Único'] : selectedSizes;
+    if (!sizesToSave.length) {
+      showToast('Selecione pelo menos um tamanho ou marque tamanho único.');
+      setActiveTab('variations');
       return;
     }
 
@@ -161,8 +218,8 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
         imagens: imageUrls,
         descricao: formData.descricao,
         composicao: '',
-        tamanhos: [],
-        cores: [],
+        tamanhos: sizesToSave,
+        cores: colors,
         estoque: Number(formData.estoque),
       };
 
@@ -335,6 +392,145 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                       />
                     </div>
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'variations' && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <section className="space-y-4">
+                    <div>
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-neutral-900">Tamanhos</h4>
+                      <p className="text-[12px] text-neutral-500 mt-1">Escolha a grade disponível ou marque tamanho único.</p>
+                    </div>
+
+                    <label className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-100 bg-neutral-50/60 px-4 py-3 cursor-pointer">
+                      <div>
+                        <span className="block text-[12px] font-bold text-neutral-900">Produto possui tamanho único</span>
+                        <span className="block text-[11px] text-neutral-500 mt-0.5">Usa “Único” como opção de tamanho.</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={isOneSize}
+                        onChange={(e) => {
+                          setIsOneSize(e.target.checked);
+                          if (e.target.checked) setSelectedSizes([]);
+                        }}
+                        className="w-5 h-5 accent-neutral-900"
+                      />
+                    </label>
+
+                    {!isOneSize && (
+                      <>
+                        <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                          {defaultSizes.map((size) => (
+                            <button
+                              key={size}
+                              type="button"
+                              onClick={() => toggleSize(size)}
+                              className={cn(
+                                "h-10 rounded-lg border text-[12px] font-bold transition-colors",
+                                selectedSizes.includes(size)
+                                  ? "bg-neutral-950 text-white border-neutral-950"
+                                  : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-900"
+                              )}
+                            >
+                              {size}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={customSize}
+                            onChange={(e) => setCustomSize(e.target.value)}
+                            placeholder="Tamanho personalizado"
+                            className="flex-1 border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
+                          />
+                          <button
+                            type="button"
+                            onClick={addCustomSize}
+                            className="px-4 py-3 rounded-xl bg-neutral-950 text-white hover:bg-neutral-800 transition-colors"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {selectedSizes.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedSizes.map((size) => (
+                              <button
+                                key={size}
+                                type="button"
+                                onClick={() => toggleSize(size)}
+                                className="inline-flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-red-50 hover:text-red-600 transition-colors"
+                              >
+                                {size}
+                                <X className="w-3 h-3" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </section>
+
+                  <section className="space-y-4 border-t border-neutral-100 pt-6">
+                    <div>
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-neutral-900">Cores</h4>
+                      <p className="text-[12px] text-neutral-500 mt-1">Cadastre nome e amostra da cor que aparecerão no produto.</p>
+                    </div>
+
+                    <div className="grid sm:grid-cols-[1fr_auto_auto] gap-3">
+                      <input
+                        type="text"
+                        value={colorDraft.nome}
+                        onChange={(e) => setColorDraft((prev) => ({ ...prev, nome: e.target.value }))}
+                        placeholder="Nome da cor. Ex: Bege"
+                        className="border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
+                      />
+                      <input
+                        type="color"
+                        value={colorDraft.hex}
+                        onChange={(e) => setColorDraft((prev) => ({ ...prev, hex: e.target.value }))}
+                        className="h-12 w-full sm:w-16 rounded-xl border border-neutral-200 bg-white p-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={addColor}
+                        className="px-5 py-3 rounded-xl bg-neutral-950 text-white text-[11px] font-bold uppercase tracking-wider hover:bg-neutral-800 transition-colors"
+                      >
+                        Adicionar
+                      </button>
+                    </div>
+
+                    {colors.length > 0 ? (
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        {colors.map((color, index) => (
+                          <div key={`${color.nome}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-neutral-100 bg-neutral-50/60 px-4 py-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="w-7 h-7 rounded-full border border-neutral-200 shadow-sm shrink-0" style={{ backgroundColor: color.hex }} />
+                              <div className="min-w-0">
+                                <p className="text-[13px] font-bold text-neutral-900 truncate">{color.nome}</p>
+                                <p className="text-[11px] text-neutral-500 font-mono">{color.hex}</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeColor(index)}
+                              className="p-2 text-neutral-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/60 px-4 py-4 text-[12px] text-neutral-500">
+                        Nenhuma cor cadastrada. Se deixar vazio, o produto será exibido sem seleção de cor.
+                      </div>
+                    )}
+                  </section>
                 </div>
               )}
 

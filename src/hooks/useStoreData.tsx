@@ -1,11 +1,12 @@
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Product } from '../data/mockData';
-import { Banner, CategoryInput, createBanner, createCategory, createProduct, deleteBanner, deleteCategory, deleteProduct, getBanners, getCategories, getInstagramFeed, getProducts, InstagramPost, ProductInput, StoreCategory, updateBannerPositions, updateCategory, updateProduct } from '../lib/storeApi';
+import { Banner, CategoryInput, createBanner, createCategory, createProduct, deleteBanner, deleteCategory, deleteProduct, getBanners, getCategories, getHomeSections, getInstagramFeed, getProducts, HomeSection, HomeSectionInput, InstagramPost, ProductInput, StoreCategory, updateBannerPositions, updateCategory, updateHomeSection, updateProduct } from '../lib/storeApi';
 
 interface StoreDataContextValue {
   products: Product[];
   categories: StoreCategory[];
   banners: Banner[];
+  homeSections: HomeSection[];
   instagramFeed: InstagramPost[];
   loading: boolean;
   error: string | null;
@@ -16,6 +17,7 @@ interface StoreDataContextValue {
   addCategory: (category: CategoryInput) => Promise<void>;
   editCategory: (id: string, category: CategoryInput) => Promise<void>;
   removeCategory: (id: string) => Promise<void>;
+  editHomeSection: (id: string, section: HomeSectionInput) => Promise<void>;
   addBanner: (banner: Pick<Banner, 'title' | 'desktop' | 'mobile' | 'link'>) => Promise<void>;
   removeBanner: (id: string) => Promise<void>;
   reorderBanners: (index: number, direction: 'up' | 'down') => Promise<void>;
@@ -27,6 +29,7 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<StoreCategory[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
+  const [homeSections, setHomeSections] = useState<HomeSection[]>([]);
   const [instagramFeed, setInstagramFeed] = useState<InstagramPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,15 +38,17 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const [nextProducts, nextCategories, nextBanners, nextInstagramFeed] = await Promise.all([
+      const [nextProducts, nextCategories, nextBanners, nextHomeSections, nextInstagramFeed] = await Promise.all([
         getProducts(),
         getCategories(),
         getBanners(),
+        getHomeSections(),
         getInstagramFeed(),
       ]);
       setProducts(nextProducts);
       setCategories(nextCategories);
       setBanners(nextBanners);
+      setHomeSections(nextHomeSections);
       setInstagramFeed(nextInstagramFeed);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível carregar os dados da loja.');
@@ -100,6 +105,13 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
     setCategories((current) => current.filter((category) => category.id !== id));
   }, []);
 
+  const editHomeSection = useCallback(async (id: string, section: HomeSectionInput) => {
+    const updated = await updateHomeSection(id, section);
+    setHomeSections((current) => current
+      .map((item) => (item.id === id ? updated : item))
+      .sort((a, b) => a.position - b.position));
+  }, []);
+
   const removeBanner = useCallback(async (id: string) => {
     await deleteBanner(id);
     setBanners((current) => current.filter((banner) => banner.id !== id));
@@ -123,6 +135,7 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
       products,
       categories,
       banners,
+      homeSections,
       instagramFeed,
       loading,
       error,
@@ -133,11 +146,12 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
       addCategory,
       editCategory,
       removeCategory,
+      editHomeSection,
       addBanner,
       removeBanner,
       reorderBanners,
     }),
-    [products, categories, banners, instagramFeed, loading, error, refresh, addProduct, editProduct, removeProduct, addCategory, editCategory, removeCategory, addBanner, removeBanner, reorderBanners],
+    [products, categories, banners, homeSections, instagramFeed, loading, error, refresh, addProduct, editProduct, removeProduct, addCategory, editCategory, removeCategory, editHomeSection, addBanner, removeBanner, reorderBanners],
   );
 
   return <StoreDataContext.Provider value={value}>{children}</StoreDataContext.Provider>;

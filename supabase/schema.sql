@@ -29,12 +29,20 @@ create table if not exists public.categories (
   status text not null default 'Ativo',
   show_in_menu boolean not null default false,
   menu_order integer not null default 100,
+  show_on_home boolean not null default false,
+  home_section_title text default '',
+  home_section_order integer not null default 100,
+  home_section_limit integer not null default 4,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.categories add column if not exists show_in_menu boolean not null default false;
 alter table public.categories add column if not exists menu_order integer not null default 100;
+alter table public.categories add column if not exists show_on_home boolean not null default false;
+alter table public.categories add column if not exists home_section_title text default '';
+alter table public.categories add column if not exists home_section_order integer not null default 100;
+alter table public.categories add column if not exists home_section_limit integer not null default 4;
 
 create table if not exists public.banners (
   id uuid primary key default gen_random_uuid(),
@@ -54,6 +62,19 @@ create table if not exists public.instagram_posts (
   link text,
   status text not null default 'Ativo',
   position integer not null default 100,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.home_sections (
+  id text primary key,
+  title text not null,
+  source_type text not null default 'category',
+  category_name text default '',
+  limit_count integer not null default 4,
+  link text default '/catalog',
+  position integer not null default 100,
+  status text not null default 'Ativo',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -100,29 +121,34 @@ group by c.id;
 alter table public.products enable row level security;
 alter table public.categories enable row level security;
 alter table public.banners enable row level security;
+alter table public.home_sections enable row level security;
 alter table public.instagram_posts enable row level security;
 alter table public.store_settings enable row level security;
 
 drop policy if exists "Public read products" on public.products;
 drop policy if exists "Public read categories" on public.categories;
 drop policy if exists "Public read banners" on public.banners;
+drop policy if exists "Public read home sections" on public.home_sections;
 drop policy if exists "Public read instagram posts" on public.instagram_posts;
 drop policy if exists "Public read store settings" on public.store_settings;
 drop policy if exists "Anon write products" on public.products;
 drop policy if exists "Anon write categories" on public.categories;
 drop policy if exists "Anon write banners" on public.banners;
+drop policy if exists "Anon write home sections" on public.home_sections;
 drop policy if exists "Anon write instagram posts" on public.instagram_posts;
 drop policy if exists "Anon write store settings" on public.store_settings;
 
 create policy "Public read products" on public.products for select using (status = 'Ativo');
 create policy "Public read categories" on public.categories for select using (status = 'Ativo');
 create policy "Public read banners" on public.banners for select using (status = 'Ativo');
+create policy "Public read home sections" on public.home_sections for select using (status = 'Ativo');
 create policy "Public read instagram posts" on public.instagram_posts for select using (status = 'Ativo');
 create policy "Public read store settings" on public.store_settings for select using (true);
 
 create policy "Anon write products" on public.products for all using (true) with check (true);
 create policy "Anon write categories" on public.categories for all using (true) with check (true);
 create policy "Anon write banners" on public.banners for all using (true) with check (true);
+create policy "Anon write home sections" on public.home_sections for all using (true) with check (true);
 create policy "Anon write instagram posts" on public.instagram_posts for all using (true) with check (true);
 create policy "Anon write store settings" on public.store_settings for all using (true) with check (true);
 
