@@ -1,7 +1,8 @@
 insert into public.store_settings (
-  id, store_name, logo_url, email, phone, instagram, facebook, tiktok, description, primary_color, secondary_color, points_per_real
+  id, store_name, site_title, logo_url, email, phone, instagram, facebook, tiktok, description, primary_color, secondary_color, points_per_real, support_sales_phone, support_sac_phone, support_email, support_week_hours, support_saturday_hours
 ) values (
   1,
+  'Spacodani',
   'Spacodani',
   'https://cdn.awsli.com.br/400x300/2751/2751677/logo/logo-dani-morais-ky8ceccgy5.png',
   'contato@danibrand.com.br',
@@ -12,9 +13,15 @@ insert into public.store_settings (
   'Loja oficial DANI Brand. Roupas minimalistas e exclusivas, feitas com algodao premium.',
   '#ba884b',
   '#1a222b',
-  1
+  1,
+  '(64) 99202-3191',
+  '(64) 99209-6899',
+  'spacodanimorais@gmail.com',
+  'Seg a Sex das 08h as 18h',
+  'Sab das 08h as 13h'
 ) on conflict (id) do update set
   store_name = excluded.store_name,
+  site_title = excluded.site_title,
   logo_url = excluded.logo_url,
   email = excluded.email,
   phone = excluded.phone,
@@ -25,6 +32,11 @@ insert into public.store_settings (
   primary_color = excluded.primary_color,
   secondary_color = excluded.secondary_color,
   points_per_real = excluded.points_per_real,
+  support_sales_phone = excluded.support_sales_phone,
+  support_sac_phone = excluded.support_sac_phone,
+  support_email = excluded.support_email,
+  support_week_hours = excluded.support_week_hours,
+  support_saturday_hours = excluded.support_saturday_hours,
   updated_at = now();
 
 insert into public.categories (nome, slug, imagem, status) values

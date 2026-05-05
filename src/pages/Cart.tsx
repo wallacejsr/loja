@@ -9,14 +9,16 @@ export function Cart() {
   const navigate = useNavigate();
   const [cupom, setCupom] = useState('');
   const [descontoCupom, setDescontoCupom] = useState(0);
+  const [cupomFeedback, setCupomFeedback] = useState('');
   const [cep, setCep] = useState('');
   const [frete, setFrete] = useState(0);
 
   const applyCupom = () => {
     if (cupom.toUpperCase() === 'BEMVINDA10') {
       setDescontoCupom(cartTotal * 0.10);
+      setCupomFeedback('Cupom aplicado com sucesso.');
     } else {
-      alert('Cupom inválido');
+      setCupomFeedback('Cupom inválido.');
       setDescontoCupom(0);
     }
   };
@@ -198,6 +200,14 @@ export function Cart() {
                      Aplicar
                   </button>
                </div>
+               {cupomFeedback && (
+                 <p className={cn(
+                   "mt-2 text-xs font-semibold",
+                   descontoCupom > 0 ? "text-emerald-600" : "text-red-600"
+                 )}>
+                   {cupomFeedback}
+                 </p>
+               )}
             </div>
 
             <button

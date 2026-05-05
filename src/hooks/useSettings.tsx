@@ -46,7 +46,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     document.documentElement.style.setProperty('--theme-primary', settings.primaryColor);
     document.documentElement.style.setProperty('--theme-primary-dark', adjustColorIntensity(settings.primaryColor, -20));
     document.documentElement.style.setProperty('--theme-secondary', settings.secondaryColor);
-  }, [settings.primaryColor, settings.secondaryColor]);
+    document.title = settings.siteTitle || settings.storeName;
+  }, [settings.primaryColor, settings.secondaryColor, settings.siteTitle, settings.storeName]);
 
   const updateSettings = useCallback((newSettings: Partial<StoreSettings>) => {
     setSettings((prev) => {

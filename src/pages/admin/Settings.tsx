@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Save, Languages, Image } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Save, Languages, Image, Headphones } from 'lucide-react';
 import { showToast } from '../../lib/adminUtils';
 import { useTranslation } from 'react-i18next';
 import { useSettings, StoreSettings } from '../../hooks/useSettings';
@@ -8,6 +8,10 @@ export function Settings() {
   const { t, i18n } = useTranslation();
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState<StoreSettings>(settings);
+
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -93,6 +97,11 @@ export function Settings() {
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">Nome da Loja</label>
                   <input type="text" name="storeName" value={localSettings.storeName} onChange={handleChange} className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
                </div>
+               <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">Título do Site</label>
+                  <input type="text" name="siteTitle" value={localSettings.siteTitle} onChange={handleChange} placeholder="Ex: Spaçodani | Moda Feminina" className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
+                  <p className="text-[11px] text-neutral-400 mt-2">Aparece na aba do navegador e pode ser usado por buscadores.</p>
+               </div>
                <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">E-mail de Contato</label>
                   <input type="email" name="email" value={localSettings.email} onChange={handleChange} className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
@@ -119,6 +128,36 @@ export function Settings() {
                <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">TikTok (URL)</label>
                   <input type="url" name="tiktok" value={localSettings.tiktok} onChange={handleChange} placeholder="https://tiktok.com/@..." className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
+               </div>
+            </div>
+         </section>
+
+         {/* Central de Atendimento */}
+         <section>
+            <div className="flex items-center gap-3 border-b border-neutral-100/60 pb-3 mb-6">
+               <Headphones className="w-4 h-4 text-neutral-900" />
+               <h3 className="text-[11px] font-semibold uppercase tracking-widest text-neutral-900">Central de Atendimento</h3>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-6">
+               <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">WhatsApp Vendas</label>
+                  <input type="text" name="supportSalesPhone" value={localSettings.supportSalesPhone} onChange={handleChange} placeholder="(64) 99202-3191" className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
+               </div>
+               <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">WhatsApp SAC</label>
+                  <input type="text" name="supportSacPhone" value={localSettings.supportSacPhone} onChange={handleChange} placeholder="(64) 99209-6899" className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
+               </div>
+               <div className="sm:col-span-2">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">E-mail SAC</label>
+                  <input type="email" name="supportEmail" value={localSettings.supportEmail} onChange={handleChange} placeholder="sac@sualoja.com.br" className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
+               </div>
+               <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">Horário dias úteis</label>
+                  <input type="text" name="supportWeekHours" value={localSettings.supportWeekHours} onChange={handleChange} placeholder="Seg a Sex das 08h às 18h" className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
+               </div>
+               <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">Horário sábado</label>
+                  <input type="text" name="supportSaturdayHours" value={localSettings.supportSaturdayHours} onChange={handleChange} placeholder="Sáb das 08h às 13h" className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
                </div>
             </div>
          </section>

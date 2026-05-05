@@ -29,6 +29,23 @@ export interface InstagramPost {
   position: number;
 }
 
+export interface ProductInput {
+  id?: string;
+  nome: string;
+  preco: number;
+  precoPromocional?: number;
+  categoria: Product['categoria'];
+  subcategoria?: string;
+  imagens: string[];
+  descricao?: string;
+  composicao?: string;
+  tamanhos?: string[];
+  cores?: { nome: string; hex: string }[];
+  estoque: number;
+  maisVendido?: boolean;
+  lancamento?: boolean;
+}
+
 const fallbackBanners: Banner[] = [
   {
     id: '1',
@@ -82,6 +99,7 @@ const toBanner = (row: any): Banner => ({
 
 const toSettings = (row: any): StoreSettings => ({
   storeName: row.store_name || defaultSettings.storeName,
+  siteTitle: row.site_title || row.store_name || defaultSettings.siteTitle,
   logoUrl: row.logo_url || defaultSettings.logoUrl,
   email: row.email || defaultSettings.email,
   phone: row.phone || defaultSettings.phone,
@@ -92,11 +110,17 @@ const toSettings = (row: any): StoreSettings => ({
   primaryColor: row.primary_color || defaultSettings.primaryColor,
   secondaryColor: row.secondary_color || defaultSettings.secondaryColor,
   pointsPerReal: Number(row.points_per_real || defaultSettings.pointsPerReal),
+  supportSalesPhone: row.support_sales_phone || row.phone || defaultSettings.supportSalesPhone,
+  supportSacPhone: row.support_sac_phone || defaultSettings.supportSacPhone,
+  supportEmail: row.support_email || row.email || defaultSettings.supportEmail,
+  supportWeekHours: row.support_week_hours || defaultSettings.supportWeekHours,
+  supportSaturdayHours: row.support_saturday_hours || defaultSettings.supportSaturdayHours,
 });
 
 const fromSettings = (settings: StoreSettings) => ({
   id: 1,
   store_name: settings.storeName,
+  site_title: settings.siteTitle,
   logo_url: settings.logoUrl,
   email: settings.email,
   phone: settings.phone,
@@ -107,6 +131,11 @@ const fromSettings = (settings: StoreSettings) => ({
   primary_color: settings.primaryColor,
   secondary_color: settings.secondaryColor,
   points_per_real: settings.pointsPerReal,
+  support_sales_phone: settings.supportSalesPhone,
+  support_sac_phone: settings.supportSacPhone,
+  support_email: settings.supportEmail,
+  support_week_hours: settings.supportWeekHours,
+  support_saturday_hours: settings.supportSaturdayHours,
   updated_at: new Date().toISOString(),
 });
 
@@ -121,6 +150,136 @@ export async function getProducts(): Promise<Product[]> {
 
   if (error) throw error;
   return (data || []).map(toProduct);
+}
+
+export async function uploadProductImage(file: File): Promise<string> {
+  if (!isSupabaseConfigured || !supabase) {
+    return URL.createObjectURL(file);
+  }
+
+  const extension = file.name.split('.').pop() || 'jpg';
+  const fileName = `${crypto.randomUUID()}.${extension}`;
+  const filePath = `products/${fileName}`;
+  const { error } = await supabase.storage
+    .from('product-images')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+    });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
+export async function createProduct(input: ProductInput): Promise<Product> {
+  const product: Product = {
+    id: input.id || crypto.randomUUID(),
+    nome: input.nome,
+    preco: input.preco,
+    precoPromocional: input.precoPromocional,
+    categoria: input.categoria,
+    subcategoria: input.subcategoria || '',
+    imagens: input.imagens,
+    descricao: input.descricao || '',
+    composicao: input.composicao || '',
+    tamanhos: input.tamanhos || [],
+    cores: input.cores || [],
+    avaliacoes: [],
+    maisVendido: Boolean(input.maisVendido),
+    lancamento: Boolean(input.lancamento),
+    estoque: input.estoque,
+  };
+
+  if (!isSupabaseConfigured || !supabase) return product;
+
+  const { data, error } = await supabase
+    .from('products')
+    .insert({
+      id: product.id,
+      nome: product.nome,
+      preco: product.preco,
+      preco_promocional: product.precoPromocional,
+      categoria: product.categoria,
+      subcategoria: product.subcategoria,
+      imagens: product.imagens,
+      descricao: product.descricao,
+      composicao: product.composicao,
+      tamanhos: product.tamanhos,
+      cores: product.cores,
+      avaliacoes: product.avaliacoes,
+      mais_vendido: product.maisVendido,
+      lancamento: product.lancamento,
+      estoque: product.estoque,
+      status: 'Ativo',
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toProduct(data);
+}
+
+export async function updateProduct(id: string, input: ProductInput): Promise<Product> {
+  const product: Product = {
+    id,
+    nome: input.nome,
+    preco: input.preco,
+    precoPromocional: input.precoPromocional,
+    categoria: input.categoria,
+    subcategoria: input.subcategoria || '',
+    imagens: input.imagens,
+    descricao: input.descricao || '',
+    composicao: input.composicao || '',
+    tamanhos: input.tamanhos || [],
+    cores: input.cores || [],
+    avaliacoes: [],
+    maisVendido: Boolean(input.maisVendido),
+    lancamento: Boolean(input.lancamento),
+    estoque: input.estoque,
+  };
+
+  if (!isSupabaseConfigured || !supabase) return product;
+
+  const { data, error } = await supabase
+    .from('products')
+    .update({
+      nome: product.nome,
+      preco: product.preco,
+      preco_promocional: product.precoPromocional,
+      categoria: product.categoria,
+      subcategoria: product.subcategoria,
+      imagens: product.imagens,
+      descricao: product.descricao,
+      composicao: product.composicao,
+      tamanhos: product.tamanhos,
+      cores: product.cores,
+      mais_vendido: product.maisVendido,
+      lancamento: product.lancamento,
+      estoque: product.estoque,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toProduct(data);
+}
+
+export async function deleteProduct(id: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+
+  const { error } = await supabase
+    .from('products')
+    .update({
+      status: 'Inativo',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
 export async function getCategories(): Promise<StoreCategory[]> {

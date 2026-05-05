@@ -56,6 +56,7 @@ create table if not exists public.instagram_posts (
 create table if not exists public.store_settings (
   id integer primary key default 1 check (id = 1),
   store_name text not null,
+  site_title text default '',
   logo_url text default '',
   email text default '',
   phone text default '',
@@ -66,8 +67,20 @@ create table if not exists public.store_settings (
   primary_color text not null default '#ba884b',
   secondary_color text not null default '#1a222b',
   points_per_real numeric(10, 2) not null default 1,
+  support_sales_phone text default '',
+  support_sac_phone text default '',
+  support_email text default '',
+  support_week_hours text default '',
+  support_saturday_hours text default '',
   updated_at timestamptz not null default now()
 );
+
+alter table public.store_settings add column if not exists support_sales_phone text default '';
+alter table public.store_settings add column if not exists site_title text default '';
+alter table public.store_settings add column if not exists support_sac_phone text default '';
+alter table public.store_settings add column if not exists support_email text default '';
+alter table public.store_settings add column if not exists support_week_hours text default '';
+alter table public.store_settings add column if not exists support_saturday_hours text default '';
 
 create or replace view public.categories_with_product_count as
 select
@@ -83,6 +96,17 @@ alter table public.banners enable row level security;
 alter table public.instagram_posts enable row level security;
 alter table public.store_settings enable row level security;
 
+drop policy if exists "Public read products" on public.products;
+drop policy if exists "Public read categories" on public.categories;
+drop policy if exists "Public read banners" on public.banners;
+drop policy if exists "Public read instagram posts" on public.instagram_posts;
+drop policy if exists "Public read store settings" on public.store_settings;
+drop policy if exists "Anon write products" on public.products;
+drop policy if exists "Anon write categories" on public.categories;
+drop policy if exists "Anon write banners" on public.banners;
+drop policy if exists "Anon write instagram posts" on public.instagram_posts;
+drop policy if exists "Anon write store settings" on public.store_settings;
+
 create policy "Public read products" on public.products for select using (status = 'Ativo');
 create policy "Public read categories" on public.categories for select using (status = 'Ativo');
 create policy "Public read banners" on public.banners for select using (status = 'Ativo');
@@ -94,3 +118,24 @@ create policy "Anon write categories" on public.categories for all using (true) 
 create policy "Anon write banners" on public.banners for all using (true) with check (true);
 create policy "Anon write instagram posts" on public.instagram_posts for all using (true) with check (true);
 create policy "Anon write store settings" on public.store_settings for all using (true) with check (true);
+
+insert into storage.buckets (id, name, public)
+values ('product-images', 'product-images', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "Public read product images" on storage.objects;
+drop policy if exists "Anon upload product images" on storage.objects;
+drop policy if exists "Anon update product images" on storage.objects;
+drop policy if exists "Anon delete product images" on storage.objects;
+
+create policy "Public read product images" on storage.objects
+for select using (bucket_id = 'product-images');
+
+create policy "Anon upload product images" on storage.objects
+for insert with check (bucket_id = 'product-images');
+
+create policy "Anon update product images" on storage.objects
+for update using (bucket_id = 'product-images') with check (bucket_id = 'product-images');
+
+create policy "Anon delete product images" on storage.objects
+for delete using (bucket_id = 'product-images');

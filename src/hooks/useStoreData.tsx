@@ -1,6 +1,6 @@
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Product } from '../data/mockData';
-import { Banner, createBanner, deleteBanner, getBanners, getCategories, getInstagramFeed, getProducts, InstagramPost, StoreCategory, updateBannerPositions } from '../lib/storeApi';
+import { Banner, createBanner, createProduct, deleteBanner, deleteProduct, getBanners, getCategories, getInstagramFeed, getProducts, InstagramPost, ProductInput, StoreCategory, updateBannerPositions, updateProduct } from '../lib/storeApi';
 
 interface StoreDataContextValue {
   products: Product[];
@@ -10,6 +10,9 @@ interface StoreDataContextValue {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  addProduct: (product: ProductInput) => Promise<void>;
+  editProduct: (id: string, product: ProductInput) => Promise<void>;
+  removeProduct: (id: string) => Promise<void>;
   addBanner: (banner: Pick<Banner, 'title' | 'desktop' | 'mobile' | 'link'>) => Promise<void>;
   removeBanner: (id: string) => Promise<void>;
   reorderBanners: (index: number, direction: 'up' | 'down') => Promise<void>;
@@ -55,6 +58,28 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
     setBanners((current) => [...current, created].sort((a, b) => a.position - b.position));
   }, []);
 
+  const addProduct = useCallback(async (product: ProductInput) => {
+    const created = await createProduct(product);
+    setProducts((current) => [created, ...current]);
+    setCategories((current) => current.map((category) => (
+      category.nome === created.categoria
+        ? { ...category, productCount: (category.productCount || 0) + 1 }
+        : category
+    )));
+  }, []);
+
+  const editProduct = useCallback(async (id: string, product: ProductInput) => {
+    const updated = await updateProduct(id, product);
+    setProducts((current) => current.map((item) => (item.id === id ? updated : item)));
+    await refresh();
+  }, [refresh]);
+
+  const removeProduct = useCallback(async (id: string) => {
+    await deleteProduct(id);
+    setProducts((current) => current.filter((product) => product.id !== id));
+    await refresh();
+  }, [refresh]);
+
   const removeBanner = useCallback(async (id: string) => {
     await deleteBanner(id);
     setBanners((current) => current.filter((banner) => banner.id !== id));
@@ -82,11 +107,14 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       refresh,
+      addProduct,
+      editProduct,
+      removeProduct,
       addBanner,
       removeBanner,
       reorderBanners,
     }),
-    [products, categories, banners, instagramFeed, loading, error, refresh, addBanner, removeBanner, reorderBanners],
+    [products, categories, banners, instagramFeed, loading, error, refresh, addProduct, editProduct, removeProduct, addBanner, removeBanner, reorderBanners],
   );
 
   return <StoreDataContext.Provider value={value}>{children}</StoreDataContext.Provider>;
