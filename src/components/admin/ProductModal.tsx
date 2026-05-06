@@ -41,6 +41,8 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
     preco: '',
     precoPromocional: '',
     estoque: '',
+    lancamento: false,
+    maisVendido: false,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { categories, addProduct, editProduct } = useStoreData();
@@ -72,6 +74,8 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
       preco: '',
       precoPromocional: '',
       estoque: '',
+      lancamento: false,
+      maisVendido: false,
     });
     setIsOneSize(false);
     setSelectedSizes([]);
@@ -95,6 +99,8 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
         preco: '',
         precoPromocional: '',
         estoque: '',
+        lancamento: false,
+        maisVendido: false,
       });
       setIsOneSize(false);
       setSelectedSizes([]);
@@ -118,6 +124,8 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
       preco: String(product.preco),
       precoPromocional: product.precoPromocional ? String(product.precoPromocional) : '',
       estoque: String(product.estoque),
+      lancamento: Boolean(product.lancamento),
+      maisVendido: Boolean(product.maisVendido),
     });
     setIsOneSize(product.tamanhos.length === 1 && ['Único', 'Unico', 'Tamanho Único', 'Tamanho Unico'].includes(product.tamanhos[0]));
     setSelectedSizes(product.tamanhos.length ? product.tamanhos : []);
@@ -221,6 +229,8 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
         tamanhos: sizesToSave,
         cores: colors,
         estoque: Number(formData.estoque),
+        lancamento: formData.lancamento,
+        maisVendido: formData.maisVendido,
       };
 
       if (product) {
@@ -391,6 +401,34 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                         className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
                       />
                     </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4 border-t border-neutral-100 pt-6">
+                    <label className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-100 bg-neutral-50/60 px-4 py-4 cursor-pointer hover:bg-neutral-50 transition-colors">
+                      <div>
+                        <span className="block text-[12px] font-bold text-neutral-900">Marcar como lançamento</span>
+                        <span className="block text-[11px] text-neutral-500 mt-0.5">Exibe este produto na faixa Lançamentos da Home.</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={formData.lancamento}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, lancamento: e.target.checked }))}
+                        className="w-5 h-5 accent-neutral-900 shrink-0"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-100 bg-neutral-50/60 px-4 py-4 cursor-pointer hover:bg-neutral-50 transition-colors">
+                      <div>
+                        <span className="block text-[12px] font-bold text-neutral-900">Marcar como mais vendido</span>
+                        <span className="block text-[11px] text-neutral-500 mt-0.5">Exibe este produto na faixa Mais Vendidos da Home.</span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={formData.maisVendido}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, maisVendido: e.target.checked }))}
+                        className="w-5 h-5 accent-neutral-900 shrink-0"
+                      />
+                    </label>
                   </div>
                 </div>
               )}

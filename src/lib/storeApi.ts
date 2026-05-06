@@ -14,6 +14,7 @@ export interface StoreCategory {
   homeSectionTitle: string;
   homeSectionOrder: number;
   homeSectionLimit: number;
+  homeSectionFilter: HomeSectionSource | 'all';
   productCount?: number;
 }
 
@@ -28,6 +29,7 @@ export interface CategoryInput {
   homeSectionTitle: string;
   homeSectionOrder: number;
   homeSectionLimit: number;
+  homeSectionFilter: HomeSectionSource | 'all';
 }
 
 export interface Banner {
@@ -45,6 +47,39 @@ export interface InstagramPost {
   id: string;
   image: string;
   link?: string;
+  position: number;
+}
+
+export interface Raffle {
+  id: string;
+  title: string;
+  prize: string;
+  description: string;
+  image: string;
+  productId: string;
+  pointsPerTicket: number;
+  drawDate: string;
+  ctaLabel: string;
+  ctaLink: string;
+  totalParticipants: number;
+  totalTickets: number;
+  status: 'Ativo' | 'Inativo' | 'Finalizado' | 'Agendado';
+  position: number;
+}
+
+export interface RaffleInput {
+  title: string;
+  prize: string;
+  description: string;
+  image: string;
+  productId: string;
+  pointsPerTicket: number;
+  drawDate: string;
+  ctaLabel: string;
+  ctaLink: string;
+  totalParticipants: number;
+  totalTickets: number;
+  status: 'Ativo' | 'Inativo' | 'Finalizado' | 'Agendado';
   position: number;
 }
 
@@ -71,6 +106,25 @@ export interface HomeSectionInput {
   status: 'Ativo' | 'Inativo';
 }
 
+export interface HomeCard {
+  id: string;
+  title: string;
+  image: string;
+  link: string;
+  ctaLabel: string;
+  position: number;
+  status: 'Ativo' | 'Inativo';
+}
+
+export interface HomeCardInput {
+  title: string;
+  image: string;
+  link: string;
+  ctaLabel: string;
+  position: number;
+  status: 'Ativo' | 'Inativo';
+}
+
 export interface ProductInput {
   id?: string;
   nome: string;
@@ -87,6 +141,8 @@ export interface ProductInput {
   maisVendido?: boolean;
   lancamento?: boolean;
 }
+
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
 const fallbackBanners: Banner[] = [
   {
@@ -131,6 +187,7 @@ const toCategory = (row: any): StoreCategory => ({
   homeSectionTitle: row.home_section_title || row.nome || '',
   homeSectionOrder: Number(row.home_section_order || row.menu_order || 100),
   homeSectionLimit: Number(row.home_section_limit || 4),
+  homeSectionFilter: row.home_section_filter || 'all',
   productCount: row.product_count,
 });
 
@@ -154,6 +211,33 @@ const toHomeSection = (row: any): HomeSection => ({
   link: row.link || '/catalog',
   position: Number(row.position || 100),
   status: row.status || 'Ativo',
+});
+
+const toHomeCard = (row: any): HomeCard => ({
+  id: String(row.id),
+  title: row.title || '',
+  image: row.image || '',
+  link: row.link || '/catalog',
+  ctaLabel: row.cta_label || 'Confira',
+  position: Number(row.position || 100),
+  status: row.status || 'Ativo',
+});
+
+const toRaffle = (row: any): Raffle => ({
+  id: String(row.id),
+  title: row.title || '',
+  prize: row.prize || '',
+  description: row.description || '',
+  image: row.image || '',
+  productId: row.product_id || '',
+  pointsPerTicket: Number(row.points_per_ticket || 0),
+  drawDate: row.draw_date || '',
+  ctaLabel: row.cta_label || 'Participar agora',
+  ctaLink: row.cta_link || '/sorteios',
+  totalParticipants: Number(row.total_participants || 0),
+  totalTickets: Number(row.total_tickets || 0),
+  status: row.status || 'Ativo',
+  position: Number(row.position || 100),
 });
 
 const toSettings = (row: any): StoreSettings => ({
@@ -355,6 +439,7 @@ export async function getCategories(): Promise<StoreCategory[]> {
       homeSectionTitle: category.nome,
       homeSectionOrder: index + 1,
       homeSectionLimit: 4,
+      homeSectionFilter: 'all',
       productCount: mockProducts.filter((product) => product.categoria === category.nome).length,
     }));
   }
@@ -383,6 +468,7 @@ export async function createCategory(input: CategoryInput): Promise<StoreCategor
     homeSectionTitle: input.homeSectionTitle || input.nome,
     homeSectionOrder: input.homeSectionOrder,
     homeSectionLimit: input.homeSectionLimit,
+    homeSectionFilter: input.homeSectionFilter,
     productCount: 0,
   };
 
@@ -401,6 +487,7 @@ export async function createCategory(input: CategoryInput): Promise<StoreCategor
       home_section_title: input.homeSectionTitle || input.nome,
       home_section_order: input.homeSectionOrder,
       home_section_limit: input.homeSectionLimit,
+      home_section_filter: input.homeSectionFilter,
     })
     .select('*')
     .single();
@@ -423,6 +510,7 @@ export async function updateCategory(id: string, input: CategoryInput): Promise<
       homeSectionTitle: input.homeSectionTitle || input.nome,
       homeSectionOrder: input.homeSectionOrder,
       homeSectionLimit: input.homeSectionLimit,
+      homeSectionFilter: input.homeSectionFilter,
       productCount: 0,
     };
   }
@@ -440,6 +528,7 @@ export async function updateCategory(id: string, input: CategoryInput): Promise<
       home_section_title: input.homeSectionTitle || input.nome,
       home_section_order: input.homeSectionOrder,
       home_section_limit: input.homeSectionLimit,
+      home_section_filter: input.homeSectionFilter,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
@@ -510,6 +599,206 @@ export async function getHomeSections({ onlyActive = true } = {}): Promise<HomeS
 
   const sections = (data || []).map(toHomeSection);
   return sections.length ? sections : fallback;
+}
+
+export async function getHomeCards({ onlyActive = true } = {}): Promise<HomeCard[]> {
+  const fallback: HomeCard[] = [
+    {
+      id: '5f3de6ca-2dcb-4b53-9d2f-0a5dd0b9f111',
+      title: 'Camisetas',
+      image: 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&q=80&w=900',
+      link: '/catalog?category=Camisetas',
+      ctaLabel: 'Confira',
+      position: 1,
+      status: 'Ativo',
+    },
+    {
+      id: '33e86420-b6d0-45a1-b53d-5fe6b7f1e222',
+      title: 'Puffer',
+      image: 'https://images.unsplash.com/photo-1548624149-f9b185f6893d?auto=format&fit=crop&q=80&w=900',
+      link: '/catalog?q=puffer',
+      ctaLabel: 'Confira',
+      position: 2,
+      status: 'Ativo',
+    },
+    {
+      id: '8f92cb70-7d15-4ab7-8082-8d6b0e51c333',
+      title: 'Tric\u00f4s',
+      image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=900',
+      link: '/catalog?q=trico',
+      ctaLabel: 'Confira',
+      position: 3,
+      status: 'Ativo',
+    },
+  ];
+
+  if (!isSupabaseConfigured || !supabase) return onlyActive ? fallback.filter((card) => card.status === 'Ativo') : fallback;
+
+  let query = supabase.from('home_cards').select('*').order('position', { ascending: true });
+  if (onlyActive) query = query.eq('status', 'Ativo');
+
+  const { data, error } = await query;
+  if (error) return fallback;
+  const cards = (data || []).map(toHomeCard);
+  return cards.length ? cards : fallback;
+}
+
+export async function createHomeCard(input: HomeCardInput): Promise<HomeCard> {
+  const card: HomeCard = { id: crypto.randomUUID(), ...input };
+  if (!isSupabaseConfigured || !supabase) return card;
+
+  const { data, error } = await supabase
+    .from('home_cards')
+    .insert({
+      id: card.id,
+      title: input.title,
+      image: input.image,
+      link: input.link,
+      cta_label: input.ctaLabel || 'Confira',
+      position: input.position,
+      status: input.status,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toHomeCard(data);
+}
+
+export async function updateHomeCard(id: string, input: HomeCardInput): Promise<HomeCard> {
+  const card: HomeCard = { id, ...input };
+  if (!isSupabaseConfigured || !supabase) return card;
+
+  if (!isUuid(id)) {
+    return createHomeCard(input);
+  }
+
+  const { data, error } = await supabase
+    .from('home_cards')
+    .upsert({
+      id,
+      title: input.title,
+      image: input.image,
+      link: input.link,
+      cta_label: input.ctaLabel || 'Confira',
+      position: input.position,
+      status: input.status,
+      updated_at: new Date().toISOString(),
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toHomeCard(data);
+}
+
+export async function deleteHomeCard(id: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+
+  const { error } = await supabase.from('home_cards').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function getRaffles({ onlyActive = true } = {}): Promise<Raffle[]> {
+  const fallback: Raffle[] = [
+    {
+      id: 'raffle-1',
+      title: 'Sorteio Ativo',
+      prize: 'Look exclusivo da loja',
+      description: 'Participe do clube de sorteios e concorra a premios especiais.',
+      image: mockProducts[0]?.imagens[0] || '',
+      productId: mockProducts[0]?.id || '',
+      pointsPerTicket: 100,
+      drawDate: '2026-12-31',
+      ctaLabel: 'Participar agora',
+      ctaLink: '/sorteios',
+      totalParticipants: 0,
+      totalTickets: 0,
+      status: 'Ativo',
+      position: 1,
+    },
+  ];
+
+  if (!isSupabaseConfigured || !supabase) return onlyActive ? fallback.filter((raffle) => raffle.status === 'Ativo') : fallback;
+
+  let query = supabase.from('raffles').select('*').order('position', { ascending: true });
+  if (onlyActive) query = query.eq('status', 'Ativo');
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data || []).map(toRaffle);
+}
+
+export async function createRaffle(input: RaffleInput): Promise<Raffle> {
+  const raffle: Raffle = { id: crypto.randomUUID(), ...input };
+  if (!isSupabaseConfigured || !supabase) return raffle;
+
+  const { data, error } = await supabase
+    .from('raffles')
+    .insert({
+      title: input.title,
+      prize: input.prize,
+      description: input.description,
+      image: input.image,
+      product_id: input.productId || null,
+      points_per_ticket: input.pointsPerTicket,
+      draw_date: input.drawDate || null,
+      cta_label: input.ctaLabel || 'Participar agora',
+      cta_link: input.ctaLink || '/sorteios',
+      total_participants: input.totalParticipants,
+      total_tickets: input.totalTickets,
+      status: input.status,
+      position: input.position,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toRaffle(data);
+}
+
+export async function updateRaffle(id: string, input: RaffleInput): Promise<Raffle> {
+  const raffle: Raffle = { id, ...input };
+  if (!isSupabaseConfigured || !supabase) return raffle;
+
+  const { data, error } = await supabase
+    .from('raffles')
+    .update({
+      title: input.title,
+      prize: input.prize,
+      description: input.description,
+      image: input.image,
+      product_id: input.productId || null,
+      points_per_ticket: input.pointsPerTicket,
+      draw_date: input.drawDate || null,
+      cta_label: input.ctaLabel || 'Participar agora',
+      cta_link: input.ctaLink || '/sorteios',
+      total_participants: input.totalParticipants,
+      total_tickets: input.totalTickets,
+      status: input.status,
+      position: input.position,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toRaffle(data);
+}
+
+export async function deleteRaffle(id: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+
+  const { error } = await supabase
+    .from('raffles')
+    .update({
+      status: 'Inativo',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
 export async function updateHomeSection(id: string, input: HomeSectionInput): Promise<HomeSection> {

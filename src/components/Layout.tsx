@@ -37,23 +37,21 @@ export function Layout() {
     }
   };
 
-  const navLinks = [
-    { name: t('nav.new_arrivals'), path: '/catalog?sort=lancamentos' },
-    { name: t('nav.occasions'), path: '/catalog?category=Ocasiões', hasDropdown: true },
-    { name: t('nav.essential'), path: '/catalog?category=Linha Essencial' },
-    { name: t('nav.jeans'), path: '/catalog?category=Jeans' },
-    { name: t('nav.vestidos'), path: '/catalog?category=Vestidos' },
-    { name: t('nav.pants'), path: '/catalog?category=Calças' },
-    { name: t('nav.shirts'), path: '/catalog?category=Camisas' },
-    { name: 'Sorteios', path: '/sorteios' },
-  ];
-
   const activeCategories = categories
     .filter((category) => category.status === 'Ativo')
     .sort((a, b) => a.menuOrder - b.menuOrder || a.nome.localeCompare(b.nome));
-  const menuCategories = activeCategories.filter((category) => category.showInMenu);
+  const automaticCategoryKeys = new Set(['lancamentos', 'lançamentos', 'mais vendidos', 'mais-vendidos']);
+  const isAutomaticCategory = (name: string) => automaticCategoryKeys.has(name.trim().toLowerCase());
+  const menuCategories = activeCategories.filter((category) => category.showInMenu && !isAutomaticCategory(category.nome));
   const visibleMenuCategories = menuCategories.slice(0, 7);
-  const hiddenMenuCategories = activeCategories.filter((category) => !visibleMenuCategories.some((visible) => visible.id === category.id));
+  const hiddenMenuCategories = activeCategories.filter((category) => (
+    !isAutomaticCategory(category.nome) &&
+    !visibleMenuCategories.some((visible) => visible.id === category.id)
+  ));
+  const automaticMenuLinks = [
+    { name: 'Lan\u00e7amentos', path: '/catalog?sort=lancamentos', active: location.search.includes('sort=lancamentos') },
+    { name: 'Mais Vendidos', path: '/catalog?sort=mais-vendidos', active: location.search.includes('sort=mais-vendidos') },
+  ];
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-secondary font-sans selection:bg-primary/20 selection:text-primary">
@@ -269,6 +267,18 @@ export function Layout() {
                 </div>
                 
                 <div className="flex items-center pl-6 space-x-6 xl:space-x-8">
+                  {automaticMenuLinks.map((link) => (
+                    <Link
+                      key={link.path}
+                      to={link.path}
+                      className={cn(
+                        "text-sm font-semibold tracking-wide uppercase text-secondary hover:text-primary transition-colors py-3 flex items-center",
+                        link.active ? 'text-primary' : ''
+                      )}
+                    >
+                      {link.name}
+                    </Link>
+                  ))}
                   {visibleMenuCategories.map((category) => (
                     <Link
                       key={category.id}
@@ -344,7 +354,17 @@ export function Layout() {
                </form>
             </div>
             
-            {activeCategories.map((category) => (
+            {automaticMenuLinks.map((link) => (
+              <Link
+                key={link.path}
+                to={link.path}
+                onClick={closeMenu}
+                className="block px-3 py-3 text-sm font-semibold uppercase tracking-wide text-secondary hover:text-primary hover:bg-neutral-50 rounded-md"
+              >
+                {link.name}
+              </Link>
+            ))}
+            {activeCategories.filter((category) => !isAutomaticCategory(category.nome)).map((category) => (
               <Link
                 key={category.id}
                 to={`/catalog?category=${encodeURIComponent(category.nome)}`}

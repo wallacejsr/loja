@@ -33,6 +33,7 @@ create table if not exists public.categories (
   home_section_title text default '',
   home_section_order integer not null default 100,
   home_section_limit integer not null default 4,
+  home_section_filter text not null default 'all',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -43,6 +44,7 @@ alter table public.categories add column if not exists show_on_home boolean not 
 alter table public.categories add column if not exists home_section_title text default '';
 alter table public.categories add column if not exists home_section_order integer not null default 100;
 alter table public.categories add column if not exists home_section_limit integer not null default 4;
+alter table public.categories add column if not exists home_section_filter text not null default 'all';
 
 create table if not exists public.banners (
   id uuid primary key default gen_random_uuid(),
@@ -78,6 +80,44 @@ create table if not exists public.home_sections (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create table if not exists public.home_cards (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  image text not null,
+  link text not null default '/catalog',
+  cta_label text not null default 'Confira',
+  position integer not null default 100,
+  status text not null default 'Ativo',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.raffles (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  prize text not null,
+  description text default '',
+  image text default '',
+  product_id text,
+  points_per_ticket integer not null default 100,
+  draw_date date,
+  cta_label text not null default 'Participar agora',
+  cta_link text not null default '/sorteios',
+  total_participants integer not null default 0,
+  total_tickets integer not null default 0,
+  status text not null default 'Ativo',
+  position integer not null default 100,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.raffles add column if not exists product_id text;
+alter table public.raffles add column if not exists cta_label text not null default 'Participar agora';
+alter table public.raffles add column if not exists cta_link text not null default '/sorteios';
+alter table public.raffles add column if not exists total_participants integer not null default 0;
+alter table public.raffles add column if not exists total_tickets integer not null default 0;
+alter table public.raffles add column if not exists position integer not null default 100;
 
 create table if not exists public.store_settings (
   id integer primary key default 1 check (id = 1),
@@ -122,6 +162,8 @@ alter table public.products enable row level security;
 alter table public.categories enable row level security;
 alter table public.banners enable row level security;
 alter table public.home_sections enable row level security;
+alter table public.home_cards enable row level security;
+alter table public.raffles enable row level security;
 alter table public.instagram_posts enable row level security;
 alter table public.store_settings enable row level security;
 
@@ -129,12 +171,16 @@ drop policy if exists "Public read products" on public.products;
 drop policy if exists "Public read categories" on public.categories;
 drop policy if exists "Public read banners" on public.banners;
 drop policy if exists "Public read home sections" on public.home_sections;
+drop policy if exists "Public read home cards" on public.home_cards;
+drop policy if exists "Public read raffles" on public.raffles;
 drop policy if exists "Public read instagram posts" on public.instagram_posts;
 drop policy if exists "Public read store settings" on public.store_settings;
 drop policy if exists "Anon write products" on public.products;
 drop policy if exists "Anon write categories" on public.categories;
 drop policy if exists "Anon write banners" on public.banners;
 drop policy if exists "Anon write home sections" on public.home_sections;
+drop policy if exists "Anon write home cards" on public.home_cards;
+drop policy if exists "Anon write raffles" on public.raffles;
 drop policy if exists "Anon write instagram posts" on public.instagram_posts;
 drop policy if exists "Anon write store settings" on public.store_settings;
 
@@ -142,6 +188,8 @@ create policy "Public read products" on public.products for select using (status
 create policy "Public read categories" on public.categories for select using (status = 'Ativo');
 create policy "Public read banners" on public.banners for select using (status = 'Ativo');
 create policy "Public read home sections" on public.home_sections for select using (status = 'Ativo');
+create policy "Public read home cards" on public.home_cards for select using (status = 'Ativo');
+create policy "Public read raffles" on public.raffles for select using (true);
 create policy "Public read instagram posts" on public.instagram_posts for select using (status = 'Ativo');
 create policy "Public read store settings" on public.store_settings for select using (true);
 
@@ -149,6 +197,8 @@ create policy "Anon write products" on public.products for all using (true) with
 create policy "Anon write categories" on public.categories for all using (true) with check (true);
 create policy "Anon write banners" on public.banners for all using (true) with check (true);
 create policy "Anon write home sections" on public.home_sections for all using (true) with check (true);
+create policy "Anon write home cards" on public.home_cards for all using (true) with check (true);
+create policy "Anon write raffles" on public.raffles for all using (true) with check (true);
 create policy "Anon write instagram posts" on public.instagram_posts for all using (true) with check (true);
 create policy "Anon write store settings" on public.store_settings for all using (true) with check (true);
 

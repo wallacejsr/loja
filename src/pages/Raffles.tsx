@@ -1,29 +1,23 @@
 import React from 'react';
-import { Trophy, Ticket, Calendar, Gift, Info, Star, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Trophy, Ticket, Calendar, Gift, Star } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useLoyalty } from '../hooks/useLoyalty';
+import { useStoreData } from '../hooks/useStoreData';
 import { showToast } from '../lib/adminUtils';
 import { cn } from '../lib/utils';
-import { motion } from 'motion/react';
+import { Raffle } from '../lib/storeApi';
 
 export function Raffles() {
   const { points, buyTicket, tickets } = useLoyalty();
+  const { raffles } = useStoreData();
+  const activeRaffles = raffles
+    .filter((raffle) => raffle.status === 'Ativo')
+    .sort((a, b) => a.position - b.position);
 
-  const activeRaffles = [
-    {
-      id: '1',
-      title: 'iPhone 15 Pro Max',
-      prize: '01 iPhone 15 Pro Max 256GB Platinum',
-      cost: 500,
-      drawDate: '2024-12-25',
-      image: 'https://images.unsplash.com/photo-1696446701796-da61225697cc?auto=format&fit=crop&w=800&q=80',
-      description: 'Participe do nosso sorteio especial de final de ano e concorra ao iPhone mais potente já criado.'
-    }
-  ];
-
-  const handleBuy = (raffle: any) => {
-    if (points >= raffle.cost) {
-      buyTicket(raffle.id, raffle.title, raffle.cost);
-      showToast('Participação confirmada! Boa sorte! 🍀');
+  const handleBuy = (raffle: Raffle) => {
+    if (points >= raffle.pointsPerTicket) {
+      buyTicket(raffle.id, raffle.title, raffle.pointsPerTicket);
+      showToast('Participacao confirmada! Boa sorte!');
     } else {
       showToast('Saldo de pontos insuficiente!');
     }
@@ -32,7 +26,6 @@ export function Raffles() {
   return (
     <div className="min-h-screen bg-[#FBFBFA] pt-32 pb-20">
       <div className="max-w-7xl mx-auto px-4 lg:px-8">
-        {/* Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-16">
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 text-primary font-bold text-[11px] uppercase tracking-[0.2em] mb-4">
@@ -59,7 +52,6 @@ export function Raffles() {
         </div>
 
         <div className="grid lg:grid-cols-12 gap-12">
-          {/* Active Raffles */}
           <div className="lg:col-span-8 space-y-8">
             <div className="flex items-center gap-4 mb-8">
               <h2 className="text-xl font-bold uppercase tracking-widest text-secondary">Sorteios Ativos</h2>
@@ -67,34 +59,34 @@ export function Raffles() {
             </div>
 
             {activeRaffles.map((raffle) => (
-              <motion.div 
+              <motion.div
                 key={raffle.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-white rounded-[32px] overflow-hidden border border-secondary/5 shadow-2xl shadow-secondary/5 group"
               >
                 <div className="grid md:grid-cols-2">
-                  <div className="h-64 md:h-full relative overflow-hidden">
-                    <img 
-                      src={raffle.image} 
-                      alt={raffle.title} 
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
-                    />
+                  <div className="h-64 md:h-full relative overflow-hidden bg-neutral-100">
+                    {raffle.image ? (
+                      <img src={raffle.image} alt={raffle.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-neutral-300">
+                        <Trophy className="w-14 h-14" />
+                      </div>
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent md:hidden" />
                     <div className="absolute bottom-6 left-6 text-white md:hidden">
-                       <span className="text-[10px] font-bold uppercase tracking-widest bg-primary px-3 py-1 rounded-full">{raffle.cost} PTS p/ bilhete</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest bg-primary px-3 py-1 rounded-full">{raffle.pointsPerTicket} PTS p/ bilhete</span>
                     </div>
                   </div>
                   <div className="p-8 md:p-12 flex flex-col justify-center">
                     <div className="hidden md:block mb-6">
                       <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-primary/10 text-primary px-4 py-1.5 rounded-full">
-                        {raffle.cost} Pontos por bilhete
+                        {raffle.pointsPerTicket} Pontos por bilhete
                       </span>
                     </div>
                     <h3 className="text-3xl font-serif font-bold text-secondary mb-4">{raffle.title}</h3>
-                    <p className="text-secondary/60 mb-8 leading-relaxed text-[15px]">
-                      {raffle.description}
-                    </p>
+                    <p className="text-secondary/60 mb-8 leading-relaxed text-[15px]">{raffle.description}</p>
 
                     <div className="space-y-4 mb-10">
                       <div className="flex items-center gap-3 text-secondary/70">
@@ -103,30 +95,37 @@ export function Raffles() {
                       </div>
                       <div className="flex items-center gap-3 text-secondary/70">
                         <Calendar className="w-5 h-5 text-primary" />
-                        <span className="text-sm font-medium">Sorteio em: {new Date(raffle.drawDate).toLocaleDateString('pt-BR')}</span>
+                        <span className="text-sm font-medium">
+                          Sorteio em: {raffle.drawDate ? new Date(`${raffle.drawDate}T00:00:00`).toLocaleDateString('pt-BR') : 'Em breve'}
+                        </span>
                       </div>
                     </div>
 
-                    <button 
+                    <button
                       onClick={() => handleBuy(raffle)}
-                      disabled={points < raffle.cost}
+                      disabled={points < raffle.pointsPerTicket}
                       className={cn(
                         "w-full py-4 rounded-full text-[12px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-3",
-                        points >= raffle.cost
+                        points >= raffle.pointsPerTicket
                           ? "bg-secondary text-white hover:bg-secondary/90 shadow-lg shadow-secondary/20"
-                          : "bg-neutral-100 text-neutral-400 cursor-not-allowed"
+                          : "bg-neutral-100 text-neutral-400 cursor-not-allowed",
                       )}
                     >
                       <Ticket className="w-5 h-5" />
-                      {points >= raffle.cost ? 'Participar Agora' : 'Pontos Insuficientes'}
+                      {points >= raffle.pointsPerTicket ? 'Participar Agora' : 'Pontos Insuficientes'}
                     </button>
                   </div>
                 </div>
               </motion.div>
             ))}
+
+            {!activeRaffles.length && (
+              <div className="bg-white border border-secondary/5 rounded-[32px] p-12 text-center text-secondary/50">
+                Nenhum sorteio ativo no momento.
+              </div>
+            )}
           </div>
 
-          {/* User Status / History */}
           <div className="lg:col-span-4 space-y-10">
             <div className="bg-secondary p-10 rounded-[32px] text-white overflow-hidden relative">
               <Star className="absolute -top-10 -right-10 w-40 h-40 text-white/5 rotate-12" />
@@ -134,10 +133,10 @@ export function Raffles() {
               <ul className="space-y-6 relative z-10">
                 {[
                   { title: 'Compre', desc: 'Cada real gasto na loja equivale a 1 ponto de lealdade.' },
-                  { title: 'Acumule', desc: 'Seus pontos ficam salvos na sua conta indefinidamente.' },
-                  { title: 'Participe', desc: 'Troque seus pontos acumulados por quantos bilhetes quiser.' }
+                  { title: 'Acumule', desc: 'Seus pontos ficam salvos na sua conta.' },
+                  { title: 'Participe', desc: 'Troque seus pontos acumulados por bilhetes.' },
                 ].map((item, idx) => (
-                  <li key={idx} className="flex gap-4">
+                  <li key={item.title} className="flex gap-4">
                     <div className="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center text-[12px] font-bold shrink-0">
                       {idx + 1}
                     </div>
@@ -155,7 +154,7 @@ export function Raffles() {
                 Seus Bilhetes
                 <span className="text-[11px] font-sans font-bold bg-secondary/5 text-secondary px-3 py-1 rounded-full">{tickets.length}</span>
               </h3>
-              
+
               {tickets.length > 0 ? (
                 <div className="space-y-4">
                   {tickets.slice().reverse().map((ticket: any) => (
@@ -164,17 +163,14 @@ export function Raffles() {
                         <p className="text-[13px] font-bold text-secondary uppercase truncate max-w-[150px]">{ticket.raffleTitle}</p>
                         <p className="text-[10px] text-secondary/40 font-mono tracking-wider">#{ticket.number}</p>
                       </div>
-                      <div className="flex flex-col items-end">
-                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Confirmado</span>
-                        <span className="text-[9px] text-secondary/30 mt-1">{new Date(ticket.date).toLocaleDateString()}</span>
-                      </div>
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Confirmado</span>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="text-center py-10 px-6">
                   <Ticket className="w-10 h-10 text-secondary/10 mx-auto mb-4" />
-                  <p className="text-secondary/40 text-[13px] italic">Você ainda não possui bilhetes para sorteios ativos.</p>
+                  <p className="text-secondary/40 text-[13px] italic">Voce ainda nao possui bilhetes para sorteios ativos.</p>
                 </div>
               )}
             </div>

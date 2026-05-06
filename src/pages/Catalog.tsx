@@ -32,6 +32,12 @@ export function Catalog() {
       result = result.filter(p => p.precoPromocional);
     }
 
+    if (sortParam === 'lancamentos') {
+      result = result.filter(p => p.lancamento);
+    } else if (sortParam === 'mais-vendidos') {
+      result = result.filter(p => p.maisVendido);
+    }
+
     if (sortParam === 'menor-preco') {
       result.sort((a, b) => (a.precoPromocional || a.preco) - (b.precoPromocional || b.preco));
     } else if (sortParam === 'maior-preco') {
@@ -57,11 +63,15 @@ export function Catalog() {
 
   const currentTitle = queryParam 
     ? `Resultados para "${queryParam}"` 
-    : promoParam 
-      ? 'Promoções' 
-      : categoryParam 
-        ? categoryParam 
-        : 'Todos os Produtos';
+    : sortParam === 'lancamentos'
+      ? 'Lan\u00e7amentos'
+      : sortParam === 'mais-vendidos'
+        ? 'Mais Vendidos'
+        : promoParam 
+          ? 'Promoções' 
+          : categoryParam 
+            ? categoryParam 
+            : 'Todos os Produtos';
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -111,9 +121,25 @@ export function Catalog() {
                  <li>
                    <Link 
                      to="/catalog" 
-                     className={cn("text-sm transition-colors", !categoryParam && !promoParam ? "text-neutral-900 font-medium" : "text-neutral-500 hover:text-neutral-900")}
+                     className={cn("text-sm transition-colors", !categoryParam && !promoParam && !sortParam ? "text-neutral-900 font-medium" : "text-neutral-500 hover:text-neutral-900")}
                    >
                      Todos
+                   </Link>
+                 </li>
+                 <li>
+                   <Link 
+                     to="/catalog?sort=lancamentos"
+                     className={cn("text-sm transition-colors", sortParam === 'lancamentos' ? "text-neutral-900 font-medium" : "text-neutral-500 hover:text-neutral-900")}
+                   >
+                     Lan\u00e7amentos
+                   </Link>
+                 </li>
+                 <li>
+                   <Link 
+                     to="/catalog?sort=mais-vendidos"
+                     className={cn("text-sm transition-colors", sortParam === 'mais-vendidos' ? "text-neutral-900 font-medium" : "text-neutral-500 hover:text-neutral-900")}
+                   >
+                     Mais Vendidos
                    </Link>
                  </li>
                 {categories.map(cat => (
@@ -170,15 +196,24 @@ export function Catalog() {
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-10 sm:gap-x-6 xl:gap-x-8">
               {filteredProducts.map((product) => (
                 <div key={product.id} className="group relative flex flex-col">
+                  {(() => {
+                    const hoverImage = product.imagens[1]?.trim();
+                    const hasHoverImage = Boolean(hoverImage && hoverImage !== product.imagens[0]);
+
+                    return (
+                      <>
                   <Link to={`/product/${product.id}`} className="block relative aspect-[3/4] bg-neutral-100 overflow-hidden mb-4">
                     <img
                       src={product.imagens[0]}
                       alt={product.nome}
-                      className="w-full h-full object-cover transition-opacity duration-500 group-hover:opacity-0"
+                      className={cn(
+                        "w-full h-full object-cover transition-opacity duration-500",
+                        hasHoverImage && "group-hover:opacity-0"
+                      )}
                     />
-                     {product.imagens[1] && (
+                     {hasHoverImage && (
                        <img
-                         src={product.imagens[1]}
+                         src={hoverImage}
                          alt={`${product.nome} alternate`}
                          className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
                        />
@@ -224,6 +259,9 @@ export function Catalog() {
                   >
                     Ver Detalhes
                   </Link>
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>

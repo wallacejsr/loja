@@ -1,12 +1,14 @@
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Product } from '../data/mockData';
-import { Banner, CategoryInput, createBanner, createCategory, createProduct, deleteBanner, deleteCategory, deleteProduct, getBanners, getCategories, getHomeSections, getInstagramFeed, getProducts, HomeSection, HomeSectionInput, InstagramPost, ProductInput, StoreCategory, updateBannerPositions, updateCategory, updateHomeSection, updateProduct } from '../lib/storeApi';
+import { Banner, CategoryInput, createBanner, createCategory, createHomeCard, createProduct, createRaffle, deleteBanner, deleteCategory, deleteHomeCard, deleteProduct, deleteRaffle, getBanners, getCategories, getHomeCards, getHomeSections, getInstagramFeed, getProducts, getRaffles, HomeCard, HomeCardInput, HomeSection, HomeSectionInput, InstagramPost, ProductInput, Raffle, RaffleInput, StoreCategory, updateBannerPositions, updateCategory, updateHomeCard, updateHomeSection, updateProduct, updateRaffle } from '../lib/storeApi';
 
 interface StoreDataContextValue {
   products: Product[];
   categories: StoreCategory[];
   banners: Banner[];
   homeSections: HomeSection[];
+  homeCards: HomeCard[];
+  raffles: Raffle[];
   instagramFeed: InstagramPost[];
   loading: boolean;
   error: string | null;
@@ -18,6 +20,12 @@ interface StoreDataContextValue {
   editCategory: (id: string, category: CategoryInput) => Promise<void>;
   removeCategory: (id: string) => Promise<void>;
   editHomeSection: (id: string, section: HomeSectionInput) => Promise<void>;
+  addHomeCard: (card: HomeCardInput) => Promise<void>;
+  editHomeCard: (id: string, card: HomeCardInput) => Promise<void>;
+  removeHomeCard: (id: string) => Promise<void>;
+  addRaffle: (raffle: RaffleInput) => Promise<void>;
+  editRaffle: (id: string, raffle: RaffleInput) => Promise<void>;
+  removeRaffle: (id: string) => Promise<void>;
   addBanner: (banner: Pick<Banner, 'title' | 'desktop' | 'mobile' | 'link'>) => Promise<void>;
   removeBanner: (id: string) => Promise<void>;
   reorderBanners: (index: number, direction: 'up' | 'down') => Promise<void>;
@@ -30,6 +38,8 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
   const [categories, setCategories] = useState<StoreCategory[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [homeSections, setHomeSections] = useState<HomeSection[]>([]);
+  const [homeCards, setHomeCards] = useState<HomeCard[]>([]);
+  const [raffles, setRaffles] = useState<Raffle[]>([]);
   const [instagramFeed, setInstagramFeed] = useState<InstagramPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,17 +48,21 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const [nextProducts, nextCategories, nextBanners, nextHomeSections, nextInstagramFeed] = await Promise.all([
+      const [nextProducts, nextCategories, nextBanners, nextHomeSections, nextHomeCards, nextRaffles, nextInstagramFeed] = await Promise.all([
         getProducts(),
         getCategories(),
         getBanners(),
         getHomeSections(),
+        getHomeCards({ onlyActive: false }),
+        getRaffles({ onlyActive: false }),
         getInstagramFeed(),
       ]);
       setProducts(nextProducts);
       setCategories(nextCategories);
       setBanners(nextBanners);
       setHomeSections(nextHomeSections);
+      setHomeCards(nextHomeCards);
+      setRaffles(nextRaffles);
       setInstagramFeed(nextInstagramFeed);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível carregar os dados da loja.');
@@ -112,6 +126,42 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
       .sort((a, b) => a.position - b.position));
   }, []);
 
+  const addHomeCard = useCallback(async (card: HomeCardInput) => {
+    const created = await createHomeCard(card);
+    setHomeCards((current) => [...current, created].sort((a, b) => a.position - b.position));
+  }, []);
+
+  const editHomeCard = useCallback(async (id: string, card: HomeCardInput) => {
+    const updated = await updateHomeCard(id, card);
+    setHomeCards((current) => current
+      .map((item) => (item.id === id ? updated : item))
+      .sort((a, b) => a.position - b.position));
+  }, []);
+
+  const removeHomeCard = useCallback(async (id: string) => {
+    await deleteHomeCard(id);
+    setHomeCards((current) => current.filter((card) => card.id !== id));
+  }, []);
+
+  const addRaffle = useCallback(async (raffle: RaffleInput) => {
+    const created = await createRaffle(raffle);
+    setRaffles((current) => [...current, created].sort((a, b) => a.position - b.position));
+  }, []);
+
+  const editRaffle = useCallback(async (id: string, raffle: RaffleInput) => {
+    const updated = await updateRaffle(id, raffle);
+    setRaffles((current) => current
+      .map((item) => (item.id === id ? updated : item))
+      .sort((a, b) => a.position - b.position));
+  }, []);
+
+  const removeRaffle = useCallback(async (id: string) => {
+    await deleteRaffle(id);
+    setRaffles((current) => current.map((raffle) => (
+      raffle.id === id ? { ...raffle, status: 'Inativo' } : raffle
+    )));
+  }, []);
+
   const removeBanner = useCallback(async (id: string) => {
     await deleteBanner(id);
     setBanners((current) => current.filter((banner) => banner.id !== id));
@@ -136,6 +186,8 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
       categories,
       banners,
       homeSections,
+      homeCards,
+      raffles,
       instagramFeed,
       loading,
       error,
@@ -147,11 +199,17 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
       editCategory,
       removeCategory,
       editHomeSection,
+      addHomeCard,
+      editHomeCard,
+      removeHomeCard,
+      addRaffle,
+      editRaffle,
+      removeRaffle,
       addBanner,
       removeBanner,
       reorderBanners,
     }),
-    [products, categories, banners, homeSections, instagramFeed, loading, error, refresh, addProduct, editProduct, removeProduct, addCategory, editCategory, removeCategory, editHomeSection, addBanner, removeBanner, reorderBanners],
+    [products, categories, banners, homeSections, homeCards, raffles, instagramFeed, loading, error, refresh, addProduct, editProduct, removeProduct, addCategory, editCategory, removeCategory, editHomeSection, addHomeCard, editHomeCard, removeHomeCard, addRaffle, editRaffle, removeRaffle, addBanner, removeBanner, reorderBanners],
   );
 
   return <StoreDataContext.Provider value={value}>{children}</StoreDataContext.Provider>;

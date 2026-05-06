@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Heart, CreditCard, BadgePercent, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Heart, CreditCard, BadgePercent, ShieldCheck, Trophy, Gift, Calendar, Ticket } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useCart } from '../context/CartContext';
 import { useStoreData } from '../hooks/useStoreData';
 import { Product } from '../data/mockData';
-import { HomeSection as HomeSectionConfig } from '../lib/storeApi';
+import { HomeCard, HomeSection as HomeSectionConfig, Raffle } from '../lib/storeApi';
 
 export function Home() {
-  const { products, banners, homeSections, categories } = useStoreData();
+  const { products, banners, homeSections, homeCards, categories, raffles } = useStoreData();
   const [currentSlide, setCurrentSlide] = useState(0);
   const slides = banners.length ? banners : [];
   const activeHomeSections = homeSections
@@ -17,6 +17,9 @@ export function Home() {
   const categoryHomeSections = categories
     .filter((category) => category.status === 'Ativo' && category.showOnHome)
     .sort((a, b) => a.homeSectionOrder - b.homeSectionOrder || a.nome.localeCompare(b.nome));
+  const activeRaffle = raffles
+    .filter((raffle) => raffle.status === 'Ativo')
+    .sort((a, b) => a.position - b.position)[0];
 
   useEffect(() => {
     if (!slides.length) return;
@@ -112,21 +115,9 @@ export function Home() {
           </React.Fragment>
         ))}
 
-      {/* Destaques / Categories Banners */}
-      <section className="py-10 bg-neutral-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Link to="/catalog?category=Feminino&subcategory=Calças" className="block relative aspect-[4/3] overflow-hidden group">
-                 <img src="https://cdn.awsli.com.br/1140x850/2751/2751677/banner/calcas-l87gy6ydk4.png" alt="Calças" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                 <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors"></div>
-              </Link>
-              <Link to="/catalog?category=Feminino&subcategory=Vestidos" className="block relative aspect-[4/3] overflow-hidden group">
-                 <img src="https://cdn.awsli.com.br/1140x850/2751/2751677/banner/vestido-n03vsfjlk3.png" alt="Vestidos" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                 <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition-colors"></div>
-              </Link>
-           </div>
-        </div>
-      </section>
+      <HomeCardsSection cards={homeCards.filter((card) => card.status === 'Ativo').sort((a, b) => a.position - b.position)} />
+
+      {activeRaffle && <RaffleCallout raffle={activeRaffle} />}
 
       {activeHomeSections.slice(1)
         .map((section) => (
@@ -145,15 +136,117 @@ export function Home() {
   );
 }
 
-function CategoryProductSection({ category, products }: { category: { nome: string; homeSectionTitle: string; homeSectionLimit: number }, products: Product[] }) {
+function HomeCardsSection({ cards }: { cards: HomeCard[] }) {
+  if (!cards.length) return null;
+
+  return (
+    <section className="py-10 bg-neutral-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {cards.map((card) => (
+            <Link key={card.id} to={card.link || '/catalog'} className="block relative aspect-[4/3] overflow-hidden group bg-neutral-100">
+              {card.image ? (
+                <img src={card.image} alt={card.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-neutral-300">
+                  <ImageIconPlaceholder />
+                </div>
+              )}
+              <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-r from-black/80 via-black/55 to-black/75 backdrop-blur-sm flex items-center justify-between px-4">
+                <span className="text-white text-base font-bold truncate pr-4">{card.title}</span>
+                <span className="text-white text-[12px] font-bold uppercase tracking-wider inline-flex items-center gap-2 shrink-0">
+                  {card.ctaLabel || 'Confira'}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ImageIconPlaceholder() {
+  return <div className="w-12 h-12 border border-neutral-200" />;
+}
+
+function RaffleCallout({ raffle }: { raffle: Raffle }) {
+  return (
+    <section className="py-12 bg-white">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid lg:grid-cols-[1.05fr_0.95fr] bg-[#fbf8f3] border border-[#eadfce] overflow-hidden">
+          <Link to={raffle.ctaLink || '/sorteios'} className="relative min-h-[300px] lg:min-h-[420px] bg-neutral-100 overflow-hidden group">
+            {raffle.image ? (
+              <img src={raffle.image} alt={raffle.prize || raffle.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-neutral-300">
+                <Trophy className="w-16 h-16" />
+              </div>
+            )}
+            <div className="absolute left-5 top-5 bg-white/95 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-primary shadow-sm">
+              Sorteio ativo
+            </div>
+          </Link>
+
+          <div className="p-8 sm:p-10 lg:p-14 flex flex-col justify-center">
+            <div className="flex items-center gap-2 text-primary text-[11px] font-black uppercase tracking-[0.22em] mb-5">
+              <Trophy className="w-4 h-4" />
+              Clube de Sorteios
+            </div>
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-serif font-bold text-secondary leading-tight mb-5">
+              {raffle.title}
+            </h2>
+            <p className="text-secondary/70 text-[15px] sm:text-base leading-relaxed mb-8">
+              {raffle.description}
+            </p>
+
+            <div className="space-y-3 mb-8">
+              <div className="flex items-center gap-3 text-secondary">
+                <Gift className="w-5 h-5 text-primary shrink-0" />
+                <span className="text-sm font-semibold">{raffle.prize}</span>
+              </div>
+              {raffle.drawDate && (
+                <div className="flex items-center gap-3 text-secondary">
+                  <Calendar className="w-5 h-5 text-primary shrink-0" />
+                  <span className="text-sm font-semibold">Sorteio em {new Date(`${raffle.drawDate}T00:00:00`).toLocaleDateString('pt-BR')}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3 text-secondary">
+                <Ticket className="w-5 h-5 text-primary shrink-0" />
+                <span className="text-sm font-semibold">{raffle.pointsPerTicket} pontos por bilhete</span>
+              </div>
+            </div>
+
+            <Link
+              to={raffle.ctaLink || '/sorteios'}
+              className="w-full sm:w-fit bg-secondary text-white px-8 py-4 text-[12px] font-black uppercase tracking-widest hover:bg-primary transition-colors inline-flex items-center justify-center gap-3"
+            >
+              {raffle.ctaLabel || 'Participar agora'}
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CategoryProductSection({ category, products }: { category: { nome: string; homeSectionTitle: string; homeSectionLimit: number; homeSectionFilter: string }, products: Product[] }) {
   const filteredProducts = products
     .filter((product) => product.categoria === category.nome)
+    .filter((product) => {
+      if (category.homeSectionFilter === 'lancamentos') return Boolean(product.lancamento);
+      if (category.homeSectionFilter === 'mais_vendidos') return Boolean(product.maisVendido);
+      if (category.homeSectionFilter === 'promocoes') return Boolean(product.precoPromocional);
+      return true;
+    })
     .slice(0, category.homeSectionLimit);
 
   if (!filteredProducts.length) return null;
 
   return (
-    <section className="py-16 bg-white">
+    <section className="py-10 md:py-12 bg-white">
       <ProductSection
         title={category.homeSectionTitle || category.nome}
         products={filteredProducts}
@@ -175,7 +268,7 @@ function HomeProductSection({ section, products }: { section: HomeSectionConfig,
   if (!filteredProducts.length) return null;
 
   return (
-    <section className="py-16 bg-white">
+    <section className="py-10 md:py-12 bg-white">
       <ProductSection title={section.title} products={filteredProducts} link={section.link} />
     </section>
   );
@@ -183,27 +276,44 @@ function HomeProductSection({ section, products }: { section: HomeSectionConfig,
 
 function ProductSection({ title, products, link }: { title: string, products: Product[], link: string }) {
   const { toggleWishlist, wishlist } = useCart();
+  const productCount = products.length;
+  const gridClassName = productCount === 1
+    ? 'grid grid-cols-1 max-w-sm'
+    : productCount === 2
+      ? 'grid grid-cols-2 max-w-3xl gap-x-4 gap-y-8 sm:gap-x-6'
+      : productCount === 3
+        ? 'grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-8 sm:gap-x-6'
+        : 'grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-8 sm:gap-x-6';
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="flex justify-between items-center mb-8 border-b-2 border-primary pb-2">
+      <div className="flex justify-between items-center mb-5 border-b-2 border-primary pb-2">
         <h2 className="text-xl font-bold uppercase tracking-wider text-primary">{title}</h2>
         <Link to={link} className="text-xs font-bold uppercase tracking-wider flex items-center text-secondary hover:text-primary transition-colors">
           Ver Todos <ArrowRight className="w-4 h-4 ml-1" />
         </Link>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-10 sm:gap-x-6">
+      <div className={gridClassName}>
         {products.map((product) => (
           <div key={product.id} className="group relative flex flex-col">
+            {(() => {
+              const hoverImage = product.imagens[1]?.trim();
+              const hasHoverImage = Boolean(hoverImage && hoverImage !== product.imagens[0]);
+
+              return (
+                <>
             <Link to={`/product/${product.id}`} className="block relative aspect-[3/4] bg-neutral-100 overflow-hidden mb-4">
               <img
                 src={product.imagens[0]}
                 alt={product.nome}
-                className="w-full h-full object-cover transition-opacity duration-500 group-hover:opacity-0"
+                className={cn(
+                  "w-full h-full object-cover transition-opacity duration-500",
+                  hasHoverImage && "group-hover:opacity-0"
+                )}
               />
-               {product.imagens[1] && (
+               {hasHoverImage && (
                  <img
-                   src={product.imagens[1]}
+                   src={hoverImage}
                    alt={`${product.nome} alternate`}
                    className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
                  />
@@ -250,6 +360,9 @@ function ProductSection({ title, products, link }: { title: string, products: Pr
             >
               Ver Detalhes
             </Link>
+                </>
+              );
+            })()}
           </div>
         ))}
       </div>

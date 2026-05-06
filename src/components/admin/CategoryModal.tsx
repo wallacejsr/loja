@@ -34,6 +34,7 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
     homeSectionTitle: '',
     homeSectionOrder: 100,
     homeSectionLimit: 4,
+    homeSectionFilter: 'all',
   });
   const [isSaving, setIsSaving] = useState(false);
   const isEditing = Boolean(category);
@@ -58,6 +59,7 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
       homeSectionTitle: category.homeSectionTitle || category.nome,
       homeSectionOrder: category.homeSectionOrder,
       homeSectionLimit: category.homeSectionLimit,
+      homeSectionFilter: category.homeSectionFilter,
     } : {
       nome: '',
       slug: '',
@@ -69,6 +71,7 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
       homeSectionTitle: '',
       homeSectionOrder: 100,
       homeSectionLimit: 4,
+      homeSectionFilter: 'all',
     });
   }, [isOpen, category?.id]);
 
@@ -268,6 +271,20 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
 
                   {formData.showOnHome ? (
                     <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Produtos exibidos</label>
+                        <select
+                          value={formData.homeSectionFilter}
+                          onChange={(e) => setFormData((prev) => ({ ...prev, homeSectionFilter: e.target.value as CategoryInput['homeSectionFilter'] }))}
+                          className="w-full border border-neutral-200/60 px-4 py-2.5 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
+                        >
+                          <option value="all">Todos da categoria</option>
+                          <option value="lancamentos">Apenas lançamentos</option>
+                          <option value="mais_vendidos">Apenas mais vendidos</option>
+                          <option value="promocoes">Apenas promoções</option>
+                        </select>
+                      </div>
+
                       <div className="space-y-2">
                         <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Título da seção</label>
                         <input

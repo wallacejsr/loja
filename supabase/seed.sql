@@ -39,18 +39,18 @@ insert into public.store_settings (
   support_saturday_hours = excluded.support_saturday_hours,
   updated_at = now();
 
-insert into public.categories (nome, slug, imagem, status, show_in_menu, menu_order, show_on_home, home_section_title, home_section_order, home_section_limit) values
-  ('Lancamentos', 'lancamentos', '', 'Ativo', true, 1, false, 'Lancamentos', 1, 4),
-  ('Ocasioes', 'ocasioes', '', 'Ativo', true, 2, false, 'Ocasioes', 2, 4),
-  ('Linha Essencial', 'linha-essencial', '', 'Ativo', true, 3, false, 'Linha Essencial', 3, 4),
-  ('Jeans', 'jeans', '', 'Ativo', true, 4, false, 'Jeans', 4, 4),
-  ('Nav.Vestidos', 'nav-vestidos', '', 'Ativo', true, 5, false, 'Vestidos', 5, 4),
-  ('Calcas', 'calcas', 'https://cdn.awsli.com.br/1140x850/2751/2751677/banner/calcas-l87gy6ydk4.png', 'Ativo', true, 6, false, 'Calcas', 6, 4),
-  ('Camisas', 'camisas', '', 'Ativo', true, 7, false, 'Camisas', 7, 4),
-  ('Feminino', 'feminino', 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=800', 'Ativo', true, 8, false, 'Feminino', 8, 4),
-  ('Masculino', 'masculino', 'https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 9, false, 'Masculino', 9, 4),
-  ('Infantil', 'infantil', 'https://images.unsplash.com/photo-1519241047957-be31d7379a5d?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 10, false, 'Infantil', 10, 4),
-  ('Acessorios', 'acessorios', 'https://images.unsplash.com/photo-1509319117193-57bab727e09d?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 11, false, 'Acessorios', 11, 4)
+insert into public.categories (nome, slug, imagem, status, show_in_menu, menu_order, show_on_home, home_section_title, home_section_order, home_section_limit, home_section_filter) values
+  ('Lancamentos', 'lancamentos', '', 'Ativo', true, 1, false, 'Lancamentos', 1, 4, 'all'),
+  ('Ocasioes', 'ocasioes', '', 'Ativo', true, 2, false, 'Ocasioes', 2, 4, 'all'),
+  ('Linha Essencial', 'linha-essencial', '', 'Ativo', true, 3, false, 'Linha Essencial', 3, 4, 'all'),
+  ('Jeans', 'jeans', '', 'Ativo', true, 4, false, 'Jeans', 4, 4, 'all'),
+  ('Nav.Vestidos', 'nav-vestidos', '', 'Ativo', true, 5, false, 'Vestidos', 5, 4, 'all'),
+  ('Calcas', 'calcas', 'https://cdn.awsli.com.br/1140x850/2751/2751677/banner/calcas-l87gy6ydk4.png', 'Ativo', true, 6, false, 'Calcas', 6, 4, 'all'),
+  ('Camisas', 'camisas', '', 'Ativo', true, 7, false, 'Camisas', 7, 4, 'all'),
+  ('Feminino', 'feminino', 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=800', 'Ativo', true, 8, false, 'Feminino', 8, 4, 'all'),
+  ('Masculino', 'masculino', 'https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 9, false, 'Masculino', 9, 4, 'all'),
+  ('Infantil', 'infantil', 'https://images.unsplash.com/photo-1519241047957-be31d7379a5d?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 10, false, 'Infantil', 10, 4, 'all'),
+  ('Acessorios', 'acessorios', 'https://images.unsplash.com/photo-1509319117193-57bab727e09d?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 11, false, 'Acessorios', 11, 4, 'all')
 on conflict (nome) do update set
   slug = excluded.slug,
   imagem = excluded.imagem,
@@ -61,6 +61,7 @@ on conflict (nome) do update set
   home_section_title = excluded.home_section_title,
   home_section_order = excluded.home_section_order,
   home_section_limit = excluded.home_section_limit,
+  home_section_filter = excluded.home_section_filter,
   updated_at = now();
 
 insert into public.banners (title, desktop_image, mobile_image, link, status, position) values
@@ -80,6 +81,31 @@ on conflict (id) do update set
   position = excluded.position,
   status = excluded.status,
   updated_at = now();
+
+insert into public.home_cards (title, image, link, cta_label, position, status) values
+  ('Camisetas', 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&q=80&w=900', '/catalog?q=camiseta', 'Confira', 1, 'Ativo'),
+  ('Puffer', 'https://images.unsplash.com/photo-1548624149-f9b185f6893d?auto=format&fit=crop&q=80&w=900', '/catalog?q=puffer', 'Confira', 2, 'Ativo'),
+  ('Tricos', 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=900', '/catalog?q=trico', 'Confira', 3, 'Ativo')
+on conflict do nothing;
+
+insert into public.raffles (
+  title, prize, description, image, product_id, points_per_ticket, draw_date, cta_label, cta_link, total_participants, total_tickets, status, position
+) values (
+  'Concorra a um look exclusivo',
+  'Conjunto Alfaiataria Bege',
+  'A cada compra voce acumula pontos para participar do clube de sorteios. Garanta seus bilhetes e concorra ao premio ativo da loja.',
+  'https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?auto=format&fit=crop&q=80&w=1000',
+  'p2',
+  100,
+  '2026-12-31',
+  'Participar do sorteio',
+  '/sorteios',
+  0,
+  0,
+  'Ativo',
+  1
+)
+on conflict do nothing;
 
 insert into public.products (
   id, nome, preco, preco_promocional, categoria, subcategoria, imagens, descricao, composicao, tamanhos, cores, avaliacoes, mais_vendido, lancamento, estoque, status
