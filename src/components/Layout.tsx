@@ -9,7 +9,7 @@ import { useStoreData } from '../hooks/useStoreData';
 
 export function Layout() {
   const { t } = useTranslation();
-  const { settings } = useSettings();
+  const { settings, loading: settingsLoading } = useSettings();
   const { categories } = useStoreData();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -20,11 +20,12 @@ export function Layout() {
   const { cartCount, wishlist } = useCart();
   const location = useLocation();
   const navigate = useNavigate();
-  const salesWhatsApp = settings.supportSalesPhone || settings.phone;
-  const sacWhatsApp = settings.supportSacPhone || settings.phone;
-  const supportEmail = settings.supportEmail || settings.email;
-  const salesWhatsAppUrl = `https://wa.me/55${salesWhatsApp.replace(/\D/g, '')}`;
-  const sacWhatsAppUrl = `https://wa.me/55${sacWhatsApp.replace(/\D/g, '')}`;
+  const settingsReady = !settingsLoading;
+  const salesWhatsApp = settingsReady ? (settings.supportSalesPhone || settings.phone) : '';
+  const sacWhatsApp = settingsReady ? (settings.supportSacPhone || settings.phone) : '';
+  const supportEmail = settingsReady ? (settings.supportEmail || settings.email) : '';
+  const salesWhatsAppUrl = salesWhatsApp ? `https://wa.me/55${salesWhatsApp.replace(/\D/g, '')}` : '#';
+  const sacWhatsAppUrl = sacWhatsApp ? `https://wa.me/55${sacWhatsApp.replace(/\D/g, '')}` : '#';
 
   const closeMenu = () => setIsMenuOpen(false);
 
@@ -64,12 +65,21 @@ export function Layout() {
             <a href="https://instagram.com/spacodanimorais" target="_blank" rel="noreferrer" className="hover:text-white/80"><Instagram className="w-4 h-4" /></a>
           </div>
           <div className="flex justify-center md:justify-end w-full md:w-auto gap-4 md:gap-6 items-center flex-wrap">
-            <a href={`tel:${sacWhatsApp.replace(/\D/g, '')}`} className="flex items-center hover:text-white/80 font-medium">
-              <Phone className="w-3.5 h-3.5 mr-1.5" /> {sacWhatsApp}
-            </a>
-            <a href={salesWhatsAppUrl} target="_blank" rel="noreferrer" className="flex items-center hover:text-white/80 font-medium">
-              <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> Whatsapp: {salesWhatsApp}
-            </a>
+            {settingsReady ? (
+              <>
+                <a href={`tel:${sacWhatsApp.replace(/\D/g, '')}`} className="flex items-center hover:text-white/80 font-medium">
+                  <Phone className="w-3.5 h-3.5 mr-1.5" /> {sacWhatsApp}
+                </a>
+                <a href={salesWhatsAppUrl} target="_blank" rel="noreferrer" className="flex items-center hover:text-white/80 font-medium">
+                  <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> Whatsapp: {salesWhatsApp}
+                </a>
+              </>
+            ) : (
+              <>
+                <div className="h-4 w-32 rounded bg-white/25 animate-pulse" />
+                <div className="h-4 w-40 rounded bg-white/25 animate-pulse" />
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -93,14 +103,16 @@ export function Layout() {
             {/* Logo */}
             <div className="flex-shrink-0 flex items-center justify-center lg:justify-start lg:w-auto left-0">
               <Link to="/" className="pointer-events-auto">
-                {settings.logoUrl ? (
+                {settingsReady && settings.logoUrl ? (
                   <img 
                     src={settings.logoUrl} 
                     alt={settings.storeName} 
                     className="h-10 sm:h-12 lg:h-14 object-contain"
                   />
-                ) : (
+                ) : settingsReady ? (
                   <span className="text-xl sm:text-2xl font-serif font-bold text-secondary uppercase tracking-widest">{settings.storeName}</span>
+                ) : (
+                  <div className="h-10 sm:h-12 lg:h-14 w-32 sm:w-40 rounded bg-neutral-100 animate-pulse" />
                 )}
               </Link>
             </div>
@@ -147,20 +159,20 @@ export function Layout() {
                              <div className="text-green-500 bg-green-50 p-1.5 rounded-full shrink-0">
                                <MessageCircle className="w-4 h-4" />
                              </div>
-                             <div className="flex flex-col">
-                               <span className="font-bold text-secondary leading-tight">{salesWhatsApp}</span>
-                               <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-0.5">Vendas</span>
-                             </div>
-                           </a>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-secondary leading-tight">{salesWhatsApp || ' '}</span>
+                              <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-0.5">Vendas</span>
+                            </div>
+                          </a>
                            <a href={sacWhatsAppUrl} className="flex items-start gap-3 hover:bg-neutral-50 p-2 rounded-sm transition-colors -mx-2">
                              <div className="text-green-500 bg-green-50 p-1.5 rounded-full shrink-0">
                                <MessageCircle className="w-4 h-4" />
                              </div>
-                             <div className="flex flex-col">
-                               <span className="font-bold text-secondary leading-tight">{sacWhatsApp}</span>
-                               <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-0.5">Sac</span>
-                             </div>
-                           </a>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-secondary leading-tight">{sacWhatsApp || ' '}</span>
+                              <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-0.5">Sac</span>
+                            </div>
+                          </a>
                          </div>
                        </div>
 
@@ -169,7 +181,7 @@ export function Layout() {
                          <a href={`mailto:${supportEmail}`} className="flex items-start gap-3 hover:bg-neutral-50 p-2 rounded-sm transition-colors -mx-2">
                            <Mail className="w-4 h-4 text-secondary shrink-0 mt-0.5" />
                            <div className="flex flex-col">
-                             <span className="font-bold text-secondary text-sm break-all leading-tight">{supportEmail}</span>
+                             <span className="font-bold text-secondary text-sm break-all leading-tight">{supportEmail || ' '}</span>
                              <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-1">SAC</span>
                            </div>
                          </a>
@@ -180,8 +192,8 @@ export function Layout() {
                          <div className="flex items-start gap-3 p-2 -mx-2">
                            <Clock className="w-4 h-4 text-secondary shrink-0 mt-0.5" />
                            <div className="flex flex-col text-sm text-secondary gap-0.5">
-                             <span>{settings.supportWeekHours}</span>
-                             <span>{settings.supportSaturdayHours}</span>
+                             <span>{settingsReady ? settings.supportWeekHours : ' '}</span>
+                             <span>{settingsReady ? settings.supportSaturdayHours : ' '}</span>
                            </div>
                          </div>
                        </div>
@@ -431,7 +443,7 @@ export function Layout() {
             <div>
               <h4 className="font-bold uppercase tracking-wider text-sm mb-6 text-secondary border-b border-primary inline-block pb-1">Sobre a loja</h4>
               <p className="text-secondary/70 text-sm leading-relaxed mb-6">
-                {settings.description}
+                {settingsReady ? settings.description : ''}
               </p>
             </div>
 
@@ -481,14 +493,16 @@ export function Layout() {
         <div className="bg-neutral-50 border-t border-neutral-200 py-6">
            <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
               <p className="text-secondary/60 text-xs font-medium">
-                {settings.storeName} <br className="sm:hidden" />
+                {settingsReady ? settings.storeName : ''} <br className="sm:hidden" />
                 &copy; Todos os direitos reservados. {new Date().getFullYear()}
               </p>
               <div className="text-2xl font-bold uppercase tracking-widest opacity-20">
-                 {settings.logoUrl ? (
+                 {settingsReady && settings.logoUrl ? (
                    <img src={settings.logoUrl} alt={settings.storeName} className="h-8 object-contain grayscale opacity-50" />
-                 ) : (
+                 ) : settingsReady ? (
                    settings.storeName
+                 ) : (
+                   <div className="h-8 w-24 rounded bg-neutral-200 animate-pulse" />
                  )}
               </div>
            </div>
@@ -496,15 +510,17 @@ export function Layout() {
       </footer>
 
       {/* WhatsApp Floating Button */}
-      <a
-        href={`${salesWhatsAppUrl}?text=Ol%C3%A1%2C%20Gostaria%20de%20adquirir%20alguns%20de%20seus%20produtos.`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 bg-[#25D366] text-white p-4 rounded-full shadow-xl hover:bg-[#20bd5a] hover:-translate-y-1 transition-all z-40 group flex items-center justify-center"
-        aria-label="Falar no WhatsApp"
-      >
-        <MessageCircle className="w-6 h-6" />
-      </a>
+      {settingsReady && (
+        <a
+          href={`${salesWhatsAppUrl}?text=Ol%C3%A1%2C%20Gostaria%20de%20adquirir%20alguns%20de%20seus%20produtos.`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="fixed bottom-6 right-6 bg-[#25D366] text-white p-4 rounded-full shadow-xl hover:bg-[#20bd5a] hover:-translate-y-1 transition-all z-40 group flex items-center justify-center"
+          aria-label="Falar no WhatsApp"
+        >
+          <MessageCircle className="w-6 h-6" />
+        </a>
+      )}
     {/* Modal de Fale Conosco */}
       {isContactModalOpen && (
          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">

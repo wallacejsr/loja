@@ -8,6 +8,7 @@ export type { StoreSettings };
 
 const SettingsContext = createContext<{
   settings: StoreSettings;
+  loading: boolean;
   updateSettings: (newSettings: Partial<StoreSettings>) => void;
 } | null>(null);
 
@@ -26,19 +27,23 @@ function adjustColorIntensity(hex: string, amount: number): string {
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const hasCachedSettings = Boolean(localStorage.getItem(SETTINGS_KEY));
   const [settings, setSettings] = useState<StoreSettings>(() => {
     const saved = localStorage.getItem(SETTINGS_KEY);
     return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
   });
+  const [loading, setLoading] = useState(!hasCachedSettings);
 
   useEffect(() => {
     getStoreSettings()
       .then((remoteSettings) => {
         setSettings(remoteSettings);
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(remoteSettings));
+        setLoading(false);
       })
       .catch(() => {
         // Keep the local copy when Supabase is not configured or temporarily unavailable.
+        setLoading(false);
       });
   }, []);
 
@@ -46,8 +51,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     document.documentElement.style.setProperty('--theme-primary', settings.primaryColor);
     document.documentElement.style.setProperty('--theme-primary-dark', adjustColorIntensity(settings.primaryColor, -20));
     document.documentElement.style.setProperty('--theme-secondary', settings.secondaryColor);
+    if (loading && !hasCachedSettings) return;
     document.title = settings.siteTitle || settings.storeName;
-  }, [settings.primaryColor, settings.secondaryColor, settings.siteTitle, settings.storeName]);
+  }, [hasCachedSettings, loading, settings.primaryColor, settings.secondaryColor, settings.siteTitle, settings.storeName]);
 
   const updateSettings = useCallback((newSettings: Partial<StoreSettings>) => {
     setSettings((prev) => {
@@ -61,7 +67,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings }}>
+    <SettingsContext.Provider value={{ settings, loading, updateSettings }}>
       {children}
     </SettingsContext.Provider>
   );

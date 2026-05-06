@@ -561,7 +561,7 @@ export async function getBanners({ onlyActive = true } = {}): Promise<Banner[]> 
   if (onlyActive) query = query.eq('status', 'Ativo');
 
   const { data, error } = await query;
-  if (error) throw error;
+  if (error) return [];
   return (data || []).map(toBanner);
 }
 
@@ -595,10 +595,10 @@ export async function getHomeSections({ onlyActive = true } = {}): Promise<HomeS
   if (onlyActive) query = query.eq('status', 'Ativo');
 
   const { data, error } = await query;
-  if (error) return fallback;
+  if (error) return [];
 
   const sections = (data || []).map(toHomeSection);
-  return sections.length ? sections : fallback;
+  return sections;
 }
 
 export async function getHomeCards({ onlyActive = true } = {}): Promise<HomeCard[]> {
@@ -638,9 +638,9 @@ export async function getHomeCards({ onlyActive = true } = {}): Promise<HomeCard
   if (onlyActive) query = query.eq('status', 'Ativo');
 
   const { data, error } = await query;
-  if (error) return fallback;
+  if (error) return [];
   const cards = (data || []).map(toHomeCard);
-  return cards.length ? cards : fallback;
+  return cards;
 }
 
 export async function createHomeCard(input: HomeCardInput): Promise<HomeCard> {
@@ -725,7 +725,7 @@ export async function getRaffles({ onlyActive = true } = {}): Promise<Raffle[]> 
   if (onlyActive) query = query.eq('status', 'Ativo');
 
   const { data, error } = await query;
-  if (error) throw error;
+  if (error) return [];
   return (data || []).map(toRaffle);
 }
 
