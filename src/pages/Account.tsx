@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { User, Package, MapPin, LogOut, X, Loader2, Star, Trophy } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useLoyalty } from '../hooks/useLoyalty';
+import { useStorefront } from '../hooks/useStorefront';
 import { Link } from 'react-router-dom';
 
 export function Account() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeTab, setActiveTab] = useState<'orders' | 'addresses' | 'data'>('orders');
   const { points } = useLoyalty();
+  const { t } = useStorefront();
   
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -67,35 +69,35 @@ export function Account() {
   if (!isLoggedIn) {
     return (
       <div className="max-w-md mx-auto px-4 py-20">
-        <h1 className="text-3xl font-serif font-bold text-secondary mb-8 text-center uppercase tracking-wider border-b-2 border-primary pb-4">Minha Conta</h1>
+        <h1 className="text-3xl font-serif font-bold text-secondary mb-8 text-center uppercase tracking-wider border-b-2 border-primary pb-4">{t('accountTitle')}</h1>
         
         <div className="bg-neutral-50 p-8 border border-neutral-200">
-           <h2 className="text-lg font-bold text-secondary mb-6 uppercase tracking-wider">Já sou cliente</h2>
+           <h2 className="text-lg font-bold text-secondary mb-6 uppercase tracking-wider">{t('alreadyCustomer')}</h2>
            <form onSubmit={(e) => { e.preventDefault(); setIsLoggedIn(true); }} className="space-y-4">
               <div>
                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">E-mail</label>
                  <input required type="email" defaultValue="cliente@exemplo.com" className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm" />
               </div>
               <div>
-                 <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Senha</label>
+                 <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('password')}</label>
                  <input required type="password" defaultValue="123456" className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm" />
               </div>
               <div className="flex justify-between items-center text-sm pt-2">
-                 <a href="#" className="text-secondary/70 hover:text-primary transition-colors">Esqueceu a senha?</a>
+                 <a href="#" className="text-secondary/70 hover:text-primary transition-colors">{t('forgotPassword')}</a>
               </div>
               <button type="submit" className="w-full bg-primary text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-primary-dark transition-colors rounded-sm mt-4">
-                 Entrar
+                 {t('login')}
               </button>
            </form>
 
            <div className="my-8 text-center border-t border-neutral-200 relative">
-              <span className="bg-neutral-50 px-4 text-xs font-bold uppercase text-secondary/50 absolute -top-2 left-1/2 -translate-x-1/2">ou</span>
+              <span className="bg-neutral-50 px-4 text-xs font-bold uppercase text-secondary/50 absolute -top-2 left-1/2 -translate-x-1/2">{t('or')}</span>
            </div>
 
-           <h2 className="text-lg font-bold text-secondary mb-4 uppercase tracking-wider">Ainda não tem conta?</h2>
-           <p className="text-sm text-secondary/70 mb-6">Cadastre-se para comprar mais rápido, acompanhar seus pedidos e criar sua lista de desejos.</p>
+           <h2 className="text-lg font-bold text-secondary mb-4 uppercase tracking-wider">{t('noAccountYet')}</h2>
+           <p className="text-sm text-secondary/70 mb-6">{t('noAccountSubtitle')}</p>
            <Link to="/register" className="block text-center w-full bg-secondary text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-primary transition-colors rounded-sm">
-              Criar Conta
+              {t('createAccount')}
            </Link>
         </div>
       </div>
@@ -117,25 +119,25 @@ export function Account() {
                 onClick={() => setActiveTab('orders')}
                 className={`w-full flex items-center px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-sm ${activeTab === 'orders' ? 'bg-primary text-white' : 'text-secondary hover:bg-neutral-200'}`}
               >
-                <Package className="w-4 h-4 mr-3" /> Meus Pedidos
+                <Package className="w-4 h-4 mr-3" /> {t('myOrders')}
               </button>
               <button 
                 onClick={() => setActiveTab('addresses')}
                 className={`w-full flex items-center px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-sm ${activeTab === 'addresses' ? 'bg-primary text-white' : 'text-secondary hover:bg-neutral-200'}`}
               >
-                <MapPin className="w-4 h-4 mr-3" /> Meus Endereços
+                <MapPin className="w-4 h-4 mr-3" /> {t('myAddresses')}
               </button>
               <button 
                 onClick={() => setActiveTab('data')}
                 className={`w-full flex items-center px-4 py-3 text-sm font-bold uppercase tracking-wider transition-colors rounded-sm ${activeTab === 'data' ? 'bg-primary text-white' : 'text-secondary hover:bg-neutral-200'}`}
               >
-                <User className="w-4 h-4 mr-3" /> Meus Dados
+                <User className="w-4 h-4 mr-3" /> {t('myData')}
               </button>
               <button 
                 onClick={() => setIsLoggedIn(false)}
                 className="w-full flex items-center px-4 py-3 text-sm font-bold uppercase tracking-wider text-red-500 hover:bg-red-50 transition-colors rounded-sm mt-4 border border-transparent hover:border-red-100"
               >
-                <LogOut className="w-4 h-4 mr-3" /> Sair
+                <LogOut className="w-4 h-4 mr-3" /> {t('logout')}
               </button>
            </nav>
         </div>
@@ -149,8 +151,8 @@ export function Account() {
                   <Star className="w-8 h-8 text-primary fill-primary" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-serif font-bold">Clube de Lealdade</h3>
-                  <p className="text-white/60 text-sm">Você tem <span className="text-white font-bold">{points}</span> pontos acumulados.</p>
+                  <h3 className="text-xl font-serif font-bold">{t('loyaltyClubTitle')}</h3>
+                  <p className="text-white/60 text-sm">{t('loyaltyPointsBalance', { points })}</p>
                 </div>
               </div>
               <Link 
@@ -158,19 +160,19 @@ export function Account() {
                 className="bg-primary text-white px-8 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest hover:bg-primary-dark transition-all flex items-center gap-2 shadow-lg shadow-primary/20"
               >
                 <Trophy className="w-4 h-4" />
-                Ver Sorteios
+                {t('viewRaffles')}
               </Link>
            </div>
 
            {activeTab === 'orders' && (
              <div>
-                <h3 className="text-2xl font-serif font-bold text-secondary mb-6 border-b border-neutral-200 pb-4">Meus Pedidos</h3>
+                <h3 className="text-2xl font-serif font-bold text-secondary mb-6 border-b border-neutral-200 pb-4">{t('myOrders')}</h3>
                 <div className="bg-white border border-neutral-200 p-6 rounded-sm text-center py-16">
                    <Package className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
-                   <h4 className="text-lg font-bold text-secondary mb-2">Você ainda não tem pedidos</h4>
-                   <p className="text-secondary/70 mb-6">Que tal conhecer nossas novidades?</p>
+                   <h4 className="text-lg font-bold text-secondary mb-2">{t('noOrdersYet')}</h4>
+                   <p className="text-secondary/70 mb-6">{t('whatAboutNews')}</p>
                    <Link to="/catalog" className="inline-block bg-primary text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-primary-dark transition-colors rounded-sm">
-                     Ver Produtos
+                     {t('seeProducts')}
                    </Link>
                 </div>
              </div>
@@ -178,16 +180,16 @@ export function Account() {
 
            {activeTab === 'addresses' && (
              <div>
-                <h3 className="text-2xl font-serif font-bold text-secondary mb-6 border-b border-neutral-200 pb-4">Meus Endereços</h3>
+                <h3 className="text-2xl font-serif font-bold text-secondary mb-6 border-b border-neutral-200 pb-4">{t('myAddresses')}</h3>
                 <div className="grid sm:grid-cols-2 gap-6">
                    <div className="bg-neutral-50 border border-neutral-200 p-6 rounded-sm relative">
-                      <span className="absolute top-4 right-4 bg-primary text-white text-[10px] font-bold px-2 py-1 uppercase tracking-wider rounded-sm">Principal</span>
-                      <h4 className="font-bold text-secondary uppercase tracking-wider mb-2">Casa</h4>
+                      <span className="absolute top-4 right-4 bg-primary text-white text-[10px] font-bold px-2 py-1 uppercase tracking-wider rounded-sm">{t('primary')}</span>
+                      <h4 className="font-bold text-secondary uppercase tracking-wider mb-2">{t('homeAddress')}</h4>
                       <p className="text-sm text-secondary/70 mb-1">Rua Exemplo, 123 - Apto 4</p>
                       <p className="text-sm text-secondary/70 mb-1">Bairro Central - São Paulo, SP</p>
                       <p className="text-sm text-secondary/70 mb-4">CEP: 01234-567</p>
                       <div className="flex gap-4">
-                         <button className="text-xs font-bold uppercase text-primary hover:text-primary-dark">Editar</button>
+                         <button className="text-xs font-bold uppercase text-primary hover:text-primary-dark">{t('edit')}</button>
                          <button className="text-xs font-bold uppercase text-red-500 hover:text-red-700">Remover</button>
                       </div>
                    </div>
@@ -196,7 +198,7 @@ export function Account() {
                       className="border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center p-6 rounded-sm text-secondary hover:border-primary hover:text-primary transition-colors min-h-[200px]"
                    >
                       <span className="text-4xl font-light mb-2">+</span>
-                      <span className="font-bold uppercase tracking-wider text-sm">Adicionar Endereço</span>
+                      <span className="font-bold uppercase tracking-wider text-sm">{t('addAddress')}</span>
                    </button>
                 </div>
              </div>
@@ -205,7 +207,7 @@ export function Account() {
            {activeTab === 'data' && (
              <div className="space-y-8">
                 <div>
-                   <h3 className="text-2xl font-serif font-bold text-secondary mb-6 border-b border-neutral-200 pb-4">Meus Dados</h3>
+                   <h3 className="text-2xl font-serif font-bold text-secondary mb-6 border-b border-neutral-200 pb-4">{t('myData')}</h3>
                    <form className="bg-white border border-neutral-200 p-6 md:p-8 rounded-sm space-y-6">
                       <div className="grid sm:grid-cols-2 gap-6">
                         <div>
@@ -243,7 +245,7 @@ export function Account() {
                             onClick={() => setIsPasswordModalOpen(true)}
                             className="text-secondary font-bold uppercase tracking-wider text-sm hover:text-primary transition-colors"
                          >
-                            Alterar Senha
+                            {t('changePassword')}
                          </button>
                          <div className="flex gap-4">
                             <button 
@@ -251,10 +253,10 @@ export function Account() {
                                onClick={() => setIsEditDataModalOpen(true)}
                                className="border border-secondary text-secondary hover:bg-neutral-100 px-8 py-3 font-bold uppercase tracking-wider text-sm transition-colors rounded-sm"
                             >
-                               Editar
+                               {t('edit')}
                             </button>
                             <button type="button" className="bg-secondary text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-primary transition-colors rounded-sm">
-                               Salvar Dados
+                               {t('saveData')}
                             </button>
                          </div>
                       </div>

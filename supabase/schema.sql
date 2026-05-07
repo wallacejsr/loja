@@ -123,6 +123,7 @@ create table if not exists public.store_settings (
   id integer primary key default 1 check (id = 1),
   store_name text not null,
   site_title text default '',
+  site_language text not null default 'pt-BR',
   logo_url text default '',
   email text default '',
   phone text default '',
@@ -143,6 +144,7 @@ create table if not exists public.store_settings (
 
 alter table public.store_settings add column if not exists support_sales_phone text default '';
 alter table public.store_settings add column if not exists site_title text default '';
+alter table public.store_settings add column if not exists site_language text not null default 'pt-BR';
 alter table public.store_settings add column if not exists support_sac_phone text default '';
 alter table public.store_settings add column if not exists support_email text default '';
 alter table public.store_settings add column if not exists support_week_hours text default '';

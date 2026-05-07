@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useSettings, StoreSettings } from '../../hooks/useSettings';
 
 export function Settings() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState<StoreSettings>(settings);
 
@@ -23,9 +23,9 @@ export function Settings() {
     showToast(t('settings.save') + '!');
   };
 
-  const changeLanguage = (lng: string) => {
-    i18n.changeLanguage(lng);
-    showToast(`Idioma alterado para: ${lng === 'pt' ? 'Português' : 'English'}`);
+  const changeLanguage = (lng: 'pt-BR' | 'en-US') => {
+    setLocalSettings((prev) => ({ ...prev, siteLanguage: lng }));
+    showToast(`Idioma selecionado: ${lng === 'pt-BR' ? 'Português' : 'English'}`);
   };
 
   return (
@@ -52,9 +52,9 @@ export function Settings() {
               </div>
               <div className="flex gap-2">
                  <button 
-                  onClick={() => changeLanguage('pt')}
+                  onClick={() => changeLanguage('pt-BR')}
                   className={`flex-1 px-4 py-2.5 text-[12px] font-bold rounded-xl border transition-all ${
-                    i18n.language.startsWith('pt') 
+                    localSettings.siteLanguage === 'pt-BR'
                       ? 'bg-neutral-900 text-white border-neutral-900 shadow-md' 
                       : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
                   }`}
@@ -62,9 +62,9 @@ export function Settings() {
                     PT-BR (Português)
                  </button>
                  <button 
-                  onClick={() => changeLanguage('en')}
+                  onClick={() => changeLanguage('en-US')}
                   className={`flex-1 px-4 py-2.5 text-[12px] font-bold rounded-xl border transition-all ${
-                    i18n.language.startsWith('en') 
+                    localSettings.siteLanguage === 'en-US'
                       ? 'bg-neutral-900 text-white border-neutral-900 shadow-md' 
                       : 'bg-white text-neutral-600 border-neutral-200 hover:border-neutral-300'
                   }`}

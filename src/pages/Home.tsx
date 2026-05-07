@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Heart, CreditCard, BadgePercent, ShieldCheck, Trophy, Gift, Calendar, Ticket } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useCart } from '../context/CartContext';
+import { useStorefront } from '../hooks/useStorefront';
 import { useStoreData } from '../hooks/useStoreData';
 import { Product } from '../data/mockData';
 import { HomeCard, HomeSection as HomeSectionConfig, Raffle } from '../lib/storeApi';
 
 export function Home() {
   const { products, banners, homeSections, homeCards, categories, raffles, loading } = useStoreData();
+  const { t } = useStorefront();
   const [currentSlide, setCurrentSlide] = useState(0);
   const slides = banners.length ? banners : [];
   const activeHomeSections = homeSections
@@ -43,22 +45,22 @@ export function Home() {
             <div className="flex items-center justify-center gap-4 px-4 py-2">
               <CreditCard className="w-10 h-10 text-[#c29656] stroke-[1.5] shrink-0" />
               <div className="text-left">
-                <h3 className="font-extrabold text-secondary text-base lg:text-lg">Parcelamento</h3>
-                <p className="text-sm text-secondary/80">Em atÃ© 12X no CartÃ£o</p>
+                <h3 className="font-extrabold text-secondary text-base lg:text-lg">{t('parcelingTitle')}</h3>
+                <p className="text-sm text-secondary/80">{t('parcelingSubtitle')}</p>
               </div>
             </div>
             <div className="flex items-center justify-center gap-4 px-4 py-2">
               <BadgePercent className="w-12 h-12 text-[#c29656] stroke-[1.2] shrink-0" />
               <div className="text-left">
-                <h3 className="font-extrabold text-secondary text-base lg:text-lg">Pagamento Ã€ Vista</h3>
-                <p className="text-sm text-secondary/80">5% de desconto Pix/Boleto</p>
+                <h3 className="font-extrabold text-secondary text-base lg:text-lg">{t('cashPaymentTitle')}</h3>
+                <p className="text-sm text-secondary/80">{t('cashPaymentSubtitle')}</p>
               </div>
             </div>
             <div className="flex items-center justify-center gap-4 px-4 py-2">
               <ShieldCheck className="w-10 h-10 text-[#c29656] stroke-[1.5] shrink-0" />
               <div className="text-left">
-                <h3 className="font-extrabold text-secondary text-base lg:text-lg">SeguranÃ§a</h3>
-                <p className="text-sm text-secondary/80">Loja com SSL de ProteÃ§Ã£o</p>
+                <h3 className="font-extrabold text-secondary text-base lg:text-lg">{t('securityTitle')}</h3>
+                <p className="text-sm text-secondary/80">{t('securitySubtitle')}</p>
               </div>
             </div>
           </div>
@@ -160,6 +162,7 @@ function HeroSkeleton() {
 }
 
 function HomeCardsSection({ cards }: { cards: HomeCard[] }) {
+  const { t } = useStorefront();
   if (!cards.length) return null;
 
   return (
@@ -178,7 +181,7 @@ function HomeCardsSection({ cards }: { cards: HomeCard[] }) {
               <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-r from-black/80 via-black/55 to-black/75 backdrop-blur-sm flex items-center justify-between px-4">
                 <span className="text-white text-base font-bold truncate pr-4">{card.title}</span>
                 <span className="text-white text-[12px] font-bold uppercase tracking-wider inline-flex items-center gap-2 shrink-0">
-                  {card.ctaLabel || 'Confira'}
+                  {card.ctaLabel || t('checkOut')}
                   <ArrowRight className="w-3.5 h-3.5" />
                 </span>
               </div>
@@ -215,6 +218,7 @@ function ImageIconPlaceholder() {
 }
 
 function RaffleCallout({ raffle }: { raffle: Raffle }) {
+  const { t, formatDate } = useStorefront();
   return (
     <section className="py-12 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -228,14 +232,14 @@ function RaffleCallout({ raffle }: { raffle: Raffle }) {
               </div>
             )}
             <div className="absolute left-5 top-5 bg-white/95 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-primary shadow-sm">
-              Sorteio ativo
+              {t('activeRaffle')}
             </div>
           </Link>
 
           <div className="p-8 sm:p-10 lg:p-14 flex flex-col justify-center">
             <div className="flex items-center gap-2 text-primary text-[11px] font-black uppercase tracking-[0.22em] mb-5">
               <Trophy className="w-4 h-4" />
-              Clube de Sorteios
+              {t('loyaltyClub')}
             </div>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-serif font-bold text-secondary leading-tight mb-5">
               {raffle.title}
@@ -252,12 +256,12 @@ function RaffleCallout({ raffle }: { raffle: Raffle }) {
               {raffle.drawDate && (
                 <div className="flex items-center gap-3 text-secondary">
                   <Calendar className="w-5 h-5 text-primary shrink-0" />
-                  <span className="text-sm font-semibold">Sorteio em {new Date(`${raffle.drawDate}T00:00:00`).toLocaleDateString('pt-BR')}</span>
+                  <span className="text-sm font-semibold">{t('raffleDrawOn', { date: formatDate(`${raffle.drawDate}T00:00:00`) })}</span>
                 </div>
               )}
               <div className="flex items-center gap-3 text-secondary">
                 <Ticket className="w-5 h-5 text-primary shrink-0" />
-                <span className="text-sm font-semibold">{raffle.pointsPerTicket} pontos por bilhete</span>
+                <span className="text-sm font-semibold">{t('pointsPerTicket', { count: raffle.pointsPerTicket })}</span>
               </div>
             </div>
 
@@ -265,7 +269,7 @@ function RaffleCallout({ raffle }: { raffle: Raffle }) {
               to={raffle.ctaLink || '/sorteios'}
               className="w-full sm:w-fit bg-secondary text-white px-8 py-4 text-[12px] font-black uppercase tracking-widest hover:bg-primary transition-colors inline-flex items-center justify-center gap-3"
             >
-              {raffle.ctaLabel || 'Participar agora'}
+              {raffle.ctaLabel || t('participateNow')}
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
@@ -345,6 +349,7 @@ function HomeProductSection({ section, products }: { section: HomeSectionConfig;
 
 function ProductSection({ title, products, link }: { title: string; products: Product[]; link: string }) {
   const { toggleWishlist, wishlist } = useCart();
+  const { t, formatCurrency } = useStorefront();
   const productCount = products.length;
   const gridClassName = productCount === 1
     ? 'grid grid-cols-1 max-w-sm'
@@ -359,7 +364,7 @@ function ProductSection({ title, products, link }: { title: string; products: Pr
       <div className="flex justify-between items-center mb-5 border-b-2 border-primary pb-2">
         <h2 className="text-xl font-bold uppercase tracking-wider text-primary">{title}</h2>
         <Link to={link} className="text-xs font-bold uppercase tracking-wider flex items-center text-secondary hover:text-primary transition-colors">
-          Ver Todos <ArrowRight className="w-4 h-4 ml-1" />
+          {t('viewAll')} <ArrowRight className="w-4 h-4 ml-1" />
         </Link>
       </div>
       <div className={gridClassName}>
@@ -385,7 +390,7 @@ function ProductSection({ title, products, link }: { title: string; products: Pr
 
                 <div className="absolute top-2 left-2 flex flex-col gap-2 z-10">
                   {product.lancamento && (
-                    <span className="bg-secondary text-white text-[10px] font-bold px-2 py-1 uppercase tracking-wider rounded-sm">Novo</span>
+                    <span className="bg-secondary text-white text-[10px] font-bold px-2 py-1 uppercase tracking-wider rounded-sm">{t('productNew')}</span>
                   )}
                   {product.precoPromocional && (
                     <span className="bg-primary text-white text-[10px] font-bold px-2 py-1 uppercase tracking-wider rounded-sm">Sale</span>
@@ -408,14 +413,14 @@ function ProductSection({ title, products, link }: { title: string; products: Pr
                 <div className="mt-auto">
                   {product.precoPromocional ? (
                     <div className="flex flex-col items-center gap-0.5">
-                      <span className="text-secondary/50 line-through text-xs">R$ {product.preco.toFixed(2).replace('.', ',')}</span>
-                      <span className="text-primary font-bold text-lg">R$ {product.precoPromocional.toFixed(2).replace('.', ',')}</span>
+                      <span className="text-secondary/50 line-through text-xs">{formatCurrency(product.preco)}</span>
+                      <span className="text-primary font-bold text-lg">{formatCurrency(product.precoPromocional)}</span>
                     </div>
                   ) : (
-                    <span className="text-primary font-bold text-lg block">R$ {product.preco.toFixed(2).replace('.', ',')}</span>
+                    <span className="text-primary font-bold text-lg block">{formatCurrency(product.preco)}</span>
                   )}
                   <span className="block text-[#1a222b] text-xs mt-1">
-                    atÃ© <strong>4x</strong> de <strong>R$ {((product.precoPromocional || product.preco) / 4).toFixed(2).replace('.', ',')}</strong> sem juros
+                    {t('installments4', { value: formatCurrency((product.precoPromocional || product.preco) / 4) })}
                   </span>
                 </div>
               </Link>
@@ -424,7 +429,7 @@ function ProductSection({ title, products, link }: { title: string; products: Pr
                 to={`/product/${product.id}`}
                 className="mt-4 w-full bg-secondary text-white font-bold text-xs uppercase tracking-wider py-3 text-center hover:bg-primary transition-colors rounded-sm sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
               >
-                Ver Detalhes
+                {t('viewDetails')}
               </Link>
             </div>
           );

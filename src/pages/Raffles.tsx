@@ -2,6 +2,7 @@ import React from 'react';
 import { Trophy, Ticket, Calendar, Gift, Star } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useLoyalty } from '../hooks/useLoyalty';
+import { useStorefront } from '../hooks/useStorefront';
 import { useStoreData } from '../hooks/useStoreData';
 import { showToast } from '../lib/adminUtils';
 import { cn } from '../lib/utils';
@@ -10,16 +11,15 @@ import { Raffle } from '../lib/storeApi';
 export function Raffles() {
   const { points, buyTicket, tickets } = useLoyalty();
   const { raffles } = useStoreData();
-  const activeRaffles = raffles
-    .filter((raffle) => raffle.status === 'Ativo')
-    .sort((a, b) => a.position - b.position);
+  const { t, formatDate } = useStorefront();
+  const activeRaffles = raffles.filter((raffle) => raffle.status === 'Ativo').sort((a, b) => a.position - b.position);
 
   const handleBuy = (raffle: Raffle) => {
     if (points >= raffle.pointsPerTicket) {
       buyTicket(raffle.id, raffle.title, raffle.pointsPerTicket);
-      showToast('Participacao confirmada! Boa sorte!');
+      showToast(t('participateConfirmed'));
     } else {
-      showToast('Saldo de pontos insuficiente!');
+      showToast(t('insufficientPoints'));
     }
   };
 
@@ -30,41 +30,32 @@ export function Raffles() {
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 text-primary font-bold text-[11px] uppercase tracking-[0.2em] mb-4">
               <Star className="w-4 h-4" />
-              Clube de Lealdade
+              {t('loyaltyClubTitle')}
             </div>
-            <h1 className="text-4xl md:text-5xl font-serif text-secondary font-bold tracking-tight mb-4">
-              Troque seus pontos por <span className="italic">sorte</span>.
-            </h1>
-            <p className="text-secondary/60 text-lg leading-relaxed">
-              Cada R$ 1,00 em compras vira 1 ponto. Acumule e troque por bilhetes para nossos sorteios exclusivos.
-            </p>
+            <h1 className="text-4xl md:text-5xl font-serif text-secondary font-bold tracking-tight mb-4">{t('rafflesHeroTitle')}</h1>
+            <p className="text-secondary/60 text-lg leading-relaxed">{t('rafflesHeroSubtitle')}</p>
           </div>
 
           <div className="bg-white p-8 rounded-3xl border border-secondary/5 shadow-xl shadow-secondary/5 relative overflow-hidden flex flex-col items-center text-center min-w-[280px]">
             <div className="absolute top-0 left-0 w-full h-1 bg-primary" />
-            <span className="text-[11px] font-bold uppercase tracking-widest text-secondary/40 mb-2">Seu Saldo Atual</span>
+            <span className="text-[11px] font-bold uppercase tracking-widest text-secondary/40 mb-2">{t('currentBalance')}</span>
             <div className="flex items-center gap-2 mb-1">
               <Star className="w-6 h-6 text-primary fill-primary" />
               <span className="text-4xl font-serif font-bold text-secondary">{points}</span>
             </div>
-            <span className="text-[13px] font-medium text-secondary/60 italic">Pontos Acumulados</span>
+            <span className="text-[13px] font-medium text-secondary/60 italic">{t('accumulatedPoints')}</span>
           </div>
         </div>
 
         <div className="grid lg:grid-cols-12 gap-12">
           <div className="lg:col-span-8 space-y-8">
             <div className="flex items-center gap-4 mb-8">
-              <h2 className="text-xl font-bold uppercase tracking-widest text-secondary">Sorteios Ativos</h2>
+              <h2 className="text-xl font-bold uppercase tracking-widest text-secondary">{t('activeRafflesTitle')}</h2>
               <div className="h-px flex-1 bg-secondary/10" />
             </div>
 
             {activeRaffles.map((raffle) => (
-              <motion.div
-                key={raffle.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-[32px] overflow-hidden border border-secondary/5 shadow-2xl shadow-secondary/5 group"
-              >
+              <motion.div key={raffle.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[32px] overflow-hidden border border-secondary/5 shadow-2xl shadow-secondary/5 group">
                 <div className="grid md:grid-cols-2">
                   <div className="h-64 md:h-full relative overflow-hidden bg-neutral-100">
                     {raffle.image ? (
@@ -76,13 +67,13 @@ export function Raffles() {
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent md:hidden" />
                     <div className="absolute bottom-6 left-6 text-white md:hidden">
-                      <span className="text-[10px] font-bold uppercase tracking-widest bg-primary px-3 py-1 rounded-full">{raffle.pointsPerTicket} PTS p/ bilhete</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest bg-primary px-3 py-1 rounded-full">{t('pointsPerTicket', { count: raffle.pointsPerTicket })}</span>
                     </div>
                   </div>
                   <div className="p-8 md:p-12 flex flex-col justify-center">
                     <div className="hidden md:block mb-6">
                       <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-primary/10 text-primary px-4 py-1.5 rounded-full">
-                        {raffle.pointsPerTicket} Pontos por bilhete
+                        {t('pointsPerTicket', { count: raffle.pointsPerTicket })}
                       </span>
                     </div>
                     <h3 className="text-3xl font-serif font-bold text-secondary mb-4">{raffle.title}</h3>
@@ -96,7 +87,7 @@ export function Raffles() {
                       <div className="flex items-center gap-3 text-secondary/70">
                         <Calendar className="w-5 h-5 text-primary" />
                         <span className="text-sm font-medium">
-                          Sorteio em: {raffle.drawDate ? new Date(`${raffle.drawDate}T00:00:00`).toLocaleDateString('pt-BR') : 'Em breve'}
+                          {raffle.drawDate ? t('raffleDrawOn', { date: formatDate(`${raffle.drawDate}T00:00:00`) }) : t('drawSoon')}
                         </span>
                       </div>
                     </div>
@@ -105,14 +96,12 @@ export function Raffles() {
                       onClick={() => handleBuy(raffle)}
                       disabled={points < raffle.pointsPerTicket}
                       className={cn(
-                        "w-full py-4 rounded-full text-[12px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-3",
-                        points >= raffle.pointsPerTicket
-                          ? "bg-secondary text-white hover:bg-secondary/90 shadow-lg shadow-secondary/20"
-                          : "bg-neutral-100 text-neutral-400 cursor-not-allowed",
+                        'w-full py-4 rounded-full text-[12px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-3',
+                        points >= raffle.pointsPerTicket ? 'bg-secondary text-white hover:bg-secondary/90 shadow-lg shadow-secondary/20' : 'bg-neutral-100 text-neutral-400 cursor-not-allowed',
                       )}
                     >
                       <Ticket className="w-5 h-5" />
-                      {points >= raffle.pointsPerTicket ? 'Participar Agora' : 'Pontos Insuficientes'}
+                      {points >= raffle.pointsPerTicket ? t('participateNow') : t('insufficientPointsButton')}
                     </button>
                   </div>
                 </div>
@@ -121,7 +110,7 @@ export function Raffles() {
 
             {!activeRaffles.length && (
               <div className="bg-white border border-secondary/5 rounded-[32px] p-12 text-center text-secondary/50">
-                Nenhum sorteio ativo no momento.
+                {t('noActiveRaffles')}
               </div>
             )}
           </div>
@@ -129,17 +118,15 @@ export function Raffles() {
           <div className="lg:col-span-4 space-y-10">
             <div className="bg-secondary p-10 rounded-[32px] text-white overflow-hidden relative">
               <Star className="absolute -top-10 -right-10 w-40 h-40 text-white/5 rotate-12" />
-              <h3 className="text-xl font-serif font-bold mb-6">Como funciona?</h3>
+              <h3 className="text-xl font-serif font-bold mb-6">{t('howItWorks')}</h3>
               <ul className="space-y-6 relative z-10">
                 {[
-                  { title: 'Compre', desc: 'Cada real gasto na loja equivale a 1 ponto de lealdade.' },
-                  { title: 'Acumule', desc: 'Seus pontos ficam salvos na sua conta.' },
-                  { title: 'Participe', desc: 'Troque seus pontos acumulados por bilhetes.' },
+                  { title: t('raffleStepBuy'), desc: t('raffleStepBuyDesc') },
+                  { title: t('raffleStepAccumulate'), desc: t('raffleStepAccumulateDesc') },
+                  { title: t('raffleStepJoin'), desc: t('raffleStepJoinDesc') },
                 ].map((item, idx) => (
                   <li key={item.title} className="flex gap-4">
-                    <div className="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center text-[12px] font-bold shrink-0">
-                      {idx + 1}
-                    </div>
+                    <div className="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center text-[12px] font-bold shrink-0">{idx + 1}</div>
                     <div>
                       <p className="font-bold text-[13px] uppercase tracking-wider mb-1">{item.title}</p>
                       <p className="text-white/60 text-[13px] leading-relaxed">{item.desc}</p>
@@ -151,7 +138,7 @@ export function Raffles() {
 
             <div className="bg-white border border-secondary/5 rounded-[32px] p-8 shadow-xl shadow-secondary/5">
               <h3 className="text-lg font-serif font-bold text-secondary mb-6 flex items-center justify-between">
-                Seus Bilhetes
+                {t('yourTickets')}
                 <span className="text-[11px] font-sans font-bold bg-secondary/5 text-secondary px-3 py-1 rounded-full">{tickets.length}</span>
               </h3>
 
@@ -163,14 +150,14 @@ export function Raffles() {
                         <p className="text-[13px] font-bold text-secondary uppercase truncate max-w-[150px]">{ticket.raffleTitle}</p>
                         <p className="text-[10px] text-secondary/40 font-mono tracking-wider">#{ticket.number}</p>
                       </div>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Confirmado</span>
+                      <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">{t('confirmed')}</span>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="text-center py-10 px-6">
                   <Ticket className="w-10 h-10 text-secondary/10 mx-auto mb-4" />
-                  <p className="text-secondary/40 text-[13px] italic">Voce ainda nao possui bilhetes para sorteios ativos.</p>
+                  <p className="text-secondary/40 text-[13px] italic">{t('noTicketsYet')}</p>
                 </div>
               )}
             </div>

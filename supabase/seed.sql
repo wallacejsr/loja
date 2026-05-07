@@ -1,9 +1,10 @@
 insert into public.store_settings (
-  id, store_name, site_title, logo_url, email, phone, instagram, facebook, tiktok, description, primary_color, secondary_color, points_per_real, support_sales_phone, support_sac_phone, support_email, support_week_hours, support_saturday_hours
+  id, store_name, site_title, site_language, logo_url, email, phone, instagram, facebook, tiktok, description, primary_color, secondary_color, points_per_real, support_sales_phone, support_sac_phone, support_email, support_week_hours, support_saturday_hours
 ) values (
   1,
   'Spacodani',
   'Spacodani',
+  'pt-BR',
   'https://cdn.awsli.com.br/400x300/2751/2751677/logo/logo-dani-morais-ky8ceccgy5.png',
   'contato@danibrand.com.br',
   '(11) 99999-9999',
@@ -22,6 +23,7 @@ insert into public.store_settings (
 ) on conflict (id) do update set
   store_name = excluded.store_name,
   site_title = excluded.site_title,
+  site_language = excluded.site_language,
   logo_url = excluded.logo_url,
   email = excluded.email,
   phone = excluded.phone,

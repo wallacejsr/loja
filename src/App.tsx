@@ -13,23 +13,12 @@ import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
 import { CartProvider } from './context/CartContext';
 import { SettingsProvider } from './hooks/useSettings';
+import { useStorefront } from './hooks/useStorefront';
 import { StoreDataProvider } from './hooks/useStoreData';
-
-function ScrollToTop() {
-  const { pathname } = useLocation();
-  
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [pathname]);
-  
-  return null;
-}
-
 import { Wishlist } from './pages/Wishlist';
 import { Raffles } from './pages/Raffles';
 import { Account } from './pages/Account';
 import { Register } from './pages/Register';
-
 import { AdminLayout } from './pages/admin/AdminLayout';
 import { Dashboard } from './pages/admin/Dashboard';
 import { Products } from './pages/admin/Products';
@@ -43,8 +32,20 @@ import { AdminRaffles } from './pages/admin/Raffles';
 import { LayoutTheme } from './pages/admin/LayoutTheme';
 import { HomeSections } from './pages/admin/HomeSections';
 
-// Simple placeholder components for other routes
-const Institutional = ({ title }: { title: string }) => <div className="flex justify-center py-32 text-xl font-bold uppercase">{title}</div>;
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
+
+const Institutional = ({ titleKey }: { titleKey: string }) => {
+  const { t } = useStorefront();
+  return <div className="flex justify-center py-32 text-xl font-bold uppercase">{t(titleKey)}</div>;
+};
 
 export default function App() {
   return (
@@ -54,41 +55,38 @@ export default function App() {
         <StoreDataProvider>
           <CartProvider>
             <Routes>
-            {/* Admin Routes */}
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="products" element={<Products />} />
-              <Route path="orders" element={<Orders />} />
-              <Route path="categories" element={<Categories />} />
-              <Route path="customers" element={<Customers />} />
-              <Route path="banners" element={<Banners />} />
-              <Route path="home" element={<HomeSections />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="promotions" element={<Promotions />} />
-              <Route path="raffles" element={<AdminRaffles />} />
-              <Route path="layout" element={<LayoutTheme />} />
-            </Route>
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<Dashboard />} />
+                <Route path="products" element={<Products />} />
+                <Route path="orders" element={<Orders />} />
+                <Route path="categories" element={<Categories />} />
+                <Route path="customers" element={<Customers />} />
+                <Route path="banners" element={<Banners />} />
+                <Route path="home" element={<HomeSections />} />
+                <Route path="settings" element={<Settings />} />
+                <Route path="promotions" element={<Promotions />} />
+                <Route path="raffles" element={<AdminRaffles />} />
+                <Route path="layout" element={<LayoutTheme />} />
+              </Route>
 
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Home />} />
-              <Route path="catalog" element={<Catalog />} />
-              <Route path="product/:id" element={<ProductDetails />} />
-              <Route path="cart" element={<Cart />} />
-              <Route path="checkout" element={<Checkout />} />
-              <Route path="account" element={<Account />} />
-              <Route path="sorteios" element={<Raffles />} />
-              <Route path="register" element={<Register />} />
-              <Route path="wishlist" element={<Wishlist />} />
-              
-              {/* Institutional Routes */}
-              <Route path="about" element={<Institutional title="Sobre a Marca" />} />
-              <Route path="contact" element={<Institutional title="Contato" />} />
-              <Route path="terms" element={<Institutional title="Termos de Uso" />} />
-              <Route path="privacy" element={<Institutional title="Política de Privacidade" />} />
-              <Route path="exchanges" element={<Institutional title="Trocas e Devoluções" />} />
-              <Route path="faq" element={<Institutional title="Perguntas Frequentes" />} />
-              <Route path="shipping" element={<Institutional title="Prazos e Envios" />} />
-            </Route>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<Home />} />
+                <Route path="catalog" element={<Catalog />} />
+                <Route path="product/:id" element={<ProductDetails />} />
+                <Route path="cart" element={<Cart />} />
+                <Route path="checkout" element={<Checkout />} />
+                <Route path="account" element={<Account />} />
+                <Route path="sorteios" element={<Raffles />} />
+                <Route path="register" element={<Register />} />
+                <Route path="wishlist" element={<Wishlist />} />
+                <Route path="about" element={<Institutional titleKey="institutionalAbout" />} />
+                <Route path="contact" element={<Institutional titleKey="institutionalContact" />} />
+                <Route path="terms" element={<Institutional titleKey="institutionalTerms" />} />
+                <Route path="privacy" element={<Institutional titleKey="institutionalPrivacy" />} />
+                <Route path="exchanges" element={<Institutional titleKey="institutionalExchanges" />} />
+                <Route path="faq" element={<Institutional titleKey="institutionalFaq" />} />
+                <Route path="shipping" element={<Institutional titleKey="institutionalShipping" />} />
+              </Route>
             </Routes>
           </CartProvider>
         </StoreDataProvider>

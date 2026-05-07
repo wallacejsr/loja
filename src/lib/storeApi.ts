@@ -243,6 +243,7 @@ const toRaffle = (row: any): Raffle => ({
 const toSettings = (row: any): StoreSettings => ({
   storeName: row.store_name || defaultSettings.storeName,
   siteTitle: row.site_title || row.store_name || defaultSettings.siteTitle,
+  siteLanguage: row.site_language === 'en-US' ? 'en-US' : defaultSettings.siteLanguage,
   logoUrl: row.logo_url || defaultSettings.logoUrl,
   email: row.email || defaultSettings.email,
   phone: row.phone || defaultSettings.phone,
@@ -264,6 +265,7 @@ const fromSettings = (settings: StoreSettings) => ({
   id: 1,
   store_name: settings.storeName,
   site_title: settings.siteTitle,
+  site_language: settings.siteLanguage,
   logo_url: settings.logoUrl,
   email: settings.email,
   phone: settings.phone,

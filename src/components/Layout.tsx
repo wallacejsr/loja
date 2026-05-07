@@ -3,12 +3,12 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ShoppingBag, Search, User, Heart, Menu, X, MessageCircle, Phone, Mail, Instagram, Youtube, Facebook, ChevronDown, Clock, Trophy } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { cn } from '../lib/utils';
-import { useTranslation } from 'react-i18next';
 import { useSettings } from '../hooks/useSettings';
+import { useStorefront } from '../hooks/useStorefront';
 import { useStoreData } from '../hooks/useStoreData';
 
 export function Layout() {
-  const { t } = useTranslation();
+  const { t } = useStorefront();
   const { settings, loading: settingsLoading } = useSettings();
   const { categories } = useStoreData();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -50,8 +50,8 @@ export function Layout() {
     !visibleMenuCategories.some((visible) => visible.id === category.id)
   ));
   const automaticMenuLinks = [
-    { name: 'Lan\u00e7amentos', path: '/catalog?sort=lancamentos', active: location.search.includes('sort=lancamentos') },
-    { name: 'Mais Vendidos', path: '/catalog?sort=mais-vendidos', active: location.search.includes('sort=mais-vendidos') },
+    { name: t('menuLaunches'), path: '/catalog?sort=lancamentos', active: location.search.includes('sort=lancamentos') },
+    { name: t('menuBestSellers'), path: '/catalog?sort=mais-vendidos', active: location.search.includes('sort=mais-vendidos') },
   ];
 
   return (
@@ -71,7 +71,7 @@ export function Layout() {
                   <Phone className="w-3.5 h-3.5 mr-1.5" /> {sacWhatsApp}
                 </a>
                 <a href={salesWhatsAppUrl} target="_blank" rel="noreferrer" className="flex items-center hover:text-white/80 font-medium">
-                  <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> Whatsapp: {salesWhatsApp}
+                  <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> WhatsApp: {salesWhatsApp}
                 </a>
               </>
             ) : (
@@ -122,7 +122,7 @@ export function Layout() {
               <form onSubmit={handleSearchSubmit} className="w-full">
                  <input
                    type="text"
-                   placeholder={t('nav.search_placeholder')}
+                   placeholder={t('searchPlaceholder')}
                    value={searchQuery}
                    onChange={(e) => setSearchQuery(e.target.value)}
                    className="w-full bg-[#f6f2ec] placeholder-secondary/50 text-secondary rounded-full pl-6 pr-14 py-3 sm:py-3.5 focus:outline-none focus:ring-1 focus:ring-primary text-sm font-medium transition-shadow mx-auto"
@@ -141,8 +141,8 @@ export function Layout() {
                     <MessageCircle className="w-7 h-7 stroke-[1]" />
                   </div>
                   <div className="flex flex-col text-sm whitespace-nowrap">
-                     <span className="text-secondary/70 text-xs text-left">Central de</span>
-                     <span className="text-secondary font-bold flex items-center">Atendimento <ChevronDown className="w-3 h-3 ml-1 text-secondary/50" /></span>
+                     <span className="text-secondary/70 text-xs text-left">{t('supportCenterPretitle')}</span>
+                     <span className="text-secondary font-bold flex items-center">{t('supportCenterTitle')} <ChevronDown className="w-3 h-3 ml-1 text-secondary/50" /></span>
                   </div>
 
                   {/* Dropdown Content */}
@@ -153,7 +153,7 @@ export function Layout() {
                     <div className="relative z-10 flex flex-col gap-4 cursor-default" onClick={e => e.stopPropagation()}>
                        {/* Whatsapp */}
                        <div>
-                         <h4 className="font-bold text-secondary mb-2">Estamos no whatsapp</h4>
+                         <h4 className="font-bold text-secondary mb-2">{t('supportWhatsappTitle')}</h4>
                          <div className="flex flex-col gap-2">
                            <a href={salesWhatsAppUrl} className="flex items-start gap-3 hover:bg-neutral-50 p-2 rounded-sm transition-colors -mx-2">
                              <div className="text-green-500 bg-green-50 p-1.5 rounded-full shrink-0">
@@ -161,7 +161,7 @@ export function Layout() {
                              </div>
                             <div className="flex flex-col">
                               <span className="font-bold text-secondary leading-tight">{salesWhatsApp || ' '}</span>
-                              <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-0.5">Vendas</span>
+                              <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-0.5">{t('supportSalesLabel')}</span>
                             </div>
                           </a>
                            <a href={sacWhatsAppUrl} className="flex items-start gap-3 hover:bg-neutral-50 p-2 rounded-sm transition-colors -mx-2">
@@ -170,25 +170,25 @@ export function Layout() {
                              </div>
                             <div className="flex flex-col">
                               <span className="font-bold text-secondary leading-tight">{sacWhatsApp || ' '}</span>
-                              <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-0.5">Sac</span>
+                              <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-0.5">{t('supportSacLabel')}</span>
                             </div>
                           </a>
                          </div>
                        </div>
 
                        <div className="border-t border-neutral-100 pt-4">
-                         <h4 className="font-bold text-secondary mb-2">Envie uma mensagem</h4>
+                         <h4 className="font-bold text-secondary mb-2">{t('supportMessageTitle')}</h4>
                          <a href={`mailto:${supportEmail}`} className="flex items-start gap-3 hover:bg-neutral-50 p-2 rounded-sm transition-colors -mx-2">
                            <Mail className="w-4 h-4 text-secondary shrink-0 mt-0.5" />
                            <div className="flex flex-col">
                              <span className="font-bold text-secondary text-sm break-all leading-tight">{supportEmail || ' '}</span>
-                             <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-1">SAC</span>
+                             <span className="text-[10px] text-secondary/70 font-bold uppercase tracking-wider mt-1">{t('supportSacLabel')}</span>
                            </div>
                          </a>
                        </div>
 
                        <div className="border-t border-neutral-100 pt-4">
-                         <h4 className="font-bold text-secondary mb-2">Horário de atendimento</h4>
+                         <h4 className="font-bold text-secondary mb-2">{t('supportHoursTitle')}</h4>
                          <div className="flex items-start gap-3 p-2 -mx-2">
                            <Clock className="w-4 h-4 text-secondary shrink-0 mt-0.5" />
                            <div className="flex flex-col text-sm text-secondary gap-0.5">
@@ -199,7 +199,7 @@ export function Layout() {
                        </div>
 
                        <button onClick={() => { setIsContactModalOpen(true); setIsMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 bg-[#f6f2ec] text-secondary font-bold text-xs uppercase tracking-wider py-3 rounded-sm hover:bg-primary hover:text-white transition-colors mt-2">
-                          <Mail className="w-4 h-4" /> Enviar mensagem
+                          <Mail className="w-4 h-4" /> {t('supportSendMessage')}
                        </button>
                     </div>
                   </div>
@@ -211,9 +211,9 @@ export function Layout() {
                     <User className="w-7 h-7 stroke-[1]" />
                   </div>
                   <div className="flex flex-col text-sm whitespace-nowrap">
-                     <span className="text-secondary/70 text-xs text-left">Bem-vindo(a)</span>
+                     <span className="text-secondary/70 text-xs text-left">{t('welcome')}</span>
                      <span className="text-secondary font-bold flex items-center">
-                       <span>Entrar ou <span className="font-extrabold">Cadastrar</span></span> 
+                       <span>{t('loginOrRegister')}</span> 
                        <ChevronDown className="w-3 h-3 ml-1 text-secondary/50" />
                      </span>
                   </div>
@@ -261,7 +261,7 @@ export function Layout() {
               <nav className="flex items-center">
                 <div className="relative group/categories flex items-center gap-2 text-secondary font-bold py-3 pr-6 border-r border-[#e8dccb] cursor-pointer hover:text-primary transition-colors">
                   <Menu className="w-5 h-5 text-primary" />
-                  <span className="text-sm font-bold uppercase tracking-wider">Todas as Categorias</span>
+                  <span className="text-sm font-bold uppercase tracking-wider">{t('allCategories')}</span>
                   <ChevronDown className="w-4 h-4 ml-1 text-secondary/50" />
                   <div className="absolute top-full left-0 w-72 bg-white rounded-b-md shadow-[0_14px_30px_-12px_rgba(0,0,0,0.18)] border border-neutral-100 opacity-0 invisible group-hover/categories:opacity-100 group-hover/categories:visible transition-all duration-200 z-50 py-3">
                     {hiddenMenuCategories.length ? hiddenMenuCategories.map((category) => (
@@ -273,7 +273,7 @@ export function Layout() {
                         {category.nome}
                       </Link>
                     )) : (
-                      <div className="px-4 py-3 text-[12px] font-medium text-neutral-400">Nenhuma categoria adicional.</div>
+                      <div className="px-4 py-3 text-[12px] font-medium text-neutral-400">{t('noAdditionalCategories')}</div>
                     )}
                   </div>
                 </div>
@@ -310,7 +310,7 @@ export function Layout() {
                       location.pathname === '/sorteios' ? 'text-primary' : ''
                     )}
                   >
-                    Sorteios
+                    {t('menuRaffles')}
                   </Link>
                 </div>
               </nav>
@@ -330,7 +330,7 @@ export function Layout() {
               <input
                 autoFocus={isSearchOpen}
                 type="text"
-                placeholder="O que você está procurando?"
+                placeholder={t('searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-neutral-100 pl-12 pr-4 py-4 text-base rounded-sm focus:outline-none focus:ring-1 focus:ring-primary w-full transition-shadow"
@@ -339,7 +339,7 @@ export function Layout() {
                 type="submit" 
                 className="absolute right-2 bg-primary text-white px-4 py-2 text-sm font-bold uppercase tracking-wider rounded-sm hover:bg-primary-dark transition-colors"
               >
-                Buscar
+                {t('searchButton')}
               </button>
             </form>
           </div>
@@ -358,7 +358,7 @@ export function Layout() {
                   <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
                   <input 
                     type="text" 
-                    placeholder="Buscar produto..." 
+                    placeholder={t('mobileSearchPlaceholder')} 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full bg-neutral-50 px-10 py-2.5 rounded-sm text-sm outline-none focus:ring-1 focus:ring-primary" 
@@ -391,17 +391,17 @@ export function Layout() {
               onClick={closeMenu}
               className="block px-3 py-3 text-sm font-semibold uppercase tracking-wide text-secondary hover:text-primary hover:bg-neutral-50 rounded-md"
             >
-              Sorteios
+              {t('menuRaffles')}
             </Link>
              <div className="border-t border-neutral-100 pt-4 mt-2 flex flex-col gap-4 px-3">
                <Link to="/account" onClick={closeMenu} className="flex items-center text-sm font-semibold uppercase text-secondary hover:text-primary">
-                 <User className="w-4 h-4 mr-3" /> Minha Conta
+                 <User className="w-4 h-4 mr-3" /> {t('myAccount')}
                </Link>
                <Link to="/wishlist" onClick={closeMenu} className="flex items-center text-sm font-semibold uppercase text-secondary hover:text-primary">
-                 <Heart className="w-4 h-4 mr-3" /> Favoritos ({wishlist.length})
+                 <Heart className="w-4 h-4 mr-3" /> {t('favorites')} ({wishlist.length})
                </Link>
                <Link to="/sorteios" onClick={closeMenu} className="flex items-center text-sm font-semibold uppercase text-secondary hover:text-primary">
-                 <Trophy className="w-4 h-4 mr-3" /> Sorteios & Fidelidade
+                 <Trophy className="w-4 h-4 mr-3" /> {t('rafflesAndLoyalty')}
                </Link>
             </div>
           </div>
@@ -419,20 +419,20 @@ export function Layout() {
           <div className="max-w-3xl mx-auto px-4 text-center">
              <h3 className="text-xl font-bold uppercase tracking-wider mb-2 text-secondary">
                <Mail className="w-5 h-5 inline-block mr-2" />
-               {t('footer.newsletter_title')}
+               {t('newsletterTitle')}
              </h3>
-             <p className="text-secondary/70 text-sm mb-6">{t('footer.newsletter_subtitle')}</p>
+             <p className="text-secondary/70 text-sm mb-6">{t('newsletterSubtitle')}</p>
              <form className="flex flex-col sm:flex-row gap-2 max-w-md mx-auto" onSubmit={(e) => e.preventDefault()}>
                <input
                  type="email"
-                 placeholder="Digite seu email"
+                 placeholder={t('newsletterEmailPlaceholder')}
                  className="flex-grow bg-white border border-neutral-300 px-4 py-3 text-sm focus:outline-none focus:border-primary rounded"
                />
                <button
                  type="submit"
                  className="bg-primary text-white px-6 py-3 text-sm font-bold hover:bg-primary-dark transition-colors rounded uppercase tracking-wider"
                >
-                 {t('footer.subscribe')}
+                 {t('subscribe')}
                </button>
              </form>
           </div>
@@ -441,25 +441,25 @@ export function Layout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
             <div>
-              <h4 className="font-bold uppercase tracking-wider text-sm mb-6 text-secondary border-b border-primary inline-block pb-1">Sobre a loja</h4>
+              <h4 className="font-bold uppercase tracking-wider text-sm mb-6 text-secondary border-b border-primary inline-block pb-1">{t('aboutStore')}</h4>
               <p className="text-secondary/70 text-sm leading-relaxed mb-6">
                 {settingsReady ? settings.description : ''}
               </p>
             </div>
 
             <div>
-              <h4 className="font-bold uppercase tracking-wider text-sm mb-6 text-secondary border-b border-primary inline-block pb-1">Conteúdo</h4>
+              <h4 className="font-bold uppercase tracking-wider text-sm mb-6 text-secondary border-b border-primary inline-block pb-1">{t('content')}</h4>
               <ul className="space-y-4">
-                <li><Link to="/about" className="text-secondary/70 hover:text-primary text-sm font-medium transition-colors">Quem somos</Link></li>
-                <li><Link to="/contact" className="text-secondary/70 hover:text-primary text-sm font-medium transition-colors">Fale Conosco</Link></li>
-                <li><Link to="/privacy" className="text-secondary/70 hover:text-primary text-sm font-medium transition-colors">Política de privacidade</Link></li>
-                <li><Link to="/exchanges" className="text-secondary/70 hover:text-primary text-sm font-medium transition-colors">Política de Trocas e Devoluções</Link></li>
-                <li><Link to="/shipping" className="text-secondary/70 hover:text-primary text-sm font-medium transition-colors">Política de frete e pagamento</Link></li>
+                <li><Link to="/about" className="text-secondary/70 hover:text-primary text-sm font-medium transition-colors">{t('aboutUs')}</Link></li>
+                <li><Link to="/contact" className="text-secondary/70 hover:text-primary text-sm font-medium transition-colors">{t('contactUs')}</Link></li>
+                <li><Link to="/privacy" className="text-secondary/70 hover:text-primary text-sm font-medium transition-colors">{t('privacyPolicy')}</Link></li>
+                <li><Link to="/exchanges" className="text-secondary/70 hover:text-primary text-sm font-medium transition-colors">{t('exchangesPolicy')}</Link></li>
+                <li><Link to="/shipping" className="text-secondary/70 hover:text-primary text-sm font-medium transition-colors">{t('shippingPolicy')}</Link></li>
               </ul>
             </div>
 
             <div>
-              <h4 className="font-bold uppercase tracking-wider text-sm mb-6 text-secondary border-b border-primary inline-block pb-1">Contato</h4>
+              <h4 className="font-bold uppercase tracking-wider text-sm mb-6 text-secondary border-b border-primary inline-block pb-1">{t('contact')}</h4>
               <ul className="space-y-4">
                  <li className="flex items-start text-secondary/70 text-sm font-medium">
                    <Phone className="w-4 h-4 mr-2 shrink-0 mt-0.5 text-primary" /> 
@@ -480,7 +480,7 @@ export function Layout() {
             </div>
 
             <div>
-              <h4 className="font-bold uppercase tracking-wider text-sm mb-6 text-secondary border-b border-primary inline-block pb-1">Social</h4>
+              <h4 className="font-bold uppercase tracking-wider text-sm mb-6 text-secondary border-b border-primary inline-block pb-1">{t('social')}</h4>
               <div className="flex gap-4">
                  {settings.facebook && <a href={settings.facebook} className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center text-secondary hover:bg-primary hover:text-white transition-colors" target="_blank" rel="noreferrer"><Facebook className="w-5 h-5"/></a>}
                  {settings.tiktok && <a href={settings.tiktok} className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center text-secondary hover:bg-primary hover:text-white transition-colors" target="_blank" rel="noreferrer"><Youtube className="w-5 h-5"/></a>}
@@ -494,7 +494,7 @@ export function Layout() {
            <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
               <p className="text-secondary/60 text-xs font-medium">
                 {settingsReady ? settings.storeName : ''} <br className="sm:hidden" />
-                &copy; Todos os direitos reservados. {new Date().getFullYear()}
+                &copy; {t('allRightsReserved')} {new Date().getFullYear()}
               </p>
               <div className="text-2xl font-bold uppercase tracking-widest opacity-20">
                  {settingsReady && settings.logoUrl ? (
@@ -512,11 +512,11 @@ export function Layout() {
       {/* WhatsApp Floating Button */}
       {settingsReady && (
         <a
-          href={`${salesWhatsAppUrl}?text=Ol%C3%A1%2C%20Gostaria%20de%20adquirir%20alguns%20de%20seus%20produtos.`}
+          href={`${salesWhatsAppUrl}?text=${encodeURIComponent(t('whatsappFloatingMessage'))}`}
           target="_blank"
           rel="noopener noreferrer"
           className="fixed bottom-6 right-6 bg-[#25D366] text-white p-4 rounded-full shadow-xl hover:bg-[#20bd5a] hover:-translate-y-1 transition-all z-40 group flex items-center justify-center"
-          aria-label="Falar no WhatsApp"
+          aria-label={t('whatsappFloatingLabel')}
         >
           <MessageCircle className="w-6 h-6" />
         </a>
@@ -534,36 +534,36 @@ export function Layout() {
                  <button onClick={() => setIsContactModalOpen(false)} className="absolute right-4 top-4 text-neutral-400 hover:text-secondary transition-colors">
                     <X className="w-5 h-5" />
                  </button>
-                 <h2 className="text-xl font-bold uppercase tracking-wider text-secondary">Fale Conosco</h2>
-                 <p className="text-secondary/70 text-sm mt-1 mb-4">Preencha o formulário abaixo.</p>
+                 <h2 className="text-xl font-bold uppercase tracking-wider text-secondary">{t('contactModalTitle')}</h2>
+                 <p className="text-secondary/70 text-sm mt-1 mb-4">{t('contactModalSubtitle')}</p>
               </div>
 
               {/* Body */}
               <div className="p-6 overflow-y-auto max-h-[70vh]">
-                 <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setContactFeedback('Mensagem enviada com sucesso!'); setTimeout(() => { setIsContactModalOpen(false); setContactFeedback(''); }, 1200); }}>
+                 <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setContactFeedback(t('contactSuccess')); setTimeout(() => { setIsContactModalOpen(false); setContactFeedback(''); }, 1200); }}>
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">Nome</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">{t('contactName')}</label>
                       <input type="text" required className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
                     </div>
                     
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">E-mail</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">{t('contactEmail')}</label>
                       <input type="email" required className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">Telefone</label>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">{t('contactPhone')}</label>
                         <input type="text" className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">Nº do pedido</label>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">{t('contactOrderNumber')}</label>
                         <input type="text" className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">Mensagem</label>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">{t('contactMessage')}</label>
                       <textarea required rows={4} className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300 resize-none"></textarea>
                     </div>
 
@@ -572,7 +572,7 @@ export function Layout() {
                       <div className="border border-neutral-300 bg-neutral-50 px-4 py-3 rounded-sm flex items-center justify-between w-64 shadow-sm">
                          <div className="flex items-center gap-3">
                            <input type="checkbox" required className="w-6 h-6 border-neutral-300 text-primary focus:ring-primary rounded-sm cursor-pointer" />
-                           <span className="text-secondary text-sm">Não sou um robô</span>
+                           <span className="text-secondary text-sm">{t('contactNotRobot')}</span>
                          </div>
                          <div className="flex flex-col items-center">
                            <img src="https://www.gstatic.com/recaptcha/api2/logo_48.png" alt="reCAPTCHA" className="w-7 h-7" />
@@ -589,10 +589,10 @@ export function Layout() {
                     )}
                     <div className="flex justify-center gap-3 pt-6 pb-2">
                        <button type="button" onClick={() => setIsContactModalOpen(false)} className="bg-[#f0f0f0] text-secondary font-bold text-sm px-6 py-2.5 rounded-sm hover:bg-neutral-200 transition-colors">
-                          Fechar
+                          {t('close')}
                        </button>
                        <button type="submit" className="bg-[#c29656] text-white font-bold text-sm px-6 py-2.5 rounded-sm hover:bg-[#a67c42] transition-colors">
-                          Enviar
+                          {t('send')}
                        </button>
                     </div>
                  </form>
