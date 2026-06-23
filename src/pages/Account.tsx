@@ -1,70 +1,271 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { User, Package, MapPin, LogOut, X, Loader2, Star, Trophy } from 'lucide-react';
-import { useCart } from '../context/CartContext';
+import {
+  type StoreCustomerAddress,
+  useCustomerSession,
+} from '../context/CustomerSessionContext';
 import { useLoyalty } from '../hooks/useLoyalty';
 import { useStorefront } from '../hooks/useStorefront';
 import { Link } from 'react-router-dom';
+import { StoreCountrySelect } from '../components/StoreCountrySelect';
+import { StorePhoneField } from '../components/StorePhoneField';
+import {
+  AddressCountryCode,
+  formatBirthDate,
+  formatPostalCode,
+  getAddressLabels,
+  getBirthDatePlaceholder,
+  getPhonePlaceholder,
+  isBirthDateComplete,
+  isBirthDateValid,
+  isAddressLookupComplete,
+  isManualAddressCountry,
+  lookupAddressByCountry,
+} from '../lib/customerForm';
+
+type AddressFormData = {
+  nome: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  localidade: string;
+  uf: string;
+};
+
+type ProfileFormData = {
+  fullName: string;
+  cellphone: string;
+  birthDate: string;
+  gender: string;
+  phoneCountry: AddressCountryCode;
+};
+
+type ZipcodeStatusTone = 'idle' | 'loading' | 'success' | 'warning' | 'error' | 'manual';
+
+const INITIAL_ADDRESS_DATA: AddressFormData = {
+  nome: '',
+  logradouro: '',
+  numero: '',
+  complemento: '',
+  bairro: '',
+  localidade: '',
+  uf: '',
+};
+
+const INITIAL_PROFILE_FORM: ProfileFormData = {
+  fullName: 'Cliente Teste',
+  cellphone: '(321) 373-4253',
+  birthDate: '1990-01-01',
+  gender: 'feminino',
+  phoneCountry: 'US',
+};
+
+const ACCOUNT_COUNTRY: AddressCountryCode = 'US';
+
+const addressFieldClass =
+  'w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm disabled:bg-neutral-100 disabled:text-secondary/50 disabled:cursor-not-allowed';
+
+const zipcodeStatusToneClasses: Record<Exclude<ZipcodeStatusTone, 'idle'>, string> = {
+  manual: 'text-neutral-500',
+  loading: 'text-neutral-500',
+  success: 'text-emerald-600',
+  warning: 'text-amber-600',
+  error: 'text-red-500',
+};
 
 export function Account() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeTab, setActiveTab] = useState<'orders' | 'addresses' | 'data'>('orders');
   const { points } = useLoyalty();
-  const { t } = useStorefront();
+  const { locale, t } = useStorefront();
+  const {
+    currentCustomer,
+    primaryAddress,
+    isLoggedIn,
+    login,
+    logout,
+    updateProfile,
+    saveAddress,
+    removeAddress,
+  } = useCustomerSession();
   
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isEditDataModalOpen, setIsEditDataModalOpen] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [addressCountry, setAddressCountry] = useState<AddressCountryCode>(ACCOUNT_COUNTRY);
   const [cep, setCep] = useState('');
   const [isSearchingCep, setIsSearchingCep] = useState(false);
-  const [addressData, setAddressData] = useState({
-    nome: '',
-    logradouro: '',
-    numero: '',
-    complemento: '',
-    bairro: '',
-    localidade: '',
-    uf: '',
-  });
+  const [addressData, setAddressData] = useState<AddressFormData>(INITIAL_ADDRESS_DATA);
+  const [profileForm, setProfileForm] = useState<ProfileFormData>(INITIAL_PROFILE_FORM);
+  const [zipcodeStatusTone, setZipcodeStatusTone] = useState<ZipcodeStatusTone>('idle');
+  const [isAddressUnlocked, setIsAddressUnlocked] = useState(false);
+  const birthDateInputRef = useRef<HTMLInputElement | null>(null);
+  const addressLabels = useMemo(() => getAddressLabels(addressCountry, locale), [addressCountry, locale]);
+  const birthDatePlaceholder = useMemo(() => getBirthDatePlaceholder(locale), [locale]);
+  const phonePlaceholder = useMemo(() => getPhonePlaceholder(profileForm.phoneCountry), [profileForm.phoneCountry]);
+  const formattedBirthDate = useMemo(() => formatBirthDate(profileForm.birthDate, locale), [locale, profileForm.birthDate]);
+  const hasCompleteBirthDate = useMemo(() => isBirthDateComplete(formattedBirthDate), [formattedBirthDate]);
+  const hasInvalidBirthDate = useMemo(
+    () => hasCompleteBirthDate && !isBirthDateValid(formattedBirthDate, locale),
+    [formattedBirthDate, hasCompleteBirthDate, locale],
+  );
+  const hasValidatedAddressLookup = useMemo(
+    () => (isManualAddressCountry(addressCountry) && isAddressUnlocked) || zipcodeStatusTone === 'success',
+    [addressCountry, isAddressUnlocked, zipcodeStatusTone],
+  );
+
+  useEffect(() => {
+    setAddressCountry((prev) => (prev === ACCOUNT_COUNTRY ? prev : ACCOUNT_COUNTRY));
+    setProfileForm((prev) =>
+      prev.phoneCountry === ACCOUNT_COUNTRY ? prev : { ...prev, phoneCountry: ACCOUNT_COUNTRY },
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!currentCustomer) return;
+
+    setProfileForm({
+      fullName: currentCustomer.fullName,
+      cellphone: currentCustomer.phone,
+      birthDate: currentCustomer.birthDate,
+      gender: currentCustomer.gender,
+      phoneCountry: currentCustomer.phoneCountry || ACCOUNT_COUNTRY,
+    });
+  }, [currentCustomer]);
+
+  const resetAddressForm = () => {
+    setEditingAddressId(null);
+    setAddressCountry(ACCOUNT_COUNTRY);
+    setCep('');
+    setAddressData(INITIAL_ADDRESS_DATA);
+    setIsSearchingCep(false);
+    setZipcodeStatusTone('idle');
+    setIsAddressUnlocked(false);
+  };
+
+  const closeAddressModal = () => {
+    setIsAddressModalOpen(false);
+    resetAddressForm();
+  };
+
+  const handleOpenAddressModal = (address?: StoreCustomerAddress) => {
+    resetAddressForm();
+
+    if (address) {
+      setEditingAddressId(address.id);
+      setCep(address.postalCode);
+      setAddressData({
+        nome: address.label,
+        logradouro: address.street,
+        numero: address.number,
+        complemento: address.complement,
+        bairro: address.neighborhood,
+        localidade: address.city,
+        uf: address.region,
+      });
+      setIsAddressUnlocked(true);
+      setZipcodeStatusTone('success');
+    }
+
+    setIsAddressModalOpen(true);
+  };
+
+  const clearAddressFields = (formattedZipcode: string) => {
+    setCep(formattedZipcode);
+    setAddressData((prev) => ({
+      ...prev,
+      logradouro: '',
+      numero: '',
+      complemento: '',
+      bairro: '',
+      localidade: '',
+      uf: '',
+    }));
+  };
 
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, '');
-    if (value.length > 8) value = value.slice(0, 8);
-    
-    // Format to XXXXX-XXX
-    const formattedCep = value.replace(/^(\d{5})(\d)/, '$1-$2');
-    setCep(formattedCep);
+    const formattedCep = formatPostalCode(e.target.value, addressCountry);
+    const manualCountry = isManualAddressCountry(addressCountry);
 
-    if (value.length === 8) {
-      setIsSearchingCep(true);
-      try {
-        const response = await fetch(`https://viacep.com.br/ws/${value}/json/`);
-        const data = await response.json();
-        
-        if (!data.erro) {
-          setAddressData(prev => ({
-            ...prev,
-            logradouro: data.logradouro || '',
-            bairro: data.bairro || '',
-            localidade: data.localidade || '',
-            uf: data.uf || ''
-          }));
-        }
-      } catch (error) {
-        console.error("Erro ao buscar CEP", error);
-      } finally {
-        setIsSearchingCep(false);
+    clearAddressFields(formattedCep);
+    setIsAddressUnlocked(manualCountry);
+
+    if (manualCountry) {
+      setIsSearchingCep(false);
+      setZipcodeStatusTone('manual');
+      return;
+    }
+
+    if (!isAddressLookupComplete(addressCountry, formattedCep)) {
+      setIsSearchingCep(false);
+      setZipcodeStatusTone('idle');
+      return;
+    }
+
+    setIsSearchingCep(true);
+    setZipcodeStatusTone('loading');
+
+    try {
+      const data = await lookupAddressByCountry(addressCountry, formattedCep);
+
+      if (data) {
+        setAddressData((prev) => ({
+          ...prev,
+          logradouro: data.street,
+          bairro: data.neighborhood,
+          localidade: data.city,
+          uf: data.region,
+        }));
+        setZipcodeStatusTone('success');
+      } else {
+        setZipcodeStatusTone('warning');
       }
+
+      setIsAddressUnlocked(true);
+    } catch (error) {
+      console.error('Erro ao buscar CEP', error);
+      setZipcodeStatusTone('error');
+      setIsAddressUnlocked(true);
+    } finally {
+      setIsSearchingCep(false);
     }
   };
 
   const handleAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Here you would save the address
-    setIsAddressModalOpen(false);
-    // Reset form
-    setCep('');
-    setAddressData({ nome: '', logradouro: '', numero: '', complemento: '', bairro: '', localidade: '', uf: '' });
+
+    saveAddress({
+      id: editingAddressId || '',
+      label: addressData.nome,
+      country: ACCOUNT_COUNTRY,
+      postalCode: cep,
+      street: addressData.logradouro,
+      number: addressData.numero,
+      complement: addressData.complemento,
+      neighborhood: addressData.bairro,
+      city: addressData.localidade,
+      region: addressData.uf,
+      isPrimary: editingAddressId
+        ? currentCustomer?.addresses.find((address) => address.id === editingAddressId)?.isPrimary
+        : !currentCustomer?.addresses.length,
+    });
+
+    closeAddressModal();
   };
+
+  const isAddressFieldsDisabled = !isAddressUnlocked || isSearchingCep;
+  const zipcodeStatusMessage = {
+    idle: addressCountry === 'BR' ? t('addressFieldsLockedHint') : t('postalFieldsLockedHint'),
+    manual: t('addressManualCountryHint'),
+    loading: addressCountry === 'BR' ? t('zipcodeLookupLoading') : t('postalLookupLoading'),
+    success: addressCountry === 'BR' ? t('zipcodeLookupSuccess') : t('postalLookupSuccess'),
+    warning: addressCountry === 'BR' ? t('zipcodeLookupNotFound') : t('postalLookupNotFound'),
+    error: addressCountry === 'BR' ? t('zipcodeLookupError') : t('postalLookupError'),
+  }[zipcodeStatusTone];
 
   if (!isLoggedIn) {
     return (
@@ -73,14 +274,39 @@ export function Account() {
         
         <div className="bg-neutral-50 p-8 border border-neutral-200">
            <h2 className="text-lg font-bold text-secondary mb-6 uppercase tracking-wider">{t('alreadyCustomer')}</h2>
-           <form onSubmit={(e) => { e.preventDefault(); setIsLoggedIn(true); }} className="space-y-4">
+           <form
+             onSubmit={(e) => {
+               e.preventDefault();
+               const result = login(loginEmail, loginPassword);
+
+               if (!result.ok) {
+                 setLoginError(t('invalidLoginCredentials'));
+                 return;
+               }
+
+               setLoginError('');
+             }}
+             className="space-y-4"
+           >
               <div>
                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">E-mail</label>
-                 <input required type="email" defaultValue="cliente@exemplo.com" className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm" />
+                 <input
+                   required
+                   type="email"
+                   value={loginEmail}
+                   onChange={(e) => setLoginEmail(e.target.value)}
+                   className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm"
+                 />
               </div>
               <div>
                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('password')}</label>
-                 <input required type="password" defaultValue="123456" className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm" />
+                 <input
+                   required
+                   type="password"
+                   value={loginPassword}
+                   onChange={(e) => setLoginPassword(e.target.value)}
+                   className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm"
+                 />
               </div>
               <div className="flex justify-between items-center text-sm pt-2">
                  <a href="#" className="text-secondary/70 hover:text-primary transition-colors">{t('forgotPassword')}</a>
@@ -88,6 +314,7 @@ export function Account() {
               <button type="submit" className="w-full bg-primary text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-primary-dark transition-colors rounded-sm mt-4">
                  {t('login')}
               </button>
+              {loginError ? <p className="text-sm font-medium text-red-500">{loginError}</p> : null}
            </form>
 
            <div className="my-8 text-center border-t border-neutral-200 relative">
@@ -111,8 +338,8 @@ export function Account() {
         {/* Sidebar */}
         <div className="w-full md:w-64 flex-shrink-0 bg-neutral-50 border border-neutral-200">
            <div className="p-6 border-b border-neutral-200">
-              <p className="text-sm text-secondary/70">Olá,</p>
-              <h2 className="text-xl font-serif font-bold text-secondary truncate">Cliente Teste</h2>
+              <p className="text-sm text-secondary/70">{t('hello')}</p>
+              <h2 className="text-xl font-serif font-bold text-secondary truncate">{currentCustomer?.fullName || t('accountTitle')}</h2>
            </div>
            <nav className="p-4 space-y-2">
               <button 
@@ -134,7 +361,7 @@ export function Account() {
                 <User className="w-4 h-4 mr-3" /> {t('myData')}
               </button>
               <button 
-                onClick={() => setIsLoggedIn(false)}
+                onClick={logout}
                 className="w-full flex items-center px-4 py-3 text-sm font-bold uppercase tracking-wider text-red-500 hover:bg-red-50 transition-colors rounded-sm mt-4 border border-transparent hover:border-red-100"
               >
                 <LogOut className="w-4 h-4 mr-3" /> {t('logout')}
@@ -182,19 +409,27 @@ export function Account() {
              <div>
                 <h3 className="text-2xl font-serif font-bold text-secondary mb-6 border-b border-neutral-200 pb-4">{t('myAddresses')}</h3>
                 <div className="grid sm:grid-cols-2 gap-6">
-                   <div className="bg-neutral-50 border border-neutral-200 p-6 rounded-sm relative">
-                      <span className="absolute top-4 right-4 bg-primary text-white text-[10px] font-bold px-2 py-1 uppercase tracking-wider rounded-sm">{t('primary')}</span>
-                      <h4 className="font-bold text-secondary uppercase tracking-wider mb-2">{t('homeAddress')}</h4>
-                      <p className="text-sm text-secondary/70 mb-1">Rua Exemplo, 123 - Apto 4</p>
-                      <p className="text-sm text-secondary/70 mb-1">Bairro Central - São Paulo, SP</p>
-                      <p className="text-sm text-secondary/70 mb-4">CEP: 01234-567</p>
-                      <div className="flex gap-4">
-                         <button className="text-xs font-bold uppercase text-primary hover:text-primary-dark">{t('edit')}</button>
-                         <button className="text-xs font-bold uppercase text-red-500 hover:text-red-700">Remover</button>
-                      </div>
-                   </div>
+                   {currentCustomer?.addresses.length ? currentCustomer.addresses.map((address) => (
+                     <div key={address.id} className="bg-neutral-50 border border-neutral-200 p-6 rounded-sm relative">
+                        {address.isPrimary ? (
+                          <span className="absolute top-4 right-4 bg-primary text-white text-[10px] font-bold px-2 py-1 uppercase tracking-wider rounded-sm">{t('primary')}</span>
+                        ) : null}
+                        <h4 className="font-bold text-secondary uppercase tracking-wider mb-2">{address.label || t('homeAddress')}</h4>
+                        <p className="text-sm text-secondary/70 mb-1">{address.street}, {address.number}{address.complement ? ` - ${address.complement}` : ''}</p>
+                        <p className="text-sm text-secondary/70 mb-1">{address.city} - {address.region}</p>
+                        <p className="text-sm text-secondary/70 mb-4">{addressLabels.postalCodeLabel}: {address.postalCode}</p>
+                        <div className="flex gap-4">
+                           <button type="button" onClick={() => handleOpenAddressModal(address)} className="text-xs font-bold uppercase text-primary hover:text-primary-dark">{t('edit')}</button>
+                           <button type="button" onClick={() => removeAddress(address.id)} className="text-xs font-bold uppercase text-red-500 hover:text-red-700">{t('remove')}</button>
+                        </div>
+                     </div>
+                   )) : (
+                     <div className="sm:col-span-2 rounded-sm border border-dashed border-neutral-300 bg-neutral-50 px-6 py-10 text-center">
+                        <p className="text-sm text-secondary/70">{t('shippingAddressEmpty')}</p>
+                     </div>
+                   )}
                    <button
-                      onClick={() => setIsAddressModalOpen(true)}
+                      onClick={() => handleOpenAddressModal()}
                       className="border-2 border-dashed border-neutral-300 flex flex-col items-center justify-center p-6 rounded-sm text-secondary hover:border-primary hover:text-primary transition-colors min-h-[200px]"
                    >
                       <span className="text-4xl font-light mb-2">+</span>
@@ -211,31 +446,32 @@ export function Account() {
                    <form className="bg-white border border-neutral-200 p-6 md:p-8 rounded-sm space-y-6">
                       <div className="grid sm:grid-cols-2 gap-6">
                         <div>
-                           <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Nome Completo</label>
-                           <input type="text" defaultValue="Cliente Teste" className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70" readOnly />
-                        </div>
-                        <div>
-                           <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">CPF</label>
-                           <input type="text" defaultValue="123.456.789-00" className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70" readOnly title="O CPF não pode ser alterado" />
+                           <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('fullName')}</label>
+                           <input type="text" value={currentCustomer?.fullName || ''} className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70" readOnly />
                         </div>
                         <div>
                            <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">E-mail</label>
-                           <input type="email" defaultValue="cliente@exemplo.com" className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70" readOnly title="Para alterar o e-mail, entre em contato com o suporte" />
+                           <input type="email" value={currentCustomer?.email || ''} className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70" readOnly title="For email changes, please contact support." />
                         </div>
                         <div>
-                           <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Celular</label>
-                           <input type="text" defaultValue="(11) 99999-9999" className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70" readOnly />
+                           <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('cellphone')}</label>
+                           <input type="text" value={profileForm.cellphone} className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70" readOnly />
                         </div>
                         <div>
-                           <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Data de Nascimento</label>
-                           <input type="date" defaultValue="1990-01-01" className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70" readOnly />
+                           <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('birthDate')}</label>
+                           <input
+                             type="text"
+                             value={formattedBirthDate}
+                             className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70"
+                             readOnly
+                           />
                         </div>
                         <div>
-                           <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Gênero</label>
-                           <select defaultValue="feminino" disabled className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70 appearance-none pointer-events-none cursor-not-allowed">
-                              <option value="feminino">Feminino</option>
-                              <option value="masculino">Masculino</option>
-                              <option value="outro">Outro / Prefiro não informar</option>
+                           <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('gender')}</label>
+                           <select value={profileForm.gender} disabled className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary/70 appearance-none pointer-events-none cursor-not-allowed">
+                              <option value="feminino">{t('female')}</option>
+                              <option value="masculino">{t('male')}</option>
+                              <option value="outro">{t('otherOrNoAnswer')}</option>
                            </select>
                         </div>
                       </div>
@@ -272,115 +508,139 @@ export function Account() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white max-w-2xl w-full rounded-sm shadow-xl p-6 relative max-h-[90vh] overflow-y-auto">
             <button 
-              onClick={() => setIsAddressModalOpen(false)}
+              onClick={closeAddressModal}
               className="absolute top-4 right-4 text-secondary/50 hover:text-secondary transition-colors"
             >
               <X className="w-6 h-6" />
             </button>
             <h3 className="text-2xl font-serif font-bold text-secondary mb-6 border-b border-neutral-200 pb-4">
-              Adicionar Endereço
+              {t('addAddress')}
             </h3>
             
             <form onSubmit={handleAddressSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Nome do Endereço (ex: Casa, Trabalho)</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('addressNickname')}</label>
                 <input 
                   type="text" 
                   required
                   value={addressData.nome}
                   onChange={(e) => setAddressData({...addressData, nome: e.target.value})}
-                  className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm" 
+                  className={addressFieldClass} 
                   placeholder="Ex: Casa"
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('country')}</label>
+                <div className="max-w-[280px] space-y-2">
+                  <StoreCountrySelect
+                    value={ACCOUNT_COUNTRY}
+                    onChange={() => undefined}
+                    locale={locale}
+                    disabled
+                  />
+                  <p className="text-[11px] text-neutral-500">{t('usOnlyShippingHint')}</p>
+                </div>
+              </div>
+
               <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">CEP</label>
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      required
-                      value={cep}
-                      onChange={handleCepChange}
-                      className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm" 
-                      placeholder="00000-000"
-                      maxLength={9}
-                    />
-                    {isSearchingCep && (
-                      <Loader2 className="absolute right-3 top-3.5 w-5 h-5 animate-spin text-primary" />
-                    )}
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{addressLabels.postalCodeLabel}</label>
+                  <div className="space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                      <div className="relative w-full sm:max-w-[180px]">
+                        <input 
+                          type="text" 
+                          required
+                          value={cep}
+                          onChange={handleCepChange}
+                          className={addressFieldClass} 
+                          placeholder={addressLabels.postalPlaceholder}
+                          inputMode="numeric"
+                        />
+                        {isSearchingCep && (
+                          <Loader2 className="absolute right-3 top-3.5 w-5 h-5 animate-spin text-primary" />
+                        )}
+                      </div>
+                    </div>
+                    <div className={`text-[11px] font-medium flex items-center gap-2 ${zipcodeStatusTone === 'idle' ? 'text-neutral-500' : zipcodeStatusToneClasses[zipcodeStatusTone]}`}>
+                      {isSearchingCep ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                      <span>{zipcodeStatusMessage}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="col-span-2 sm:col-span-1"></div>
                 
                 <div className="col-span-2 sm:col-span-1">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Logradouro</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('street')}</label>
                   <input 
                     type="text" 
                     required
                     value={addressData.logradouro}
-                    readOnly
-                    className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary cursor-not-allowed" 
+                    disabled={isAddressFieldsDisabled}
+                    onChange={(e) => setAddressData({...addressData, logradouro: e.target.value})}
+                    className={addressFieldClass} 
                     placeholder="Rua, Avenida, etc."
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Número</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('number')}</label>
                   <input 
                     type="text" 
                     required
-                    disabled={!cep}
+                    disabled={isAddressFieldsDisabled}
                     value={addressData.numero}
                     onChange={(e) => setAddressData({...addressData, numero: e.target.value})}
-                    className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm disabled:bg-neutral-100 disabled:cursor-not-allowed" 
+                    className={addressFieldClass} 
                     placeholder="Ex: 123"
                   />
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Complemento</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('complement')}</label>
                   <input 
                     type="text" 
-                    disabled={!cep}
+                    disabled={isAddressFieldsDisabled}
                     value={addressData.complemento}
                     onChange={(e) => setAddressData({...addressData, complemento: e.target.value})}
-                    className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm disabled:bg-neutral-100 disabled:cursor-not-allowed" 
+                    className={addressFieldClass} 
                     placeholder="Ex: Apto 4"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Bairro</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('neighborhood')}</label>
                   <input 
                     type="text" 
                     required
                     value={addressData.bairro}
-                    readOnly
-                    className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary cursor-not-allowed" 
+                    disabled={isAddressFieldsDisabled}
+                    onChange={(e) => setAddressData({...addressData, bairro: e.target.value})}
+                    className={addressFieldClass} 
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Cidade</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('city')}</label>
                   <input 
                     type="text" 
                     required
                     value={addressData.localidade}
-                    readOnly
-                    className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary cursor-not-allowed" 
+                    disabled={isAddressFieldsDisabled}
+                    onChange={(e) => setAddressData({...addressData, localidade: e.target.value})}
+                    className={addressFieldClass} 
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Estado</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{addressLabels.regionLabel}</label>
                   <input 
                     type="text" 
                     required
                     value={addressData.uf}
-                    readOnly
-                    className="w-full border border-neutral-300 px-4 py-3 bg-neutral-100 focus:outline-none rounded-sm text-secondary cursor-not-allowed" 
+                    disabled={isAddressFieldsDisabled}
+                    onChange={(e) => setAddressData({...addressData, uf: e.target.value})}
+                    className={addressFieldClass} 
                   />
                 </div>
               </div>
@@ -388,16 +648,17 @@ export function Account() {
               <div className="pt-4 mt-6 flex justify-end gap-4">
                 <button 
                   type="button" 
-                  onClick={() => setIsAddressModalOpen(false)}
+                  onClick={closeAddressModal}
                   className="px-6 py-3 font-bold uppercase tracking-wider text-sm text-secondary hover:text-secondary/70 transition-colors"
                 >
-                  Cancelar
+                  {t('cancel')}
                 </button>
                 <button 
                   type="submit" 
-                  className="bg-secondary text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-primary transition-colors rounded-sm"
+                  disabled={isSearchingCep || !isAddressUnlocked || !hasValidatedAddressLookup}
+                  className="bg-secondary text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-primary transition-colors rounded-sm disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  Salvar Endereço
+                  {t('saveAddress')}
                 </button>
               </div>
             </form>
@@ -416,26 +677,82 @@ export function Account() {
               <X className="w-6 h-6" />
             </button>
             <h3 className="text-2xl font-serif font-bold text-secondary mb-6 border-b border-neutral-200 pb-4">
-              Editar Meus Dados
+              {t('editMyData')}
             </h3>
             
-            <form onSubmit={(e) => { e.preventDefault(); setIsEditDataModalOpen(false); }} className="space-y-6">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+
+                if (hasInvalidBirthDate) {
+                  birthDateInputRef.current?.focus();
+                  return;
+                }
+
+                updateProfile({
+                  fullName: profileForm.fullName,
+                  phone: profileForm.cellphone,
+                  phoneCountry: ACCOUNT_COUNTRY,
+                  birthDate: profileForm.birthDate,
+                  gender: profileForm.gender,
+                });
+
+                setIsEditDataModalOpen(false);
+              }}
+              className="space-y-6"
+            >
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                   <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Nome Completo</label>
-                   <input type="text" defaultValue="Cliente Teste" className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm" />
+                   <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('fullName')}</label>
+                   <input
+                     type="text"
+                     value={profileForm.fullName}
+                     onChange={(e) => setProfileForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                     className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm"
+                   />
+                </div>
+                <div className="sm:col-span-2">
+                   <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('cellphone')}</label>
+                   <StorePhoneField
+                     locale={locale}
+                     name="accountCellphone"
+                     countryCode={ACCOUNT_COUNTRY}
+                     value={profileForm.cellphone}
+                     placeholder={phonePlaceholder}
+                     disableCountrySelection
+                     onChange={(nextValue) =>
+                       setProfileForm((prev) => ({
+                         ...prev,
+                         phoneCountry: ACCOUNT_COUNTRY,
+                         cellphone: nextValue,
+                       }))
+                     }
+                   />
                 </div>
                 <div>
-                   <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Celular</label>
-                   <input type="text" defaultValue="(11) 99999-9999" className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm" />
+                   <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('birthDate')}</label>
+                   <input
+                     ref={birthDateInputRef}
+                     type="text"
+                     inputMode="numeric"
+                     value={formattedBirthDate}
+                     onChange={(e) => setProfileForm((prev) => ({ ...prev, birthDate: formatBirthDate(e.target.value, locale) }))}
+                     placeholder={birthDatePlaceholder}
+                     maxLength={10}
+                     aria-invalid={hasInvalidBirthDate}
+                     className={`w-full border px-4 py-3 bg-white focus:outline-none transition-colors rounded-sm ${hasInvalidBirthDate ? 'border-red-400 focus:border-red-500' : 'border-neutral-300 focus:border-primary'}`}
+                   />
+                   {hasInvalidBirthDate ? (
+                     <p className="mt-2 text-[12px] text-red-500">{t('birthDateInvalid')}</p>
+                   ) : null}
                 </div>
                 <div>
-                   <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Data de Nascimento</label>
-                   <input type="date" defaultValue="1990-01-01" className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm" />
-                </div>
-                <div>
-                   <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">Gênero</label>
-                   <select defaultValue="feminino" className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm appearance-none">
+                   <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('gender')}</label>
+                   <select
+                     value={profileForm.gender}
+                     onChange={(e) => setProfileForm((prev) => ({ ...prev, gender: e.target.value }))}
+                     className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-primary transition-colors rounded-sm appearance-none"
+                   >
                       <option value="feminino">Feminino</option>
                       <option value="masculino">Masculino</option>
                       <option value="outro">Outro / Prefiro não informar</option>
@@ -449,7 +766,7 @@ export function Account() {
                   onClick={() => setIsEditDataModalOpen(false)}
                   className="px-6 py-3 font-bold uppercase tracking-wider text-sm text-secondary hover:text-secondary/70 transition-colors"
                 >
-                  Cancelar
+                  {t('cancel')}
                 </button>
                 <button 
                   type="submit" 
@@ -497,7 +814,7 @@ export function Account() {
                   onClick={() => setIsPasswordModalOpen(false)}
                   className="px-6 py-3 font-bold uppercase tracking-wider text-sm text-secondary hover:text-secondary/70 transition-colors"
                 >
-                  Cancelar
+                  {t('cancel')}
                 </button>
                 <button 
                   type="submit" 

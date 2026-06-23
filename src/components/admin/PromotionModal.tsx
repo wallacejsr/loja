@@ -3,7 +3,8 @@ import { X, Save, Percent, Calendar, Tag, Package, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { showToast } from '../../lib/adminUtils';
-import { useStoreData } from '../../hooks/useStoreData';
+import { useAdminCurrency } from '../../hooks/useAdminCurrency';
+import { useStoreProducts } from '../../hooks/useStoreData';
 
 interface PromotionModalProps {
   isOpen: boolean;
@@ -13,10 +14,11 @@ interface PromotionModalProps {
 type TabType = 'general' | 'products' | 'schedule';
 
 export function PromotionModal({ isOpen, onClose }: PromotionModalProps) {
+  const { currencyCode } = useAdminCurrency();
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
-  const { products } = useStoreData();
+  const products = useStoreProducts();
 
   const tabs = [
     { id: 'general', name: 'Geral', icon: Tag },
@@ -124,7 +126,7 @@ export function PromotionModal({ isOpen, onClose }: PromotionModalProps) {
                         <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Tipo de Desconto</label>
                         <select className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] appearance-none">
                           <option>Porcentagem (%)</option>
-                          <option>Valor Fixo (R$)</option>
+                          <option>{`Valor Fixo (${currencyCode})`}</option>
                           <option>Frete Grátis</option>
                         </select>
                       </div>

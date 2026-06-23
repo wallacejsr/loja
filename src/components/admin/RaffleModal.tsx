@@ -3,7 +3,7 @@ import { X, Save, Trophy, Calendar, FileText, Image as ImageIcon, Megaphone } fr
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { showToast } from '../../lib/adminUtils';
-import { useStoreData } from '../../hooks/useStoreData';
+import { useStoreProducts } from '../../hooks/useStoreData';
 import { Raffle, RaffleInput } from '../../lib/storeApi';
 
 interface RaffleModalProps {
@@ -37,7 +37,7 @@ export function RaffleModal({ isOpen, raffle, onClose, onSave }: RaffleModalProp
   const [prizeMode, setPrizeMode] = useState<PrizeMode>('store_product');
   const [formData, setFormData] = useState<RaffleInput>(emptyForm);
   const [isSaving, setIsSaving] = useState(false);
-  const { products } = useStoreData();
+  const products = useStoreProducts();
   const isEditing = Boolean(raffle);
 
   const selectedProduct = useMemo(

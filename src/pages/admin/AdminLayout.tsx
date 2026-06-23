@@ -15,15 +15,18 @@ import {
   Tag,
   Trophy,
   Palette,
-  Home as HomeIcon
+  Home as HomeIcon,
+  Mail
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { useSettings } from '../../hooks/useSettings';
 
 export function AdminLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; visible: boolean }>({ message: '', visible: false });
   const location = useLocation();
+  const { settings } = useSettings();
 
   useEffect(() => {
     const handleToast = (e: any) => {
@@ -40,6 +43,7 @@ export function AdminLayout() {
     { name: 'Pedidos', href: '/admin/orders', icon: ShoppingCart },
     { name: 'Categorias', href: '/admin/categories', icon: PackageSearch },
     { name: 'Clientes', href: '/admin/customers', icon: Users },
+    { name: 'Mensagens', href: '/admin/messages', icon: Mail },
     { name: 'Sorteios', href: '/admin/raffles', icon: Trophy },
     { name: 'Promoções', href: '/admin/promotions', icon: Tag },
     { name: 'Banners', href: '/admin/banners', icon: ImageIcon },
@@ -47,6 +51,7 @@ export function AdminLayout() {
     { name: 'Layout', href: '/admin/layout', icon: Palette },
     { name: 'Configurações', href: '/admin/settings', icon: Settings },
   ];
+  const brandParts = getAdminBrandParts(settings.adminPanelName);
 
   return (
     <div className="min-h-screen bg-[#F5F5F7] flex font-sans text-neutral-900 relative">
@@ -79,7 +84,13 @@ export function AdminLayout() {
       )}>
         <div className="h-[72px] flex items-center justify-between px-6 border-b border-white/5">
           <Link to="/admin" className="text-lg font-serif font-bold text-white tracking-widest uppercase">
-            DANI <span className="font-light text-white/40">Studio</span>
+            {brandParts.secondary ? (
+              <>
+                {brandParts.primary} <span className="font-light text-white/40">{brandParts.secondary}</span>
+              </>
+            ) : (
+              brandParts.primary
+            )}
           </Link>
           <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-white/50 hover:text-white transition-colors">
             <X className="w-5 h-5" />
@@ -152,4 +163,17 @@ export function AdminLayout() {
       </main>
     </div>
   );
+}
+
+function getAdminBrandParts(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { primary: 'DANI', secondary: 'Studio' };
+  }
+
+  const parts = trimmed.split(/\s+/);
+  return {
+    primary: parts[0],
+    secondary: parts.slice(1).join(' '),
+  };
 }

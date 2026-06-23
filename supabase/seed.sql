@@ -1,13 +1,17 @@
 insert into public.store_settings (
-  id, store_name, site_title, site_language, logo_url, email, phone, instagram, facebook, tiktok, description, primary_color, secondary_color, points_per_real, support_sales_phone, support_sac_phone, support_email, support_week_hours, support_saturday_hours
+  id, store_name, site_title, admin_panel_name, site_language, allow_business_registration, store_currency, logo_url, email, phone, phone_country, instagram, facebook, tiktok, description, primary_color, secondary_color, points_per_real, support_sales_phone, support_sales_phone_country, support_sac_phone, support_sac_phone_country, support_email, support_week_hours, support_saturday_hours, shipping_origin_country, shipping_origin_postal_code, shipping_origin_city, shipping_origin_region, shipping_origin_street, shipping_origin_number, shipping_free_threshold, shipping_default_product_weight_grams, shipping_package_length_cm, shipping_package_width_cm, shipping_package_height_cm
 ) values (
   1,
   'Spacodani',
   'Spacodani',
+  'DANI Studio',
   'pt-BR',
+  false,
+  'USD',
   'https://cdn.awsli.com.br/400x300/2751/2751677/logo/logo-dani-morais-ky8ceccgy5.png',
   'contato@danibrand.com.br',
   '(11) 99999-9999',
+  'BR',
   'https://instagram.com/danibrand',
   'https://facebook.com/',
   'https://tiktok.com/@',
@@ -16,17 +20,34 @@ insert into public.store_settings (
   '#1a222b',
   1,
   '(64) 99202-3191',
+  'BR',
   '(64) 99209-6899',
+  'BR',
   'spacodanimorais@gmail.com',
   'Seg a Sex das 08h as 18h',
-  'Sab das 08h as 13h'
+  'Sab das 08h as 13h',
+  'US',
+  '73098',
+  'Wynnewood',
+  'OK',
+  '',
+  '',
+  199,
+  500,
+  30,
+  24,
+  6
 ) on conflict (id) do update set
   store_name = excluded.store_name,
   site_title = excluded.site_title,
+  admin_panel_name = excluded.admin_panel_name,
   site_language = excluded.site_language,
+  allow_business_registration = excluded.allow_business_registration,
+  store_currency = excluded.store_currency,
   logo_url = excluded.logo_url,
   email = excluded.email,
   phone = excluded.phone,
+  phone_country = excluded.phone_country,
   instagram = excluded.instagram,
   facebook = excluded.facebook,
   tiktok = excluded.tiktok,
@@ -35,27 +56,41 @@ insert into public.store_settings (
   secondary_color = excluded.secondary_color,
   points_per_real = excluded.points_per_real,
   support_sales_phone = excluded.support_sales_phone,
+  support_sales_phone_country = excluded.support_sales_phone_country,
   support_sac_phone = excluded.support_sac_phone,
+  support_sac_phone_country = excluded.support_sac_phone_country,
   support_email = excluded.support_email,
   support_week_hours = excluded.support_week_hours,
   support_saturday_hours = excluded.support_saturday_hours,
+  shipping_origin_country = excluded.shipping_origin_country,
+  shipping_origin_postal_code = excluded.shipping_origin_postal_code,
+  shipping_origin_city = excluded.shipping_origin_city,
+  shipping_origin_region = excluded.shipping_origin_region,
+  shipping_origin_street = excluded.shipping_origin_street,
+  shipping_origin_number = excluded.shipping_origin_number,
+  shipping_free_threshold = excluded.shipping_free_threshold,
+  shipping_default_product_weight_grams = excluded.shipping_default_product_weight_grams,
+  shipping_package_length_cm = excluded.shipping_package_length_cm,
+  shipping_package_width_cm = excluded.shipping_package_width_cm,
+  shipping_package_height_cm = excluded.shipping_package_height_cm,
   updated_at = now();
 
-insert into public.categories (nome, slug, imagem, status, show_in_menu, menu_order, show_on_home, home_section_title, home_section_order, home_section_limit, home_section_filter) values
-  ('Lancamentos', 'lancamentos', '', 'Ativo', true, 1, false, 'Lancamentos', 1, 4, 'all'),
-  ('Ocasioes', 'ocasioes', '', 'Ativo', true, 2, false, 'Ocasioes', 2, 4, 'all'),
-  ('Linha Essencial', 'linha-essencial', '', 'Ativo', true, 3, false, 'Linha Essencial', 3, 4, 'all'),
-  ('Jeans', 'jeans', '', 'Ativo', true, 4, false, 'Jeans', 4, 4, 'all'),
-  ('Nav.Vestidos', 'nav-vestidos', '', 'Ativo', true, 5, false, 'Vestidos', 5, 4, 'all'),
-  ('Calcas', 'calcas', 'https://cdn.awsli.com.br/1140x850/2751/2751677/banner/calcas-l87gy6ydk4.png', 'Ativo', true, 6, false, 'Calcas', 6, 4, 'all'),
-  ('Camisas', 'camisas', '', 'Ativo', true, 7, false, 'Camisas', 7, 4, 'all'),
-  ('Feminino', 'feminino', 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=800', 'Ativo', true, 8, false, 'Feminino', 8, 4, 'all'),
-  ('Masculino', 'masculino', 'https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 9, false, 'Masculino', 9, 4, 'all'),
-  ('Infantil', 'infantil', 'https://images.unsplash.com/photo-1519241047957-be31d7379a5d?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 10, false, 'Infantil', 10, 4, 'all'),
-  ('Acessorios', 'acessorios', 'https://images.unsplash.com/photo-1509319117193-57bab727e09d?auto=format&fit=crop&q=80&w=800', 'Ativo', false, 11, false, 'Acessorios', 11, 4, 'all')
+insert into public.categories (nome, slug, imagem, subcategories, status, show_in_menu, menu_order, show_on_home, home_section_title, home_section_order, home_section_limit, home_section_filter) values
+  ('Lancamentos', 'lancamentos', '', '[]'::jsonb, 'Ativo', true, 1, false, 'Lancamentos', 1, 4, 'all'),
+  ('Ocasioes', 'ocasioes', '', '["Aniversario","Casamentos/Formaturas","Festas da Empresa","Final de Ano","Night","Trabalho","White Looks"]'::jsonb, 'Ativo', true, 2, false, 'Ocasioes', 2, 4, 'all'),
+  ('Linha Essencial', 'linha-essencial', '', '["Basicos","Office","Casual Chic"]'::jsonb, 'Ativo', true, 3, false, 'Linha Essencial', 3, 4, 'all'),
+  ('Jeans', 'jeans', '', '["Wide Leg","Mom","Skinny","Reta"]'::jsonb, 'Ativo', true, 4, false, 'Jeans', 4, 4, 'all'),
+  ('Nav.Vestidos', 'nav-vestidos', '', '["Midi","Longo","Festa","Casual"]'::jsonb, 'Ativo', true, 5, false, 'Vestidos', 5, 4, 'all'),
+  ('Calcas', 'calcas', 'https://cdn.awsli.com.br/1140x850/2751/2751677/banner/calcas-l87gy6ydk4.png', '["Alfaiataria","Wide Leg","Pantalona","Linho"]'::jsonb, 'Ativo', true, 6, false, 'Calcas', 6, 4, 'all'),
+  ('Camisas', 'camisas', '', '["Social","Premium","Manga Curta"]'::jsonb, 'Ativo', true, 7, false, 'Camisas', 7, 4, 'all'),
+  ('Feminino', 'feminino', 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=800', '["Vestidos","Conjuntos","Blusas","Calcas"]'::jsonb, 'Ativo', true, 8, false, 'Feminino', 8, 4, 'all'),
+  ('Masculino', 'masculino', 'https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&q=80&w=800', '["Camisas","Polos","Bermudas"]'::jsonb, 'Ativo', false, 9, false, 'Masculino', 9, 4, 'all'),
+  ('Infantil', 'infantil', 'https://images.unsplash.com/photo-1519241047957-be31d7379a5d?auto=format&fit=crop&q=80&w=800', '["Menina","Menino","Bebe"]'::jsonb, 'Ativo', false, 10, false, 'Infantil', 10, 4, 'all'),
+  ('Acessorios', 'acessorios', 'https://images.unsplash.com/photo-1509319117193-57bab727e09d?auto=format&fit=crop&q=80&w=800', '["Bolsas","Cintos","Bijuterias","Bones"]'::jsonb, 'Ativo', false, 11, false, 'Acessorios', 11, 4, 'all')
 on conflict (nome) do update set
   slug = excluded.slug,
   imagem = excluded.imagem,
+  subcategories = excluded.subcategories,
   status = excluded.status,
   show_in_menu = excluded.show_in_menu,
   menu_order = excluded.menu_order,
@@ -110,7 +145,7 @@ insert into public.raffles (
 on conflict do nothing;
 
 insert into public.products (
-  id, nome, preco, preco_promocional, categoria, subcategoria, imagens, descricao, composicao, tamanhos, cores, avaliacoes, mais_vendido, lancamento, estoque, status
+  id, nome, preco, preco_promocional, categoria, subcategoria, imagens, descricao, composicao, tamanhos, cores, avaliacoes, mais_vendido, lancamento, estoque, shipping_weight_grams, status
 ) values
   (
     'p1',
@@ -128,6 +163,7 @@ insert into public.products (
     true,
     false,
     15,
+    420,
     'Ativo'
   ),
   (
@@ -146,6 +182,7 @@ insert into public.products (
     false,
     true,
     8,
+    760,
     'Ativo'
   ),
   (
@@ -164,6 +201,7 @@ insert into public.products (
     true,
     false,
     20,
+    360,
     'Ativo'
   )
 on conflict (id) do update set
@@ -181,6 +219,7 @@ on conflict (id) do update set
   mais_vendido = excluded.mais_vendido,
   lancamento = excluded.lancamento,
   estoque = excluded.estoque,
+  shipping_weight_grams = excluded.shipping_weight_grams,
   status = excluded.status,
   updated_at = now();
 

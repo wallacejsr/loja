@@ -1,19 +1,210 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import { CheckCircle, CreditCard } from 'lucide-react';
+import { useCustomerSession } from '../context/CustomerSessionContext';
+import { CheckCircle, CreditCard, HelpCircle, Loader2 } from 'lucide-react';
 import { useLoyalty } from '../hooks/useLoyalty';
 import { useSettings } from '../hooks/useSettings';
+import { useShippingQuotes } from '../hooks/useShippingQuotes';
 import { useStorefront } from '../hooks/useStorefront';
+import { syncCheckoutOrderToAdmin } from '../lib/adminDataBridge';
+import { StoreCountrySelect } from '../components/StoreCountrySelect';
+import { StorePhoneField } from '../components/StorePhoneField';
+import { StoreImage } from '../components/StoreImage';
+import {
+  AddressCountryCode,
+  formatPostalCode,
+  getAddressLabels,
+  getPhonePlaceholder,
+  getTaxIdFieldConfig,
+  isAddressLookupComplete,
+  isManualAddressCountry,
+  lookupAddressByCountry,
+  type TaxIdFieldKind,
+} from '../lib/customerForm';
+
+type PostalStatusTone = 'error' | 'idle' | 'loading' | 'manual' | 'success' | 'warning';
+
+type IdentificationFormData = {
+  cpf: string;
+  email: string;
+  fullName: string;
+  phone: string;
+  phoneCountry: AddressCountryCode;
+};
+
+type DeliveryFormData = {
+  city: string;
+  complement: string;
+  country: AddressCountryCode;
+  neighborhood: string;
+  number: string;
+  postalCode: string;
+  region: string;
+  street: string;
+};
+
+const INITIAL_IDENTIFICATION_FORM: IdentificationFormData = {
+  cpf: '',
+  email: '',
+  fullName: '',
+  phone: '',
+  phoneCountry: 'US',
+};
+
+const INITIAL_DELIVERY_FORM: DeliveryFormData = {
+  city: '',
+  complement: '',
+  country: 'US',
+  neighborhood: '',
+  number: '',
+  postalCode: '',
+  region: '',
+  street: '',
+};
+
+const CHECKOUT_COUNTRY: AddressCountryCode = 'US';
+
+const inputClass =
+  'w-full border border-neutral-300 px-4 py-3 bg-neutral-50 focus:bg-white focus:outline-none focus:border-neutral-900 transition-colors disabled:bg-neutral-100 disabled:text-neutral-400 disabled:cursor-not-allowed';
+
+const postalToneClasses: Record<Exclude<PostalStatusTone, 'idle'>, string> = {
+  error: 'text-red-500',
+  loading: 'text-neutral-500',
+  manual: 'text-neutral-500',
+  success: 'text-emerald-600',
+  warning: 'text-amber-600',
+};
+
+function getPostalStatusMessage(
+  tone: PostalStatusTone,
+  countryCode: AddressCountryCode,
+  t: (key: string) => string,
+) {
+  if (tone === 'manual') return t('addressManualCountryHint');
+
+  const isBrazil = countryCode === 'BR';
+
+  switch (tone) {
+    case 'loading':
+      return isBrazil ? t('zipcodeLookupLoading') : t('postalLookupLoading');
+    case 'success':
+      return isBrazil ? t('zipcodeLookupSuccess') : t('postalLookupSuccess');
+    case 'warning':
+      return isBrazil ? t('zipcodeLookupNotFound') : t('postalLookupNotFound');
+    case 'error':
+      return isBrazil ? t('zipcodeLookupError') : t('postalLookupError');
+    default:
+      return isBrazil ? t('addressFieldsLockedHint') : t('postalFieldsLockedHint');
+  }
+}
 
 export function Checkout() {
   const { cart, cartTotal } = useCart();
   const navigate = useNavigate();
   const { addPoints } = useLoyalty();
   const { settings } = useSettings();
-  const { t, formatCurrency } = useStorefront();
+  const { locale, t, formatCurrency } = useStorefront();
+  const {
+    currentCustomer,
+    primaryAddress,
+    isLoggedIn,
+    guestShippingDraft,
+    saveGuestShippingDraft,
+    updateProfile,
+    saveAddress,
+  } = useCustomerSession();
   const [step, setStep] = useState(1);
+  const [identificationData, setIdentificationData] = useState<IdentificationFormData>(INITIAL_IDENTIFICATION_FORM);
+  const [deliveryData, setDeliveryData] = useState<DeliveryFormData>(INITIAL_DELIVERY_FORM);
+  const [isSearchingPostalCode, setIsSearchingPostalCode] = useState(false);
+  const [isDeliveryUnlocked, setIsDeliveryUnlocked] = useState(false);
+  const [postalStatusTone, setPostalStatusTone] = useState<PostalStatusTone>('idle');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'Cartao de credito' | 'Pix'>('Cartao de credito');
   const orderNumber = useMemo(() => `#SD${Math.floor(Math.random() * 100000)}`, []);
+  const { quotes, selectedQuote, setSelectedQuoteId, loadQuotes, mode, status: shippingQuotesStatus, error: shippingQuotesError, resetQuotes } = useShippingQuotes(
+    cart,
+    cartTotal,
+    settings,
+  );
+
+  const addressLabels = useMemo(() => getAddressLabels(deliveryData.country, locale), [deliveryData.country, locale]);
+  const phonePlaceholder = useMemo(() => getPhonePlaceholder(identificationData.phoneCountry), [identificationData.phoneCountry]);
+  const taxIdConfig = useMemo(() => getTaxIdFieldConfig(deliveryData.country, 'F', locale), [deliveryData.country, locale]);
+  const previousTaxIdKindRef = useRef<TaxIdFieldKind | null>(null);
+  const hasHydratedCustomerDataRef = useRef(false);
+
+  useEffect(() => {
+    const previousKind = previousTaxIdKindRef.current;
+
+    if (previousKind && previousKind !== taxIdConfig.kind && taxIdConfig.kind !== 'none') {
+      setIdentificationData((prev) => (prev.cpf ? { ...prev, cpf: '' } : prev));
+    }
+
+    previousTaxIdKindRef.current = taxIdConfig.kind;
+  }, [taxIdConfig.kind]);
+
+  useEffect(() => {
+    setIdentificationData((prev) =>
+      prev.phoneCountry === CHECKOUT_COUNTRY ? prev : { ...prev, phoneCountry: CHECKOUT_COUNTRY },
+    );
+    setDeliveryData((prev) =>
+      prev.country === CHECKOUT_COUNTRY ? prev : { ...prev, country: CHECKOUT_COUNTRY },
+    );
+  }, []);
+
+  useEffect(() => {
+    if (hasHydratedCustomerDataRef.current) return;
+
+    if (isLoggedIn && currentCustomer) {
+      setIdentificationData((prev) => ({
+        ...prev,
+        fullName: currentCustomer.fullName,
+        email: currentCustomer.email,
+        phone: currentCustomer.phone,
+        phoneCountry: currentCustomer.phoneCountry || CHECKOUT_COUNTRY,
+        cpf: currentCustomer.taxId,
+      }));
+
+      if (primaryAddress) {
+        setDeliveryData({
+          country: primaryAddress.country,
+          postalCode: primaryAddress.postalCode,
+          street: primaryAddress.street,
+          number: primaryAddress.number,
+          complement: primaryAddress.complement,
+          neighborhood: primaryAddress.neighborhood,
+          city: primaryAddress.city,
+          region: primaryAddress.region,
+        });
+        setIsDeliveryUnlocked(true);
+        setPostalStatusTone('success');
+        hasHydratedCustomerDataRef.current = true;
+        return;
+      }
+
+      if (!guestShippingDraft) {
+        hasHydratedCustomerDataRef.current = true;
+        return;
+      }
+    }
+
+    if (guestShippingDraft) {
+      setDeliveryData({
+        country: guestShippingDraft.country,
+        postalCode: guestShippingDraft.postalCode,
+        street: guestShippingDraft.street,
+        number: guestShippingDraft.number,
+        complement: guestShippingDraft.complement,
+        neighborhood: guestShippingDraft.neighborhood,
+        city: guestShippingDraft.city,
+        region: guestShippingDraft.region,
+      });
+      setIsDeliveryUnlocked(Boolean(guestShippingDraft.postalCode));
+      setPostalStatusTone(guestShippingDraft.postalCode ? 'success' : 'idle');
+      hasHydratedCustomerDataRef.current = true;
+    }
+  }, [currentCustomer, guestShippingDraft, isLoggedIn, primaryAddress]);
 
   if (cart.length === 0 && step !== 4) {
     navigate('/cart');
@@ -24,9 +215,219 @@ export function Checkout() {
     e.preventDefault();
     if (step === 3) {
       addPoints(Math.floor(cartTotal * (settings.pointsPerReal || 1)));
+
+      if (isLoggedIn) {
+        updateProfile({
+          fullName: identificationData.fullName,
+          phone: identificationData.phone,
+          phoneCountry: identificationData.phoneCountry,
+          taxId: taxIdConfig.visible ? identificationData.cpf : currentCustomer?.taxId || '',
+        });
+
+        saveAddress({
+          id: primaryAddress?.id || '',
+          label: primaryAddress?.label || t('homeAddress'),
+          country: deliveryData.country,
+          postalCode: deliveryData.postalCode,
+          street: deliveryData.street,
+          number: deliveryData.number,
+          complement: deliveryData.complement,
+          neighborhood: deliveryData.neighborhood,
+          city: deliveryData.city,
+          region: deliveryData.region,
+          isPrimary: true,
+        });
+      } else {
+        saveGuestShippingDraft({
+          country: deliveryData.country,
+          postalCode: deliveryData.postalCode,
+          street: deliveryData.street,
+          number: deliveryData.number,
+          complement: deliveryData.complement,
+          neighborhood: deliveryData.neighborhood,
+          city: deliveryData.city,
+          region: deliveryData.region,
+        });
+      }
+
+      syncCheckoutOrderToAdmin({
+        orderNumber,
+        paymentMethod: selectedPaymentMethod,
+        customer: {
+          name: identificationData.fullName,
+          email: identificationData.email,
+          phone: identificationData.phone,
+          phoneCountry: identificationData.phoneCountry,
+          cpf: taxIdConfig.visible ? identificationData.cpf : '',
+        },
+        shippingAddress: {
+          country: deliveryData.country,
+          postalCode: deliveryData.postalCode,
+          street: deliveryData.street,
+          number: deliveryData.number,
+          complement: deliveryData.complement,
+          neighborhood: deliveryData.neighborhood,
+          city: deliveryData.city,
+          region: deliveryData.region,
+        },
+        items: cart.map((item) => ({
+          id: item.product.id,
+          name: item.product.nome,
+          quantity: item.quantity,
+          unitPrice: item.product.precoPromocional || item.product.preco,
+          size: item.size,
+          color: item.color,
+        })),
+        subtotal: cartTotal,
+        shipping: shippingCost,
+        shippingMethod: selectedQuote?.service,
+        discount: 0,
+      });
     }
     setStep(step + 1);
   };
+
+  const updateIdentificationField = <K extends keyof IdentificationFormData>(field: K, value: IdentificationFormData[K]) => {
+    setIdentificationData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateDeliveryField = <K extends keyof DeliveryFormData>(field: K, value: DeliveryFormData[K]) => {
+    setDeliveryData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const resetDeliveryAddress = (postalCode: string, country: AddressCountryCode = deliveryData.country) => {
+    setDeliveryData((prev) => ({
+      ...prev,
+      city: '',
+      complement: '',
+      country,
+      neighborhood: '',
+      number: '',
+      postalCode,
+      region: '',
+      street: '',
+    }));
+  };
+
+  const handleCountryChange = (nextCountry: AddressCountryCode) => {
+    const manualCountry = isManualAddressCountry(nextCountry);
+
+    setIsSearchingPostalCode(false);
+    setIsDeliveryUnlocked(manualCountry);
+    setPostalStatusTone(manualCountry ? 'manual' : 'idle');
+    resetQuotes();
+    resetDeliveryAddress('', nextCountry);
+  };
+
+  const handlePostalCodeChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const formattedPostalCode = formatPostalCode(event.target.value, deliveryData.country);
+    const manualCountry = isManualAddressCountry(deliveryData.country);
+
+    resetDeliveryAddress(formattedPostalCode);
+    setIsDeliveryUnlocked(manualCountry);
+    resetQuotes();
+
+    if (manualCountry) {
+      setIsSearchingPostalCode(false);
+      setPostalStatusTone('manual');
+      return;
+    }
+
+    if (!isAddressLookupComplete(deliveryData.country, formattedPostalCode)) {
+      setIsSearchingPostalCode(false);
+      setPostalStatusTone('idle');
+      return;
+    }
+
+    setIsSearchingPostalCode(true);
+    setPostalStatusTone('loading');
+
+    try {
+      const result = await lookupAddressByCountry(deliveryData.country, formattedPostalCode);
+
+      if (result) {
+        setDeliveryData((prev) => ({
+          ...prev,
+          city: result.city,
+          neighborhood: result.neighborhood,
+          postalCode: result.postalCode || formattedPostalCode,
+          region: result.region,
+          street: result.street,
+        }));
+        setPostalStatusTone('success');
+      } else {
+        setPostalStatusTone('warning');
+      }
+
+      setIsDeliveryUnlocked(true);
+    } catch (error) {
+      console.error('Erro ao buscar codigo postal', error);
+      setPostalStatusTone('error');
+      setIsDeliveryUnlocked(true);
+    } finally {
+      setIsSearchingPostalCode(false);
+    }
+  };
+
+  const isDeliveryFieldsDisabled = !isDeliveryUnlocked || isSearchingPostalCode;
+  const postalStatusMessage = getPostalStatusMessage(postalStatusTone, deliveryData.country, t);
+  const hasValidatedPostalLookup =
+    (isManualAddressCountry(deliveryData.country) && isDeliveryUnlocked)
+    || postalStatusTone === 'success';
+  const canRequestShippingQuotes =
+    isDeliveryUnlocked &&
+    hasValidatedPostalLookup &&
+    deliveryData.street.trim().length > 0 &&
+    deliveryData.city.trim().length > 0 &&
+    deliveryData.region.trim().length > 0 &&
+    isAddressLookupComplete(deliveryData.country, deliveryData.postalCode);
+  const shippingCost = selectedQuote?.amount ?? 0;
+
+  const handleRefreshShipping = async () => {
+    if (!canRequestShippingQuotes) return;
+
+    await loadQuotes({
+      country: deliveryData.country,
+      postalCode: deliveryData.postalCode,
+      city: deliveryData.city,
+      region: deliveryData.region,
+      street: deliveryData.street,
+      number: deliveryData.number,
+      name: identificationData.fullName,
+      phone: identificationData.phone,
+      email: identificationData.email,
+    });
+  };
+
+  useEffect(() => {
+    if (step !== 2) return;
+    if (!canRequestShippingQuotes) return;
+
+    void loadQuotes({
+      country: deliveryData.country,
+      postalCode: deliveryData.postalCode,
+      city: deliveryData.city,
+      region: deliveryData.region,
+      street: deliveryData.street,
+      number: deliveryData.number,
+      name: identificationData.fullName,
+      phone: identificationData.phone,
+      email: identificationData.email,
+    });
+  }, [
+    canRequestShippingQuotes,
+    deliveryData.city,
+    deliveryData.country,
+    deliveryData.postalCode,
+    deliveryData.region,
+    deliveryData.street,
+    deliveryData.number,
+    identificationData.email,
+    identificationData.fullName,
+    identificationData.phone,
+    loadQuotes,
+    step,
+  ]);
 
   if (step === 4) {
     return (
@@ -43,8 +444,6 @@ export function Checkout() {
       </div>
     );
   }
-
-  const shippingCost = step >= 2 ? 25.9 : 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -74,12 +473,52 @@ export function Checkout() {
                   <span className="w-8">1.</span> {t('personalDataTitle')}
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Field label={t('fullName')} />
+                  <Field
+                    label={t('fullName')}
+                    value={identificationData.fullName}
+                    onChange={(event) => updateIdentificationField('fullName', event.target.value)}
+                  />
                   <div className="md:col-span-2 hidden" />
-                  <Field label={t('cpf')} />
-                  <Field label={t('contactPhone')} />
+                  {taxIdConfig.visible ? (
+                    <Field
+                      label={taxIdConfig.label}
+                      value={identificationData.cpf}
+                      inputMode={taxIdConfig.inputMode}
+                      placeholder={taxIdConfig.placeholder}
+                      required={taxIdConfig.required}
+                      onChange={(event) => updateIdentificationField('cpf', taxIdConfig.format(event.target.value))}
+                    />
+                  ) : taxIdConfig.helpText ? (
+                    <div className="md:col-span-2 rounded-sm border border-dashed border-neutral-300 bg-neutral-50 px-4 py-3">
+                      <div className="text-xs font-bold uppercase tracking-wider text-neutral-700">{taxIdConfig.label}</div>
+                      <p className="mt-1.5 text-sm text-neutral-500">{taxIdConfig.helpText}</p>
+                    </div>
+                  ) : null}
                   <div className="md:col-span-2">
-                    <Field label={t('contactEmail')} type="email" />
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-2">{t('contactPhone')}</label>
+                    <StorePhoneField
+                      locale={locale}
+                      name="checkoutPhone"
+                      countryCode={CHECKOUT_COUNTRY}
+                      value={identificationData.phone}
+                      placeholder={phonePlaceholder}
+                      disableCountrySelection
+                      onChange={(nextValue) =>
+                        setIdentificationData((prev) => ({
+                          ...prev,
+                          phoneCountry: CHECKOUT_COUNTRY,
+                          phone: nextValue,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Field
+                      label={t('contactEmail')}
+                      type="email"
+                      value={identificationData.email}
+                      onChange={(event) => updateIdentificationField('email', event.target.value)}
+                    />
                   </div>
                 </div>
                 <div className="mt-8 flex justify-end">
@@ -96,28 +535,161 @@ export function Checkout() {
                   <span className="w-8">2.</span> {t('deliveryAddressTitle')}
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Field label={t('zipcode')} />
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-2">{t('country')}</label>
+                    <div className="max-w-[280px] space-y-2">
+                      <StoreCountrySelect
+                        value={CHECKOUT_COUNTRY}
+                        onChange={handleCountryChange}
+                        locale={locale}
+                        disabled
+                      />
+                      <p className="text-[11px] text-neutral-500">{t('usOnlyShippingHint')}</p>
+                    </div>
+                  </div>
+                  <div className="hidden md:block" />
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-2">{addressLabels.postalCodeLabel}</label>
+                    <div className="space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                        <div className="relative flex-1 md:max-w-[180px]">
+                          <input
+                            required
+                            type="text"
+                            inputMode={deliveryData.country === 'CA' || deliveryData.country === 'GB' ? 'text' : 'numeric'}
+                            value={deliveryData.postalCode}
+                            onChange={handlePostalCodeChange}
+                            className={inputClass}
+                            placeholder={addressLabels.postalPlaceholder}
+                          />
+                          {isSearchingPostalCode ? (
+                            <Loader2 className="absolute right-3 top-3.5 w-5 h-5 animate-spin text-neutral-500" />
+                          ) : null}
+                        </div>
+                        {deliveryData.country === 'BR' ? (
+                          <a
+                            href="https://buscacepinter.correios.com.br/app/endereco/index.php"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-secondary font-bold text-xs flex items-center hover:text-primary"
+                          >
+                            <HelpCircle className="w-3.5 h-3.5 mr-1" /> {t('dontKnowZipcode')}
+                          </a>
+                        ) : null}
+                      </div>
+                      <div className={`text-[11px] font-medium flex items-center gap-2 ${postalStatusTone === 'idle' ? 'text-neutral-500' : postalToneClasses[postalStatusTone]}`}>
+                        {isSearchingPostalCode ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                        <span>{postalStatusMessage}</span>
+                      </div>
+                    </div>
+                  </div>
                   <div className="hidden md:block" />
                   <div className="md:col-span-2">
-                    <Field label={t('avenue')} />
+                    <Field
+                      label={t('avenue')}
+                      value={deliveryData.street}
+                      disabled={isDeliveryFieldsDisabled}
+                      onChange={(event) => updateDeliveryField('street', event.target.value)}
+                    />
                   </div>
-                  <Field label={t('number')} />
-                  <Field label={t('complement')} required={false} />
-                  <Field label={t('neighborhood')} />
-                  <Field label={t('city')} />
+                  <Field
+                    label={t('number')}
+                    value={deliveryData.number}
+                    disabled={isDeliveryFieldsDisabled}
+                    onChange={(event) => updateDeliveryField('number', event.target.value)}
+                  />
+                  <Field
+                    label={t('complement')}
+                    required={false}
+                    value={deliveryData.complement}
+                    disabled={isDeliveryFieldsDisabled}
+                    onChange={(event) => updateDeliveryField('complement', event.target.value)}
+                  />
+                  <Field
+                    label={t('neighborhood')}
+                    value={deliveryData.neighborhood}
+                    disabled={isDeliveryFieldsDisabled}
+                    onChange={(event) => updateDeliveryField('neighborhood', event.target.value)}
+                  />
+                  <Field
+                    label={t('city')}
+                    value={deliveryData.city}
+                    disabled={isDeliveryFieldsDisabled}
+                    onChange={(event) => updateDeliveryField('city', event.target.value)}
+                  />
+                  <Field
+                    label={addressLabels.regionLabel}
+                    value={deliveryData.region}
+                    disabled={isDeliveryFieldsDisabled}
+                    onChange={(event) => updateDeliveryField('region', event.target.value)}
+                  />
                 </div>
 
                 <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-900 mt-8 mb-4">{t('shippingOptions')}</h3>
                 <div className="space-y-3">
-                  <ShippingOption title="Correios - PAC" subtitle={t('businessDays7')} price={formatCurrency(25.9)} defaultChecked />
-                  <ShippingOption title="Correios - SEDEX" subtitle={t('businessDays3')} price={formatCurrency(45.9)} />
+                  {shippingQuotesStatus === 'loading' && (
+                    <div className="rounded-sm border border-neutral-200 bg-neutral-50 px-4 py-4 text-sm text-neutral-500">
+                      {t('shippingRatesLoading')}
+                    </div>
+                  )}
+
+                  {shippingQuotesStatus === 'error' && (
+                    <div className="rounded-sm border border-red-100 bg-red-50 px-4 py-4 text-sm text-red-600">
+                      {shippingQuotesError || t('shippingRatesError')}
+                    </div>
+                  )}
+
+                  {shippingQuotesStatus === 'ready' && mode === 'estimated' && quotes.length > 0 && (
+                    <div className="rounded-sm border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                      {t('shippingRatesEstimated')}
+                    </div>
+                  )}
+
+                  {shippingQuotesStatus === 'ready' && mode === 'live' && quotes.length > 0 && (
+                    <div className="rounded-sm border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs text-emerald-700">
+                      {t('shippingRatesLive')}
+                    </div>
+                  )}
+
+                  {shippingQuotesStatus === 'ready' && quotes.length === 0 && (
+                    <div className="rounded-sm border border-neutral-200 bg-neutral-50 px-4 py-4 text-sm text-neutral-500">
+                      {t('shippingRatesEmpty')}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleRefreshShipping}
+                      disabled={!canRequestShippingQuotes || shippingQuotesStatus === 'loading'}
+                      className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 hover:text-neutral-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {t('shippingRefresh')}
+                    </button>
+                  </div>
+
+                  {quotes.map((quote) => (
+                    <div key={quote.id}>
+                      <ShippingOption
+                        title={quote.service}
+                        subtitle={t('shippingDeliveryWindow', { min: quote.estimatedDaysMin, max: quote.estimatedDaysMax })}
+                        price={quote.amount > 0 ? formatCurrency(quote.amount, quote.currency) : t('freeShipping')}
+                        checked={selectedQuote?.id === quote.id}
+                        onChange={() => setSelectedQuoteId(quote.id)}
+                      />
+                    </div>
+                  ))}
                 </div>
 
                 <div className="mt-8 flex justify-between">
                   <button type="button" onClick={() => setStep(1)} className="text-secondary/70 px-6 py-3 font-bold uppercase tracking-wider text-sm hover:text-secondary transition-colors">
                     {t('back')}
                   </button>
-                  <button type="submit" className="bg-primary text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-primary-dark transition-colors rounded-sm">
+                  <button
+                    type="submit"
+                    disabled={isSearchingPostalCode || !isDeliveryUnlocked || shippingQuotesStatus === 'loading' || !selectedQuote}
+                    className="bg-primary text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-primary-dark transition-colors rounded-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
                     {t('goToPayment')}
                   </button>
                 </div>
@@ -132,7 +704,13 @@ export function Checkout() {
 
                 <div className="space-y-4 mb-8">
                   <label className="flex items-center p-4 border border-neutral-900 bg-neutral-50 cursor-pointer">
-                    <input type="radio" name="payment" className="text-neutral-900 focus:ring-neutral-900" defaultChecked />
+                    <input
+                      type="radio"
+                      name="payment"
+                      className="text-neutral-900 focus:ring-neutral-900"
+                      checked={selectedPaymentMethod === 'Cartao de credito'}
+                      onChange={() => setSelectedPaymentMethod('Cartao de credito')}
+                    />
                     <CreditCard className="w-5 h-5 ml-4 text-neutral-900" />
                     <span className="ml-3 font-bold text-sm uppercase tracking-wider text-neutral-900">{t('creditCard')}</span>
                   </label>
@@ -149,15 +727,21 @@ export function Checkout() {
                     <div className="md:col-span-2">
                       <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-2">{t('installments')}</label>
                       <select className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-neutral-900 transition-colors text-sm">
-                        <option>1x de {formatCurrency(cartTotal + 25.9)}</option>
-                        <option>2x de {formatCurrency((cartTotal + 25.9) / 2)}</option>
-                        <option>3x de {formatCurrency((cartTotal + 25.9) / 3)}</option>
+                        <option>1x de {formatCurrency(cartTotal + shippingCost)}</option>
+                        <option>2x de {formatCurrency((cartTotal + shippingCost) / 2)}</option>
+                        <option>3x de {formatCurrency((cartTotal + shippingCost) / 3)}</option>
                       </select>
                     </div>
                   </div>
 
                   <label className="flex items-center p-4 border border-neutral-200 cursor-pointer hover:border-neutral-400">
-                    <input type="radio" name="payment" className="text-neutral-900 focus:ring-neutral-900" />
+                    <input
+                      type="radio"
+                      name="payment"
+                      className="text-neutral-900 focus:ring-neutral-900"
+                      checked={selectedPaymentMethod === 'Pix'}
+                      onChange={() => setSelectedPaymentMethod('Pix')}
+                    />
                     <div className="ml-4 font-bold text-sm uppercase tracking-wider text-neutral-500">{t('pixDiscount')}</div>
                   </label>
                 </div>
@@ -182,7 +766,7 @@ export function Checkout() {
             <div className="max-h-60 overflow-y-auto pr-2 mb-4 space-y-4">
               {cart.map((item) => (
                 <div key={`${item.product.id}-${item.size}-${item.color}`} className="flex gap-4">
-                  <img src={item.product.imagens[0]} alt="" className="w-16 h-20 object-cover bg-neutral-200" />
+                  <StoreImage src={item.product.imagens[0]} alt="" className="w-16 h-20 object-cover bg-neutral-200" sizes="64px" />
                   <div className="flex-1">
                     <p className="text-xs font-bold text-neutral-900 line-clamp-1">{item.product.nome}</p>
                     <p className="text-[10px] text-neutral-500 mt-1 uppercase tracking-wider">{t('quantityShort')}: {item.quantity} | {item.size}</p>
@@ -199,7 +783,9 @@ export function Checkout() {
               </div>
               <div className="flex justify-between">
                 <dt>{t('shipping')}</dt>
-                <dd className="font-medium text-neutral-900">{step >= 2 ? formatCurrency(25.9) : t('toCalculate')}</dd>
+                <dd className="font-medium text-neutral-900">
+                  {selectedQuote ? (shippingCost > 0 ? formatCurrency(shippingCost, selectedQuote.currency) : t('freeShipping')) : t('toCalculate')}
+                </dd>
               </div>
             </dl>
 
@@ -214,19 +800,39 @@ export function Checkout() {
   );
 }
 
-function Field({ label, type = 'text', required = true }: { label: string; type?: string; required?: boolean }) {
+type FieldProps = {
+  disabled?: boolean;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+  label: string;
+  onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  required?: boolean;
+  type?: string;
+  value?: string;
+};
+
+function Field({ label, type = 'text', required = true, value, onChange, disabled = false, inputMode, placeholder }: FieldProps) {
   return (
     <div>
       <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-2">{label}</label>
-      <input required={required} type={type} className="w-full border border-neutral-300 px-4 py-3 bg-neutral-50 focus:bg-white focus:outline-none focus:border-neutral-900 transition-colors" />
+      <input
+        required={required}
+        type={type}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        inputMode={inputMode}
+        placeholder={placeholder}
+        className={inputClass}
+      />
     </div>
   );
 }
 
-function ShippingOption({ title, subtitle, price, defaultChecked = false }: { title: string; subtitle: string; price: string; defaultChecked?: boolean }) {
+function ShippingOption({ title, subtitle, price, checked = false, onChange }: { title: string; subtitle: string; price: string; checked?: boolean; onChange?: () => void }) {
   return (
     <label className="flex items-center p-4 border border-neutral-200 cursor-pointer hover:border-neutral-400 transition-colors">
-      <input type="radio" name="shipping" className="text-neutral-900 focus:ring-neutral-900" defaultChecked={defaultChecked} />
+      <input type="radio" name="shipping" className="text-neutral-900 focus:ring-neutral-900" checked={checked} onChange={onChange} />
       <div className="ml-4 flex-1 flex justify-between">
         <div>
           <span className="block text-sm font-bold text-neutral-900">{title}</span>

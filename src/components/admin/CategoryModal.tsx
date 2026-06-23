@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Save, Folder, Info, Link as LinkIcon, Image as ImageIcon, ListOrdered, Menu, Home } from 'lucide-react';
+import { X, Save, Folder, Info, Link as LinkIcon, Image as ImageIcon, ListOrdered, Menu, Home, Plus, Tags } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { showToast } from '../../lib/adminUtils';
 import { CategoryInput, StoreCategory } from '../../lib/storeApi';
@@ -12,7 +12,7 @@ interface CategoryModalProps {
   onSave: (category: CategoryInput) => Promise<void>;
 }
 
-type CategoryTab = 'general' | 'menu' | 'home';
+type CategoryTab = 'general' | 'subcategories' | 'menu' | 'home';
 
 const slugify = (value: string) => value
   .toLowerCase()
@@ -27,6 +27,7 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
     nome: '',
     slug: '',
     imagem: '',
+    subcategories: [],
     status: 'Ativo',
     showInMenu: true,
     menuOrder: 100,
@@ -36,11 +37,13 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
     homeSectionLimit: 4,
     homeSectionFilter: 'all',
   });
+  const [subcategoryDraft, setSubcategoryDraft] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const isEditing = Boolean(category);
 
   const tabs = [
     { id: 'general', name: 'Geral', icon: Info },
+    { id: 'subcategories', name: 'Subcategorias', icon: Tags },
     { id: 'menu', name: 'Menu', icon: Menu },
     { id: 'home', name: 'Home', icon: Home },
   ];
@@ -52,6 +55,7 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
       nome: category.nome,
       slug: category.slug,
       imagem: category.imagem,
+      subcategories: category.subcategories || [],
       status: category.status,
       showInMenu: category.showInMenu,
       menuOrder: category.menuOrder,
@@ -64,6 +68,7 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
       nome: '',
       slug: '',
       imagem: '',
+      subcategories: [],
       status: 'Ativo',
       showInMenu: true,
       menuOrder: 100,
@@ -73,6 +78,7 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
       homeSectionLimit: 4,
       homeSectionFilter: 'all',
     });
+    setSubcategoryDraft('');
   }, [isOpen, category?.id]);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -101,6 +107,26 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
       nome,
       slug: category ? prev.slug : slugify(nome),
       homeSectionTitle: prev.homeSectionTitle || nome,
+    }));
+  };
+
+  const addSubcategory = () => {
+    const nextName = subcategoryDraft.trim();
+    if (!nextName) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      subcategories: prev.subcategories.includes(nextName)
+        ? prev.subcategories
+        : [...prev.subcategories, nextName],
+    }));
+    setSubcategoryDraft('');
+  };
+
+  const removeSubcategory = (subcategory: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      subcategories: prev.subcategories.filter((item) => item !== subcategory),
     }));
   };
 
@@ -217,6 +243,62 @@ export function CategoryModal({ isOpen, onClose, category, onSave }: CategoryMod
                       <option value="Inativo">Inativo</option>
                     </select>
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'subcategories' && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-2">
+                      <Tags className="w-3 h-3" /> Subcategorias da categoria
+                    </label>
+                    <p className="text-[12px] text-neutral-500">
+                      Cadastre as subcategorias que devem aparecer no menu e no cadastro de produto.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={subcategoryDraft}
+                      onChange={(e) => setSubcategoryDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addSubcategory();
+                        }
+                      }}
+                      placeholder="Ex: Aniversário"
+                      className="flex-1 border border-neutral-200/60 px-4 py-2.5 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={addSubcategory}
+                      className="px-4 py-2.5 rounded-xl bg-neutral-950 text-white hover:bg-neutral-800 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {formData.subcategories.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.subcategories.map((subcategory) => (
+                        <button
+                          key={subcategory}
+                          type="button"
+                          onClick={() => removeSubcategory(subcategory)}
+                          className="inline-flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 text-[12px] font-semibold text-neutral-700 hover:bg-red-50 hover:text-red-600 transition-colors"
+                        >
+                          {subcategory}
+                          <X className="w-3 h-3" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/60 px-4 py-4 text-[12px] text-neutral-500">
+                      Nenhuma subcategoria cadastrada ainda. Você pode deixar vazio ou montar a estrutura dessa categoria aqui.
+                    </div>
+                  )}
                 </div>
               )}
 

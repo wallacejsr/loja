@@ -1,6 +1,6 @@
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { getStoreSettings, saveStoreSettings } from '../lib/storeApi';
-import { defaultSettings, StoreSettings } from '../types/settings';
+import { defaultSettings, normalizeStoreSettings, StoreSettings } from '../types/settings';
 
 const SETTINGS_KEY = 'dani_brand_store_settings';
 
@@ -30,16 +30,23 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const hasCachedSettings = Boolean(localStorage.getItem(SETTINGS_KEY));
   const [settings, setSettings] = useState<StoreSettings>(() => {
     const saved = localStorage.getItem(SETTINGS_KEY);
-    return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
+    return saved ? normalizeStoreSettings({ ...defaultSettings, ...JSON.parse(saved) }) : defaultSettings;
   });
   const [loading, setLoading] = useState(!hasCachedSettings);
 
   useEffect(() => {
     getStoreSettings()
       .then((remoteSettings) => {
-        setSettings(remoteSettings);
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(remoteSettings));
+        const normalizedSettings = normalizeStoreSettings(remoteSettings);
+        setSettings(normalizedSettings);
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalizedSettings));
         setLoading(false);
+
+        if (normalizedSettings.storeCurrency !== remoteSettings.storeCurrency) {
+          saveStoreSettings(normalizedSettings).catch(() => {
+            // Keep the normalized local state even if the remote migration fails for now.
+          });
+        }
       })
       .catch(() => {
         // Keep the local copy when Supabase is not configured or temporarily unavailable.
@@ -57,7 +64,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const updateSettings = useCallback((newSettings: Partial<StoreSettings>) => {
     setSettings((prev) => {
-      const updated = { ...prev, ...newSettings };
+      const updated = normalizeStoreSettings({ ...prev, ...newSettings });
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
       saveStoreSettings(updated).catch(() => {
         // Local state remains updated; the next save can retry the remote write.

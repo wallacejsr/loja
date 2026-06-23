@@ -3,14 +3,17 @@ import { Trophy, Ticket, Calendar, Gift, Star } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useLoyalty } from '../hooks/useLoyalty';
 import { useStorefront } from '../hooks/useStorefront';
-import { useStoreData } from '../hooks/useStoreData';
+import { useStoreDomainStatus, useStoreRaffles } from '../hooks/useStoreData';
 import { showToast } from '../lib/adminUtils';
 import { cn } from '../lib/utils';
 import { Raffle } from '../lib/storeApi';
+import { StoreImage } from '../components/StoreImage';
+import { StorefrontErrorNotice } from '../components/StorefrontFeedback';
 
 export function Raffles() {
   const { points, buyTicket, tickets } = useLoyalty();
-  const { raffles } = useStoreData();
+  const raffles = useStoreRaffles();
+  const rafflesStatus = useStoreDomainStatus('raffles');
   const { t, formatDate } = useStorefront();
   const activeRaffles = raffles.filter((raffle) => raffle.status === 'Ativo').sort((a, b) => a.position - b.position);
 
@@ -54,12 +57,26 @@ export function Raffles() {
               <div className="h-px flex-1 bg-secondary/10" />
             </div>
 
-            {activeRaffles.map((raffle) => (
+            {rafflesStatus.loading && !raffles.length ? (
+              <RafflesListSkeleton />
+            ) : rafflesStatus.error && !raffles.length ? (
+              <StorefrontErrorNotice
+                message={t('unableToLoadRaffles')}
+                detail={rafflesStatus.error}
+                actionLabel={t('tryAgain')}
+                onRetry={rafflesStatus.refresh}
+              />
+            ) : activeRaffles.map((raffle) => (
               <motion.div key={raffle.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-[32px] overflow-hidden border border-secondary/5 shadow-2xl shadow-secondary/5 group">
                 <div className="grid md:grid-cols-2">
                   <div className="h-64 md:h-full relative overflow-hidden bg-neutral-100">
                     {raffle.image ? (
-                      <img src={raffle.image} alt={raffle.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                      <StoreImage
+                        src={raffle.image}
+                        alt={raffle.title}
+                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                        sizes="(min-width: 768px) 50vw, 100vw"
+                      />
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center text-neutral-300">
                         <Trophy className="w-14 h-14" />
@@ -108,7 +125,7 @@ export function Raffles() {
               </motion.div>
             ))}
 
-            {!activeRaffles.length && (
+            {!rafflesStatus.loading && !rafflesStatus.error && !activeRaffles.length && (
               <div className="bg-white border border-secondary/5 rounded-[32px] p-12 text-center text-secondary/50">
                 {t('noActiveRaffles')}
               </div>
@@ -165,5 +182,32 @@ export function Raffles() {
         </div>
       </div>
     </div>
+  );
+}
+
+function RafflesListSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 2 }).map((_, index) => (
+        <div key={index} className="bg-white rounded-[32px] overflow-hidden border border-secondary/5 shadow-2xl shadow-secondary/5 animate-pulse">
+          <div className="grid md:grid-cols-2">
+            <div className="h-64 md:h-[420px] bg-gradient-to-br from-neutral-100 via-neutral-200 to-neutral-100" />
+            <div className="p-8 md:p-12 space-y-6">
+              <div className="h-6 w-40 rounded bg-neutral-100" />
+              <div className="h-10 w-3/4 rounded bg-neutral-200" />
+              <div className="space-y-3">
+                <div className="h-4 w-full rounded bg-neutral-100" />
+                <div className="h-4 w-5/6 rounded bg-neutral-100" />
+              </div>
+              <div className="space-y-3">
+                <div className="h-4 w-40 rounded bg-neutral-100" />
+                <div className="h-4 w-52 rounded bg-neutral-100" />
+              </div>
+              <div className="h-12 w-full rounded-full bg-neutral-200" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </>
   );
 }

@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Plus, Edit, Trash2, Search, Filter, Image as ImageIcon, AlertTriangle, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { showToast } from '../../lib/adminUtils';
 import { ProductModal } from '../../components/admin/ProductModal';
-import { useStoreData } from '../../hooks/useStoreData';
+import { useStoreActions, useStoreProducts } from '../../hooks/useStoreData';
+import { useAdminCurrency } from '../../hooks/useAdminCurrency';
+import { useDeferredSearchTerm } from '../../hooks/useDeferredSearchTerm';
 import { Product } from '../../data/mockData';
 
 export function Products() {
@@ -12,25 +14,41 @@ export function Products() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const { products, removeProduct } = useStoreData();
-  const filteredProducts = products.filter((produto) => (
-    produto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    produto.id.toLowerCase().includes(searchTerm.toLowerCase())
-  ));
+  const products = useStoreProducts();
+  const { removeProduct } = useStoreActions();
+  const { formatCurrency } = useAdminCurrency();
+  const normalizedSearchTerm = useDeferredSearchTerm(searchTerm);
+  const filteredProducts = useMemo(() => products.filter((produto) => (
+    !normalizedSearchTerm
+      || produto.nome.toLowerCase().includes(normalizedSearchTerm)
+      || produto.id.toLowerCase().includes(normalizedSearchTerm)
+  )), [normalizedSearchTerm, products]);
+  const paginationSummary = useMemo(
+    () => ({
+      start: filteredProducts.length ? 1 : 0,
+      end: filteredProducts.length,
+      total: products.length,
+    }),
+    [filteredProducts.length, products.length],
+  );
 
   const handleAction = (action: string, name?: string) => {
     showToast(`${action}${name ? `: ${name}` : ''}`);
   };
 
-  const handleNewProduct = () => {
+  const handleNewProduct = useCallback(() => {
     setSelectedProduct(null);
     setIsModalOpen(true);
-  };
+  }, []);
 
-  const handleEditProduct = (product: Product) => {
+  const handleEditProduct = useCallback((product: Product) => {
     setSelectedProduct(product);
     setIsModalOpen(true);
-  };
+  }, []);
+
+  const handleRequestDeleteProduct = useCallback((product: Product) => {
+    setProductToDelete(product);
+  }, []);
 
   const handleDeleteProduct = async () => {
     if (!productToDelete) return;
@@ -164,50 +182,13 @@ export function Products() {
             </thead>
             <tbody className="divide-y divide-neutral-100/60">
               {filteredProducts.map((produto) => (
-                <tr key={produto.id} className="hover:bg-neutral-50/50 transition-colors group cursor-pointer">
-                  <td className="py-4 px-6 flex items-center gap-4">
-                    <div className="w-12 h-12 bg-[#F5F5F7] rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center border border-neutral-200/50">
-                      {produto.imagens[0] ? (
-                        <img src={produto.imagens[0]} alt={produto.nome} className="w-full h-full object-cover mix-blend-multiply" />
-                      ) : (
-                        <ImageIcon className="w-5 h-5 text-neutral-300" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="font-medium text-[13px] text-neutral-900 group-hover:text-blue-600 transition-colors">{produto.nome}</div>
-                      <div className="text-[11px] font-medium text-neutral-400 mt-0.5 tracking-wide">REF: {produto.id}</div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6 text-[13px] text-neutral-600 capitalize">
-                    {produto.categoria}
-                  </td>
-                  <td className="py-4 px-6 text-[13px] font-medium text-neutral-900">
-                    R$ {produto.preco.toFixed(2).replace('.', ',')}
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600">
-                      Em estoque
-                    </span>
-                  </td>
-                  <td className="py-4 px-6 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleEditProduct(produto); }}
-                        className="p-2 text-neutral-400 hover:text-neutral-900 transition-colors rounded-lg hover:bg-neutral-100" 
-                        title="Editar"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setProductToDelete(produto); }}
-                        className="p-2 text-neutral-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50" 
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                <ProductTableRow
+                  key={produto.id}
+                  product={produto}
+                  formatCurrency={formatCurrency}
+                  onEdit={handleEditProduct}
+                  onDelete={handleRequestDeleteProduct}
+                />
               ))}
             </tbody>
           </table>
@@ -215,7 +196,7 @@ export function Products() {
         
         {/* Pagination */}
         <div className="p-4 border-t border-neutral-100/60 flex items-center justify-between text-[13px] text-neutral-500 bg-white">
-          <div>Mostrando <span className="font-medium text-neutral-900">{filteredProducts.length ? 1 : 0}</span> a <span className="font-medium text-neutral-900">{filteredProducts.length}</span> de <span className="font-medium text-neutral-900">{products.length}</span> resultados</div>
+          <div>Mostrando <span className="font-medium text-neutral-900">{paginationSummary.start}</span> a <span className="font-medium text-neutral-900">{paginationSummary.end}</span> de <span className="font-medium text-neutral-900">{paginationSummary.total}</span> resultados</div>
           <div className="flex gap-2">
             <button 
               onClick={() => handleAction('Navegar para página anterior')}
@@ -235,3 +216,62 @@ export function Products() {
     </div>
   );
 }
+
+const ProductTableRow = React.memo(function ProductTableRow({
+  product,
+  formatCurrency,
+  onEdit,
+  onDelete,
+}: {
+  product: Product;
+  formatCurrency: (value: number) => string;
+  onEdit: (product: Product) => void;
+  onDelete: (product: Product) => void;
+}) {
+  return (
+    <tr className="hover:bg-neutral-50/50 transition-colors group cursor-pointer">
+      <td className="py-4 px-6 flex items-center gap-4">
+        <div className="w-12 h-12 bg-[#F5F5F7] rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center border border-neutral-200/50">
+          {product.imagens[0] ? (
+            <img src={product.imagens[0]} alt={product.nome} className="w-full h-full object-cover mix-blend-multiply" />
+          ) : (
+            <ImageIcon className="w-5 h-5 text-neutral-300" />
+          )}
+        </div>
+        <div>
+          <div className="font-medium text-[13px] text-neutral-900 group-hover:text-blue-600 transition-colors">{product.nome}</div>
+          <div className="text-[11px] font-medium text-neutral-400 mt-0.5 tracking-wide">REF: {product.id}</div>
+        </div>
+      </td>
+      <td className="py-4 px-6 text-[13px] text-neutral-600 capitalize">
+        {product.categoria}
+      </td>
+      <td className="py-4 px-6 text-[13px] font-medium text-neutral-900">
+        {formatCurrency(product.preco)}
+      </td>
+      <td className="py-4 px-6">
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600">
+          Em estoque
+        </span>
+      </td>
+      <td className="py-4 px-6 text-right">
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(product); }}
+            className="p-2 text-neutral-400 hover:text-neutral-900 transition-colors rounded-lg hover:bg-neutral-100"
+            title="Editar"
+          >
+            <Edit className="w-4 h-4" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(product); }}
+            className="p-2 text-neutral-400 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50"
+            title="Excluir"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});

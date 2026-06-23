@@ -4,18 +4,26 @@ import { Filter, ChevronDown, Heart } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useCart } from '../context/CartContext';
 import { useStorefront } from '../hooks/useStorefront';
-import { useStoreData } from '../hooks/useStoreData';
+import { useStoreCategories, useStoreDomainStatus, useStoreProducts } from '../hooks/useStoreData';
+import { useCanHover } from '../hooks/useCanHover';
+import { StoreImage } from '../components/StoreImage';
+import { StorefrontErrorNotice } from '../components/StorefrontFeedback';
 
 export function Catalog() {
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryParam = searchParams.get('category');
+  const subcategoryParam = searchParams.get('subcategory');
   const sortParam = searchParams.get('sort');
   const promoParam = searchParams.get('promo');
   const queryParam = searchParams.get('q');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const { toggleWishlist, wishlist } = useCart();
-  const { products, categories } = useStoreData();
+  const products = useStoreProducts();
+  const categories = useStoreCategories();
+  const productsStatus = useStoreDomainStatus('products');
+  const categoriesStatus = useStoreDomainStatus('categories');
   const { t, formatCurrency } = useStorefront();
+  const canHover = useCanHover();
 
   const filteredProducts = useMemo(() => {
     let result = [...products];
@@ -27,6 +35,10 @@ export function Catalog() {
 
     if (categoryParam) {
       result = result.filter((p) => p.categoria === categoryParam);
+    }
+
+    if (subcategoryParam) {
+      result = result.filter((p) => p.subcategoria === subcategoryParam);
     }
 
     if (promoParam === 'true') {
@@ -50,7 +62,7 @@ export function Catalog() {
     }
 
     return result;
-  }, [products, categoryParam, sortParam, promoParam, queryParam]);
+  }, [products, categoryParam, subcategoryParam, sortParam, promoParam, queryParam]);
 
   const handleSort = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
@@ -70,7 +82,7 @@ export function Catalog() {
         ? t('bestSellers')
         : promoParam
           ? t('promotions')
-          : categoryParam || t('allProducts');
+          : subcategoryParam || categoryParam || t('allProducts');
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -90,7 +102,7 @@ export function Catalog() {
 
           <div className="relative">
             <select
-              className="appearance-none bg-transparent text-sm font-medium uppercase tracking-wider pr-6 focus:outline-none"
+              className="min-w-[170px] appearance-none bg-transparent pl-2 pr-9 text-sm font-medium uppercase tracking-[0.14em] focus:outline-none"
               value={sortParam || ''}
               onChange={handleSort}
             >
@@ -100,7 +112,7 @@ export function Catalog() {
               <option value="menor-preco">{t('lowestPrice')}</option>
               <option value="maior-preco">{t('highestPrice')}</option>
             </select>
-            <ChevronDown className="w-4 h-4 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-500" />
+            <ChevronDown className="w-4 h-4 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-500" />
           </div>
         </div>
 
@@ -108,50 +120,76 @@ export function Catalog() {
           <div className="space-y-8 sticky top-24">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider mb-4 pb-2 border-b border-neutral-200">{t('categories')}</h3>
-              <ul className="space-y-3">
-                <li>
-                  <Link
-                    to="/catalog"
-                    className={cn('text-sm transition-colors', !categoryParam && !promoParam && !sortParam ? 'text-neutral-900 font-medium' : 'text-neutral-500 hover:text-neutral-900')}
-                  >
-                    {t('all')}
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/catalog?sort=lancamentos"
-                    className={cn('text-sm transition-colors', sortParam === 'lancamentos' ? 'text-neutral-900 font-medium' : 'text-neutral-500 hover:text-neutral-900')}
-                  >
-                    {t('launches')}
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/catalog?sort=mais-vendidos"
-                    className={cn('text-sm transition-colors', sortParam === 'mais-vendidos' ? 'text-neutral-900 font-medium' : 'text-neutral-500 hover:text-neutral-900')}
-                  >
-                    {t('bestSellers')}
-                  </Link>
-                </li>
-                {categories.map((cat) => (
-                  <li key={cat.nome}>
+              {categoriesStatus.loading && !categories.length ? (
+                <CategoryFiltersSkeleton />
+              ) : categoriesStatus.error && !categories.length ? (
+                <StorefrontErrorNotice
+                  compact
+                  message={t('unableToLoadCategories')}
+                  detail={categoriesStatus.error}
+                  actionLabel={t('tryAgain')}
+                  onRetry={categoriesStatus.refresh}
+                />
+              ) : (
+                <ul className="space-y-3">
+                  <li>
                     <Link
-                      to={`/catalog?category=${cat.nome}`}
-                      className={cn('text-sm transition-colors', categoryParam === cat.nome ? 'text-neutral-900 font-medium' : 'text-neutral-500 hover:text-neutral-900')}
+                      to="/catalog"
+                      className={cn('text-sm transition-colors', !categoryParam && !promoParam && !sortParam ? 'text-neutral-900 font-medium' : 'text-neutral-500 hover:text-neutral-900')}
                     >
-                      {cat.nome}
+                      {t('all')}
                     </Link>
                   </li>
-                ))}
-                <li>
-                  <Link
-                    to="/catalog?promo=true"
-                    className={cn('text-sm transition-colors', promoParam ? 'text-red-600 font-medium' : 'text-red-500 hover:text-red-700')}
-                  >
-                    {t('promotions')}
-                  </Link>
-                </li>
-              </ul>
+                  <li>
+                    <Link
+                      to="/catalog?sort=lancamentos"
+                      className={cn('text-sm transition-colors', sortParam === 'lancamentos' ? 'text-neutral-900 font-medium' : 'text-neutral-500 hover:text-neutral-900')}
+                    >
+                      {t('launches')}
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/catalog?sort=mais-vendidos"
+                      className={cn('text-sm transition-colors', sortParam === 'mais-vendidos' ? 'text-neutral-900 font-medium' : 'text-neutral-500 hover:text-neutral-900')}
+                    >
+                      {t('bestSellers')}
+                    </Link>
+                  </li>
+                  {categories.map((cat) => (
+                    <li key={cat.nome} className="space-y-2">
+                      <Link
+                        to={`/catalog?category=${encodeURIComponent(cat.nome)}`}
+                        className={cn('text-sm transition-colors', categoryParam === cat.nome && !subcategoryParam ? 'text-neutral-900 font-medium' : 'text-neutral-500 hover:text-neutral-900')}
+                      >
+                        {cat.nome}
+                      </Link>
+                      {cat.subcategories.length > 0 && (
+                        <ul className="pl-4 space-y-2 border-l border-neutral-100">
+                          {cat.subcategories.map((subcategory) => (
+                            <li key={`${cat.nome}-${subcategory}`}>
+                              <Link
+                                to={`/catalog?category=${encodeURIComponent(cat.nome)}&subcategory=${encodeURIComponent(subcategory)}`}
+                                className={cn('text-xs transition-colors', categoryParam === cat.nome && subcategoryParam === subcategory ? 'text-neutral-900 font-semibold' : 'text-neutral-500 hover:text-neutral-900')}
+                              >
+                                {subcategory}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                  <li>
+                    <Link
+                      to="/catalog?promo=true"
+                      className={cn('text-sm transition-colors', promoParam ? 'text-red-600 font-medium' : 'text-red-500 hover:text-red-700')}
+                    >
+                      {t('promotions')}
+                    </Link>
+                  </li>
+                </ul>
+              )}
             </div>
           </div>
         </div>
@@ -160,7 +198,7 @@ export function Catalog() {
           <div className="hidden lg:flex justify-end mb-6">
             <div className="relative">
               <select
-                className="appearance-none bg-transparent text-sm font-medium uppercase tracking-wider pr-8 py-2 border border-neutral-200 rounded-sm focus:outline-none focus:border-neutral-900"
+                className="min-w-[208px] appearance-none bg-white pl-4 pr-12 py-3 text-sm font-medium uppercase tracking-[0.14em] border border-neutral-200 rounded-sm focus:outline-none focus:border-neutral-900"
                 value={sortParam || ''}
                 onChange={handleSort}
               >
@@ -170,11 +208,20 @@ export function Catalog() {
                 <option value="menor-preco">{t('lowestPrice')}</option>
                 <option value="maior-preco">{t('highestPrice')}</option>
               </select>
-              <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-secondary" />
+              <ChevronDown className="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-secondary" />
             </div>
           </div>
 
-          {filteredProducts.length === 0 ? (
+          {productsStatus.loading && !products.length ? (
+            <CatalogProductsSkeleton />
+          ) : productsStatus.error && !products.length ? (
+            <StorefrontErrorNotice
+              message={t('unableToLoadProducts')}
+              detail={productsStatus.error}
+              actionLabel={t('tryAgain')}
+              onRetry={productsStatus.refresh}
+            />
+          ) : filteredProducts.length === 0 ? (
             <div className="text-center py-20">
               <p className="text-secondary/70 text-lg">{t('noProductsFound')}</p>
               <Link to="/catalog" className="mt-4 inline-block text-secondary font-medium underline underline-offset-4">{t('clearFilters')}</Link>
@@ -183,20 +230,23 @@ export function Catalog() {
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-10 sm:gap-x-6 xl:gap-x-8">
               {filteredProducts.map((product) => {
                 const hoverImage = product.imagens[1]?.trim();
-                const hasHoverImage = Boolean(hoverImage && hoverImage !== product.imagens[0]);
+                const hasHoverImage = Boolean(canHover && hoverImage && hoverImage !== product.imagens[0]);
 
                 return (
                   <div key={product.id} className="group relative flex flex-col">
                     <Link to={`/product/${product.id}`} className="block relative aspect-[3/4] bg-neutral-100 overflow-hidden mb-4">
-                      <img
+                      <StoreImage
                         src={product.imagens[0]}
                         alt={product.nome}
+                        sizes="(min-width: 1280px) 30vw, (min-width: 1024px) 33vw, 50vw"
                         className={cn('w-full h-full object-cover transition-opacity duration-500', hasHoverImage && 'group-hover:opacity-0')}
                       />
                       {hasHoverImage && (
-                        <img
+                        <StoreImage
                           src={hoverImage}
                           alt={`${product.nome} alternate`}
+                          sizes="(min-width: 1280px) 30vw, (min-width: 1024px) 33vw, 50vw"
+                          fetchPriority="low"
                           className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
                         />
                       )}
@@ -247,6 +297,36 @@ export function Catalog() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function CategoryFiltersSkeleton() {
+  return (
+    <div className="space-y-3 animate-pulse">
+      {Array.from({ length: 7 }).map((_, index) => (
+        <div
+          key={index}
+          className="h-4 rounded bg-neutral-100"
+          style={{ width: `${60 + ((index % 3) * 12)}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CatalogProductsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-10 sm:gap-x-6 xl:gap-x-8">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="flex flex-col animate-pulse">
+          <div className="aspect-[3/4] bg-gradient-to-br from-neutral-100 via-neutral-200 to-neutral-100 mb-4" />
+          <div className="h-4 w-3/4 mx-auto rounded bg-neutral-200" />
+          <div className="h-6 w-24 mx-auto rounded bg-neutral-100 mt-3" />
+          <div className="h-3 w-28 mx-auto rounded bg-neutral-100 mt-2" />
+          <div className="h-11 w-full rounded bg-neutral-200 mt-4" />
+        </div>
+      ))}
     </div>
   );
 }

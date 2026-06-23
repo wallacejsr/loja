@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useSettings } from './useSettings';
+import { formatCurrencyValue } from '../lib/currency';
 
 export type StorefrontLanguage = 'pt-BR' | 'en-US';
 
@@ -86,6 +87,11 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     categories: 'Categorias',
     all: 'Todos',
     noProductsFound: 'Nenhum produto encontrado com os filtros selecionados.',
+    unableToLoadSection: 'Nao foi possivel carregar esta secao agora.',
+    unableToLoadProducts: 'Nao foi possivel carregar os produtos agora.',
+    unableToLoadRaffles: 'Nao foi possivel carregar os sorteios agora.',
+    unableToLoadCategories: 'Nao foi possivel carregar as categorias agora.',
+    tryAgain: 'Tentar novamente',
     clearFilters: 'Limpar filtros',
     productNotFound: 'Produto nao encontrado',
     backToStore: 'Voltar para a loja',
@@ -136,6 +142,11 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     orContinueShopping: 'Ou continuar comprando',
     couponApplied: 'Cupom aplicado com sucesso.',
     invalidCoupon: 'Cupom invalido.',
+    savedShippingAddress: 'Endereco salvo',
+    shippingUsingSavedAddress: 'Usando o endereco salvo da sua conta para calcular o frete.',
+    guestShippingAddress: 'Endereco para frete',
+    signInForSavedAddress: 'Entre na sua conta para usar um endereco salvo e agilizar o checkout.',
+    shippingAddressEmpty: 'Voce ainda nao possui um endereco salvo.',
     wishlistEmptyTitle: 'Sua lista de desejos esta vazia',
     wishlistEmptySubtitle: 'Salve seus itens favoritos para compra-los mais tarde. Clique no coracao em qualquer produto para adiciona-lo.',
     exploreProducts: 'Explorar Produtos',
@@ -144,7 +155,7 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     removeFromFavorites: 'Remover dos favoritos',
     loyaltyClubTitle: 'Clube de Lealdade',
     rafflesHeroTitle: 'Troque seus pontos por sorte.',
-    rafflesHeroSubtitle: 'Cada R$ 1,00 em compras vira 1 ponto. Acumule e troque por bilhetes para nossos sorteios exclusivos.',
+    rafflesHeroSubtitle: 'Cada compra gera pontos. Acumule e troque por bilhetes para nossos sorteios exclusivos.',
     currentBalance: 'Seu Saldo Atual',
     accumulatedPoints: 'Pontos Acumulados',
     activeRafflesTitle: 'Sorteios Ativos',
@@ -155,7 +166,7 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     noActiveRaffles: 'Nenhum sorteio ativo no momento.',
     howItWorks: 'Como funciona?',
     raffleStepBuy: 'Compre',
-    raffleStepBuyDesc: 'Cada real gasto na loja equivale a 1 ponto de lealdade.',
+    raffleStepBuyDesc: 'Cada compra na loja gera pontos de lealdade conforme o valor gasto.',
     raffleStepAccumulate: 'Acumule',
     raffleStepAccumulateDesc: 'Seus pontos ficam salvos na sua conta.',
     raffleStepJoin: 'Participe',
@@ -173,6 +184,7 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     noAccountSubtitle: 'Cadastre-se para comprar mais rapido, acompanhar seus pedidos e criar sua lista de desejos.',
     createAccount: 'Criar Conta',
     hello: 'Ola,',
+    invalidLoginCredentials: 'E-mail ou senha invalidos.',
     myOrders: 'Meus Pedidos',
     myAddresses: 'Meus Enderecos',
     myData: 'Meus Dados',
@@ -189,7 +201,9 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     fullName: 'Nome Completo',
     cpf: 'CPF',
     cellphone: 'Celular',
+    phoneCountry: 'Pais do telefone',
     birthDate: 'Data de Nascimento',
+    birthDateInvalid: 'Informe uma data de nascimento valida no formato DD/MM/AAAA.',
     gender: 'Genero',
     female: 'Feminino',
     male: 'Masculino',
@@ -220,17 +234,38 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     accessData: 'Dados para Acesso',
     enterYourEmail: 'Digite o seu email',
     confirmEmail: 'Confirmar e-mail',
+    emailConfirmationMismatch: 'Os e-mails informados nao conferem.',
     createPassword: 'Crie uma senha',
     confirmPassword: 'Confirmar senha',
+    passwordConfirmationMismatch: 'As senhas informadas nao conferem.',
+    accountAlreadyExists: 'Ja existe uma conta cadastrada com este e-mail.',
+    accountCreationError: 'Nao foi possivel concluir o cadastro agora.',
     registrationType: 'Tipo de Cadastro',
     individualPerson: 'Pessoa Fisica',
     legalEntity: 'Pessoa Juridica',
+    businessRegistrationUnavailable: 'Cadastro empresarial indisponivel no momento.',
+    usOnlyRegistrationHint: 'Cadastro disponivel apenas para clientes nos Estados Unidos.',
+    usOnlyShippingHint: 'Envios disponiveis apenas para enderecos nos Estados Unidos.',
     personalData: 'Dados Pessoais',
     landline: 'Telefone fixo',
     corporateName: 'Razao Social',
     stateRegistration: 'Inscricao Estadual',
     address: 'Endereco',
+    country: 'Pais',
+    postalCode: 'Codigo postal',
+    stateProvince: 'Estado / Provincia / Regiao',
     dontKnowZipcode: 'Nao sei meu cep',
+    addressFieldsLockedHint: 'Digite um CEP valido para liberar os campos de endereco.',
+    postalFieldsLockedHint: 'Digite um codigo postal valido para liberar os campos de endereco.',
+    addressManualCountryHint: 'Preencha o endereco manualmente para este pais.',
+    zipcodeLookupLoading: 'Buscando CEP...',
+    zipcodeLookupSuccess: 'CEP encontrado. Complete o numero e os detalhes do endereco.',
+    zipcodeLookupNotFound: 'CEP nao encontrado. Preencha o endereco manualmente.',
+    zipcodeLookupError: 'Nao foi possivel buscar o CEP agora. Preencha o endereco manualmente.',
+    postalLookupLoading: 'Buscando codigo postal...',
+    postalLookupSuccess: 'Codigo postal encontrado. Revise os dados e complete o restante do endereco.',
+    postalLookupNotFound: 'Codigo postal nao encontrado. Preencha o endereco manualmente.',
+    postalLookupError: 'Nao foi possivel buscar o codigo postal agora. Preencha o endereco manualmente.',
     reference: 'Referencia',
     selectOption: 'Selecione',
     cancel: 'Cancelar',
@@ -246,6 +281,14 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     deliveryAddressTitle: 'Endereco de Entrega',
     avenue: 'Rua / Avenida',
     shippingOptions: 'Opcoes de Frete',
+    shippingRatesLoading: 'Buscando opcoes de frete...',
+    shippingRatesEstimated: 'Mostrando opcoes estimadas de frete. Conecte um provider como Shippo para tarifas ao vivo.',
+    shippingRatesLive: 'Tarifas ao vivo carregadas.',
+    shippingRatesError: 'Nao foi possivel carregar as opcoes de frete agora.',
+    shippingRatesEmpty: 'Nenhuma opcao de frete disponivel para este destino.',
+    shippingMethodRequired: 'Selecione uma opcao de frete para continuar.',
+    shippingDeliveryWindow: 'Entrega estimada entre {min} e {max} dias uteis',
+    shippingRefresh: 'Atualizar frete',
     businessDays7: 'Ate 7 dias uteis',
     businessDays3: 'Ate 3 dias uteis',
     back: 'Voltar',
@@ -347,6 +390,11 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     categories: 'Categories',
     all: 'All',
     noProductsFound: 'No products found with the selected filters.',
+    unableToLoadSection: 'We could not load this section right now.',
+    unableToLoadProducts: 'We could not load the products right now.',
+    unableToLoadRaffles: 'We could not load the raffles right now.',
+    unableToLoadCategories: 'We could not load the categories right now.',
+    tryAgain: 'Try again',
     clearFilters: 'Clear filters',
     productNotFound: 'Product not found',
     backToStore: 'Back to store',
@@ -397,6 +445,11 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     orContinueShopping: 'Or continue shopping',
     couponApplied: 'Coupon applied successfully.',
     invalidCoupon: 'Invalid coupon.',
+    savedShippingAddress: 'Saved address',
+    shippingUsingSavedAddress: 'Using your saved account address to calculate shipping.',
+    guestShippingAddress: 'Shipping address',
+    signInForSavedAddress: 'Sign in to use a saved address and speed up checkout.',
+    shippingAddressEmpty: 'You do not have a saved address yet.',
     wishlistEmptyTitle: 'Your wishlist is empty',
     wishlistEmptySubtitle: 'Save your favorite items to buy them later. Click the heart on any product to add it.',
     exploreProducts: 'Explore Products',
@@ -405,7 +458,7 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     removeFromFavorites: 'Remove from wishlist',
     loyaltyClubTitle: 'Loyalty Club',
     rafflesHeroTitle: 'Trade your points for luck.',
-    rafflesHeroSubtitle: 'Every R$ 1.00 spent becomes 1 point. Save up and exchange them for tickets in our exclusive raffles.',
+    rafflesHeroSubtitle: 'Every purchase earns loyalty points. Save up and exchange them for tickets in our exclusive raffles.',
     currentBalance: 'Your Current Balance',
     accumulatedPoints: 'Accumulated Points',
     activeRafflesTitle: 'Active Raffles',
@@ -416,7 +469,7 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     noActiveRaffles: 'There are no active raffles at the moment.',
     howItWorks: 'How it works',
     raffleStepBuy: 'Buy',
-    raffleStepBuyDesc: 'Every real spent in the store equals 1 loyalty point.',
+    raffleStepBuyDesc: 'Every purchase in the store earns loyalty points according to the amount spent.',
     raffleStepAccumulate: 'Collect',
     raffleStepAccumulateDesc: 'Your points stay saved in your account.',
     raffleStepJoin: 'Join',
@@ -434,6 +487,7 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     noAccountSubtitle: 'Create an account to shop faster, track your orders, and build your wishlist.',
     createAccount: 'Create Account',
     hello: 'Hello,',
+    invalidLoginCredentials: 'Invalid email or password.',
     myOrders: 'My Orders',
     myAddresses: 'My Addresses',
     myData: 'My Data',
@@ -450,7 +504,9 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     fullName: 'Full Name',
     cpf: 'Tax ID',
     cellphone: 'Mobile',
+    phoneCountry: 'Phone Country',
     birthDate: 'Birth Date',
+    birthDateInvalid: 'Enter a valid birth date in MM/DD/YYYY format.',
     gender: 'Gender',
     female: 'Female',
     male: 'Male',
@@ -481,17 +537,38 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     accessData: 'Access Data',
     enterYourEmail: 'Enter your email',
     confirmEmail: 'Confirm email',
+    emailConfirmationMismatch: 'The email confirmation does not match.',
     createPassword: 'Create a password',
     confirmPassword: 'Confirm password',
+    passwordConfirmationMismatch: 'The password confirmation does not match.',
+    accountAlreadyExists: 'An account with this email already exists.',
+    accountCreationError: 'We could not finish the registration right now.',
     registrationType: 'Registration Type',
     individualPerson: 'Individual',
     legalEntity: 'Company',
+    businessRegistrationUnavailable: 'Business registration is currently unavailable.',
+    usOnlyRegistrationHint: 'Registration is currently available only for customers in the United States.',
+    usOnlyShippingHint: 'Shipping is currently available only for addresses in the United States.',
     personalData: 'Personal Data',
     landline: 'Landline',
     corporateName: 'Legal Name',
     stateRegistration: 'State Registration',
     address: 'Address',
+    country: 'Country',
+    postalCode: 'Postal Code',
+    stateProvince: 'State / Province / Region',
     dontKnowZipcode: "I don't know my zip code",
+    addressFieldsLockedHint: 'Enter a valid zip code to unlock the address fields.',
+    postalFieldsLockedHint: 'Enter a valid postal code to unlock the address fields.',
+    addressManualCountryHint: 'Fill the address manually for this country.',
+    zipcodeLookupLoading: 'Looking up the zip code...',
+    zipcodeLookupSuccess: 'Zip code found. Complete the street number and any extra details.',
+    zipcodeLookupNotFound: 'Zip code not found. Please fill the address manually.',
+    zipcodeLookupError: 'We could not look up the zip code right now. Please fill the address manually.',
+    postalLookupLoading: 'Looking up the postal code...',
+    postalLookupSuccess: 'Postal code found. Review the data and complete the rest of the address.',
+    postalLookupNotFound: 'Postal code not found. Please fill the address manually.',
+    postalLookupError: 'We could not look up the postal code right now. Please fill the address manually.',
     reference: 'Reference',
     selectOption: 'Select',
     cancel: 'Cancel',
@@ -507,6 +584,14 @@ const storefrontTranslations: Record<StorefrontLanguage, TranslationMap> = {
     deliveryAddressTitle: 'Delivery Address',
     avenue: 'Street / Avenue',
     shippingOptions: 'Shipping Options',
+    shippingRatesLoading: 'Loading shipping options...',
+    shippingRatesEstimated: 'Showing estimated shipping options. Connect a provider like Shippo for live carrier rates.',
+    shippingRatesLive: 'Live carrier rates loaded.',
+    shippingRatesError: 'We could not load shipping options right now.',
+    shippingRatesEmpty: 'No shipping options are available for this destination.',
+    shippingMethodRequired: 'Select a shipping option to continue.',
+    shippingDeliveryWindow: 'Estimated delivery between {min} and {max} business days',
+    shippingRefresh: 'Refresh shipping',
     businessDays7: 'Up to 7 business days',
     businessDays3: 'Up to 3 business days',
     back: 'Back',
@@ -550,7 +635,32 @@ export function useStorefront() {
     document.documentElement.lang = locale;
   }, [locale]);
 
-  const dictionary = storefrontTranslations[locale];
+  const formattedPointsBase = useMemo(
+    () => formatCurrencyValue(1, settings.storeCurrency, locale),
+    [locale, settings.storeCurrency],
+  );
+
+  const formattedPointsRate = useMemo(
+    () => new Intl.NumberFormat(locale).format(settings.pointsPerReal),
+    [locale, settings.pointsPerReal],
+  );
+
+  const dictionary = useMemo(() => {
+    const baseDictionary = storefrontTranslations[locale];
+    const pointsSuffix = settings.pointsPerReal === 1 ? '' : 's';
+
+    return {
+      ...baseDictionary,
+      rafflesHeroSubtitle:
+        locale === 'pt-BR'
+          ? `Cada ${formattedPointsBase} em compras gera ${formattedPointsRate} ponto${pointsSuffix}. Acumule e troque por bilhetes para nossos sorteios exclusivos.`
+          : `Every ${formattedPointsBase} spent becomes ${formattedPointsRate} loyalty point${pointsSuffix}. Save up and exchange them for tickets in our exclusive raffles.`,
+      raffleStepBuyDesc:
+        locale === 'pt-BR'
+          ? `Cada ${formattedPointsBase} gasto na loja equivale a ${formattedPointsRate} ponto${pointsSuffix} de lealdade.`
+          : `Every ${formattedPointsBase} spent in the store equals ${formattedPointsRate} loyalty point${pointsSuffix}.`,
+    };
+  }, [formattedPointsBase, formattedPointsRate, locale, settings.pointsPerReal]);
 
   const t = useCallback(
     (key: string, values?: Record<string, string | number>) => interpolate(dictionary[key] || key, values),
@@ -558,12 +668,12 @@ export function useStorefront() {
   );
 
   const formatCurrency = useCallback(
-    (value: number) =>
+    (value: number, currency = settings.storeCurrency) =>
       new Intl.NumberFormat(locale, {
         style: 'currency',
-        currency: 'BRL',
+        currency,
       }).format(value),
-    [locale],
+    [locale, settings.storeCurrency],
   );
 
   const formatDate = useCallback(

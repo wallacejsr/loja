@@ -1,21 +1,34 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ShoppingBag, Search, User, Heart, Menu, X, MessageCircle, Phone, Mail, Instagram, Youtube, Facebook, ChevronDown, Clock, Trophy } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { cn } from '../lib/utils';
 import { useSettings } from '../hooks/useSettings';
 import { useStorefront } from '../hooks/useStorefront';
-import { useStoreData } from '../hooks/useStoreData';
+import { useStoreCategories } from '../hooks/useStoreData';
+import { createContactMessage } from '../lib/storeApi';
+import { getWhatsAppUrl } from '../lib/customerForm';
+import { StoreImage } from './StoreImage';
 
 export function Layout() {
   const { t } = useStorefront();
   const { settings, loading: settingsLoading } = useSettings();
-  const { categories } = useStoreData();
+  const categories = useStoreCategories();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [contactFeedback, setContactFeedback] = useState('');
+  const [contactError, setContactError] = useState('');
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    orderNumber: '',
+    message: '',
+  });
   const [searchQuery, setSearchQuery] = useState('');
+  const [hoveredDropdownCategoryId, setHoveredDropdownCategoryId] = useState<string | null>(null);
   
   const { cartCount, wishlist } = useCart();
   const location = useLocation();
@@ -24,10 +37,35 @@ export function Layout() {
   const salesWhatsApp = settingsReady ? (settings.supportSalesPhone || settings.phone) : '';
   const sacWhatsApp = settingsReady ? (settings.supportSacPhone || settings.phone) : '';
   const supportEmail = settingsReady ? (settings.supportEmail || settings.email) : '';
-  const salesWhatsAppUrl = salesWhatsApp ? `https://wa.me/55${salesWhatsApp.replace(/\D/g, '')}` : '#';
-  const sacWhatsAppUrl = sacWhatsApp ? `https://wa.me/55${sacWhatsApp.replace(/\D/g, '')}` : '#';
+  const salesWhatsAppUrl = settingsReady
+    ? getWhatsAppUrl(salesWhatsApp, settings.supportSalesPhoneCountry || settings.phoneCountry)
+    : '#';
+  const sacWhatsAppUrl = settingsReady
+    ? getWhatsAppUrl(sacWhatsApp, settings.supportSacPhoneCountry || settings.phoneCountry)
+    : '#';
+  const floatingWhatsAppUrl = settingsReady
+    ? getWhatsAppUrl(salesWhatsApp, settings.supportSalesPhoneCountry || settings.phoneCountry, t('whatsappFloatingMessage'))
+    : '#';
 
   const closeMenu = () => setIsMenuOpen(false);
+
+  const resetContactForm = () => {
+    setContactForm({
+      name: '',
+      email: '',
+      phone: '',
+      orderNumber: '',
+      message: '',
+    });
+    setContactFeedback('');
+    setContactError('');
+    setIsSubmittingContact(false);
+  };
+
+  const closeContactModal = () => {
+    setIsContactModalOpen(false);
+    resetContactForm();
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +76,27 @@ export function Layout() {
     }
   };
 
+  const handleContactChange = (field: keyof typeof contactForm, value: string) => {
+    setContactForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleContactSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setContactError('');
+    setIsSubmittingContact(true);
+
+    try {
+      await createContactMessage(contactForm);
+      setContactFeedback(t('contactSuccess'));
+      setTimeout(() => {
+        closeContactModal();
+      }, 1200);
+    } catch (error) {
+      setContactError(error instanceof Error ? error.message : 'Não foi possível enviar a sua mensagem.');
+      setIsSubmittingContact(false);
+    }
+  };
+
   const activeCategories = categories
     .filter((category) => category.status === 'Ativo')
     .sort((a, b) => a.menuOrder - b.menuOrder || a.nome.localeCompare(b.nome));
@@ -45,10 +104,15 @@ export function Layout() {
   const isAutomaticCategory = (name: string) => automaticCategoryKeys.has(name.trim().toLowerCase());
   const menuCategories = activeCategories.filter((category) => category.showInMenu && !isAutomaticCategory(category.nome));
   const visibleMenuCategories = menuCategories.slice(0, 7);
-  const hiddenMenuCategories = activeCategories.filter((category) => (
-    !isAutomaticCategory(category.nome) &&
-    !visibleMenuCategories.some((visible) => visible.id === category.id)
-  ));
+  const dropdownCategories = activeCategories.filter((category) => !isAutomaticCategory(category.nome));
+  const categoryLink = (categoryName: string, subcategoryName?: string) =>
+    subcategoryName
+      ? `/catalog?category=${encodeURIComponent(categoryName)}&subcategory=${encodeURIComponent(subcategoryName)}`
+      : `/catalog?category=${encodeURIComponent(categoryName)}`;
+  const activeDropdownCategory = useMemo(() => {
+    if (!dropdownCategories.length) return null;
+    return dropdownCategories.find((category) => category.id === hoveredDropdownCategoryId) || dropdownCategories[0];
+  }, [dropdownCategories, hoveredDropdownCategoryId]);
   const automaticMenuLinks = [
     { name: t('menuLaunches'), path: '/catalog?sort=lancamentos', active: location.search.includes('sort=lancamentos') },
     { name: t('menuBestSellers'), path: '/catalog?sort=mais-vendidos', active: location.search.includes('sort=mais-vendidos') },
@@ -56,34 +120,6 @@ export function Layout() {
 
   return (
     <div className="flex flex-col min-h-screen bg-white text-secondary font-sans selection:bg-primary/20 selection:text-primary">
-      {/* Top Banner */}
-      <div className="bg-primary text-white text-xs sm:text-sm py-2 px-4 shadow-sm relative z-50">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="hidden md:flex gap-4">
-            <a href="https://facebook.com/spacodanimoraisitb" target="_blank" rel="noreferrer" className="hover:text-white/80"><Facebook className="w-4 h-4" /></a>
-            <a href="https://youtube.com.br/spacodanimorais" target="_blank" rel="noreferrer" className="hover:text-white/80"><Youtube className="w-4 h-4" /></a>
-            <a href="https://instagram.com/spacodanimorais" target="_blank" rel="noreferrer" className="hover:text-white/80"><Instagram className="w-4 h-4" /></a>
-          </div>
-          <div className="flex justify-center md:justify-end w-full md:w-auto gap-4 md:gap-6 items-center flex-wrap">
-            {settingsReady ? (
-              <>
-                <a href={`tel:${sacWhatsApp.replace(/\D/g, '')}`} className="flex items-center hover:text-white/80 font-medium">
-                  <Phone className="w-3.5 h-3.5 mr-1.5" /> {sacWhatsApp}
-                </a>
-                <a href={salesWhatsAppUrl} target="_blank" rel="noreferrer" className="flex items-center hover:text-white/80 font-medium">
-                  <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> WhatsApp: {salesWhatsApp}
-                </a>
-              </>
-            ) : (
-              <>
-                <div className="h-4 w-32 rounded bg-white/25 animate-pulse" />
-                <div className="h-4 w-40 rounded bg-white/25 animate-pulse" />
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-neutral-100 shadow-sm transition-all md:relative md:top-auto">
         {/* Top Row: Logo, Search, Actions */}
@@ -104,10 +140,12 @@ export function Layout() {
             <div className="flex-shrink-0 flex items-center justify-center lg:justify-start lg:w-auto left-0">
               <Link to="/" className="pointer-events-auto">
                 {settingsReady && settings.logoUrl ? (
-                  <img 
-                    src={settings.logoUrl} 
-                    alt={settings.storeName} 
+                  <StoreImage
+                    src={settings.logoUrl}
+                    alt={settings.storeName}
                     className="h-10 sm:h-12 lg:h-14 object-contain"
+                    loading="eager"
+                    fetchPriority="high"
                   />
                 ) : settingsReady ? (
                   <span className="text-xl sm:text-2xl font-serif font-bold text-secondary uppercase tracking-widest">{settings.storeName}</span>
@@ -198,7 +236,7 @@ export function Layout() {
                          </div>
                        </div>
 
-                       <button onClick={() => { setIsContactModalOpen(true); setIsMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 bg-[#f6f2ec] text-secondary font-bold text-xs uppercase tracking-wider py-3 rounded-sm hover:bg-primary hover:text-white transition-colors mt-2">
+                       <button onClick={() => { resetContactForm(); setIsContactModalOpen(true); setIsMenuOpen(false); }} className="w-full flex items-center justify-center gap-2 bg-[#f6f2ec] text-secondary font-bold text-xs uppercase tracking-wider py-3 rounded-sm hover:bg-primary hover:text-white transition-colors mt-2">
                           <Mail className="w-4 h-4" /> {t('supportSendMessage')}
                        </button>
                     </div>
@@ -259,20 +297,63 @@ export function Layout() {
         <div className="hidden lg:block bg-[#f6f2ec] border-t border-neutral-100">
            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <nav className="flex items-center">
-                <div className="relative group/categories flex items-center gap-2 text-secondary font-bold py-3 pr-6 border-r border-[#e8dccb] cursor-pointer hover:text-primary transition-colors">
+                <div
+                  className="relative group/categories flex items-center gap-2 text-secondary font-bold py-3 pr-6 border-r border-[#e8dccb] cursor-pointer hover:text-primary transition-colors"
+                  onMouseEnter={() => setHoveredDropdownCategoryId(dropdownCategories[0]?.id || null)}
+                >
                   <Menu className="w-5 h-5 text-primary" />
                   <span className="text-sm font-bold uppercase tracking-wider">{t('allCategories')}</span>
                   <ChevronDown className="w-4 h-4 ml-1 text-secondary/50" />
-                  <div className="absolute top-full left-0 w-72 bg-white rounded-b-md shadow-[0_14px_30px_-12px_rgba(0,0,0,0.18)] border border-neutral-100 opacity-0 invisible group-hover/categories:opacity-100 group-hover/categories:visible transition-all duration-200 z-50 py-3">
-                    {hiddenMenuCategories.length ? hiddenMenuCategories.map((category) => (
-                      <Link
-                        key={category.id}
-                        to={`/catalog?category=${encodeURIComponent(category.nome)}`}
-                        className="block px-4 py-2.5 text-[13px] font-semibold uppercase tracking-wide text-secondary hover:text-primary hover:bg-neutral-50 transition-colors"
-                      >
-                        {category.nome}
-                      </Link>
-                    )) : (
+                  <div className="absolute top-full left-0 w-[880px] bg-white rounded-b-md shadow-[0_14px_30px_-12px_rgba(0,0,0,0.18)] border border-neutral-100 opacity-0 invisible group-hover/categories:opacity-100 group-hover/categories:visible transition-all duration-200 z-50 overflow-hidden">
+                    {dropdownCategories.length && activeDropdownCategory ? (
+                      <div className="grid grid-cols-[320px_minmax(0,1fr)] min-h-[420px]">
+                        <div className="border-r border-neutral-100 py-3 max-h-[420px] overflow-y-auto">
+                          {dropdownCategories.map((category) => (
+                            <Link
+                              key={category.id}
+                              to={categoryLink(category.nome)}
+                              onMouseEnter={() => setHoveredDropdownCategoryId(category.id)}
+                              className={cn(
+                                'flex items-center justify-between px-4 py-3 text-[13px] font-semibold uppercase tracking-wide transition-colors',
+                                activeDropdownCategory.id === category.id
+                                  ? 'bg-neutral-100 text-secondary'
+                                  : 'text-secondary hover:text-primary hover:bg-neutral-50',
+                              )}
+                            >
+                              <span>{category.nome}</span>
+                              {category.subcategories.length > 0 && <ChevronDown className="-rotate-90 w-4 h-4 text-neutral-400" />}
+                            </Link>
+                          ))}
+                        </div>
+
+                        <div className="p-6">
+                          <div className="flex items-center justify-between gap-4 border-b border-neutral-100 pb-4 mb-4">
+                            <h4 className="text-3xl font-serif text-secondary uppercase">{activeDropdownCategory.nome}</h4>
+                            <Link to={categoryLink(activeDropdownCategory.nome)} className="text-[11px] font-bold uppercase tracking-wider text-secondary hover:text-primary">
+                              Ver categoria
+                            </Link>
+                          </div>
+
+                          {activeDropdownCategory.subcategories.length ? (
+                            <div className="grid sm:grid-cols-2 gap-x-10 gap-y-4">
+                              {activeDropdownCategory.subcategories.map((subcategory) => (
+                                <Link
+                                  key={subcategory}
+                                  to={categoryLink(activeDropdownCategory.nome, subcategory)}
+                                  className="text-[13px] font-semibold text-secondary hover:text-primary transition-colors"
+                                >
+                                  {subcategory}
+                                </Link>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50 px-4 py-4 text-[12px] font-medium text-neutral-400">
+                              Esta categoria ainda não possui subcategorias cadastradas.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
                       <div className="px-4 py-3 text-[12px] font-medium text-neutral-400">{t('noAdditionalCategories')}</div>
                     )}
                   </div>
@@ -292,16 +373,42 @@ export function Layout() {
                     </Link>
                   ))}
                   {visibleMenuCategories.map((category) => (
-                    <Link
-                      key={category.id}
-                      to={`/catalog?category=${encodeURIComponent(category.nome)}`}
-                      className={cn(
-                        "text-sm font-semibold tracking-wide uppercase text-secondary hover:text-primary transition-colors py-3 flex items-center",
-                         location.search.includes(category.nome) ? 'text-primary' : ''
-                      )}
-                    >
-                      {category.nome}
-                    </Link>
+                    category.subcategories.length ? (
+                      <div key={category.id} className="relative group/submenu">
+                        <Link
+                          to={categoryLink(category.nome)}
+                          className={cn(
+                            'text-sm font-semibold tracking-wide uppercase text-secondary hover:text-primary transition-colors py-3 flex items-center gap-1',
+                            location.search.includes(category.nome) ? 'text-primary' : '',
+                          )}
+                        >
+                          {category.nome}
+                          <ChevronDown className="w-3.5 h-3.5 text-secondary/50" />
+                        </Link>
+                        <div className="absolute top-full left-0 min-w-[240px] bg-white rounded-b-md shadow-[0_14px_30px_-12px_rgba(0,0,0,0.18)] border border-neutral-100 opacity-0 invisible group-hover/submenu:opacity-100 group-hover/submenu:visible transition-all duration-200 z-50 py-2">
+                          {category.subcategories.map((subcategory) => (
+                            <Link
+                              key={subcategory}
+                              to={categoryLink(category.nome, subcategory)}
+                              className="block px-4 py-2.5 text-[13px] font-semibold text-secondary hover:text-primary hover:bg-neutral-50 transition-colors"
+                            >
+                              {subcategory}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <Link
+                        key={category.id}
+                        to={categoryLink(category.nome)}
+                        className={cn(
+                          "text-sm font-semibold tracking-wide uppercase text-secondary hover:text-primary transition-colors py-3 flex items-center",
+                           location.search.includes(category.nome) ? 'text-primary' : ''
+                        )}
+                      >
+                        {category.nome}
+                      </Link>
+                    )
                   ))}
                   <Link
                     to="/sorteios"
@@ -377,14 +484,29 @@ export function Layout() {
               </Link>
             ))}
             {activeCategories.filter((category) => !isAutomaticCategory(category.nome)).map((category) => (
-              <Link
-                key={category.id}
-                to={`/catalog?category=${encodeURIComponent(category.nome)}`}
-                onClick={closeMenu}
-                className="block px-3 py-3 text-sm font-semibold uppercase tracking-wide text-secondary hover:text-primary hover:bg-neutral-50 rounded-md"
-              >
-                {category.nome}
-              </Link>
+              <div key={category.id} className="px-3 py-1">
+                <Link
+                  to={categoryLink(category.nome)}
+                  onClick={closeMenu}
+                  className="block py-2 text-sm font-semibold uppercase tracking-wide text-secondary hover:text-primary hover:bg-neutral-50 rounded-md"
+                >
+                  {category.nome}
+                </Link>
+                {category.subcategories.length > 0 && (
+                  <div className="pl-3 pb-1 space-y-1">
+                    {category.subcategories.map((subcategory) => (
+                      <Link
+                        key={`${category.id}-${subcategory}`}
+                        to={categoryLink(category.nome, subcategory)}
+                        onClick={closeMenu}
+                        className="block py-1.5 text-[12px] font-medium text-neutral-500 hover:text-primary"
+                      >
+                        {subcategory}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
             <Link
               to="/sorteios"
@@ -498,7 +620,7 @@ export function Layout() {
               </p>
               <div className="text-2xl font-bold uppercase tracking-widest opacity-20">
                  {settingsReady && settings.logoUrl ? (
-                   <img src={settings.logoUrl} alt={settings.storeName} className="h-8 object-contain grayscale opacity-50" />
+                   <StoreImage src={settings.logoUrl} alt={settings.storeName} className="h-8 object-contain grayscale opacity-50" />
                  ) : settingsReady ? (
                    settings.storeName
                  ) : (
@@ -512,7 +634,7 @@ export function Layout() {
       {/* WhatsApp Floating Button */}
       {settingsReady && (
         <a
-          href={`${salesWhatsAppUrl}?text=${encodeURIComponent(t('whatsappFloatingMessage'))}`}
+          href={floatingWhatsAppUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="fixed bottom-6 right-6 bg-[#25D366] text-white p-4 rounded-full shadow-xl hover:bg-[#20bd5a] hover:-translate-y-1 transition-all z-40 group flex items-center justify-center"
@@ -525,13 +647,13 @@ export function Layout() {
       {isContactModalOpen && (
          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             {/* Overlay */}
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsContactModalOpen(false)}></div>
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeContactModal}></div>
             
             {/* Modal */}
             <div className="relative bg-white w-full max-w-lg rounded-sm shadow-2xl z-10 flex flex-col">
               {/* Header */}
               <div className="p-6 pb-2 text-center relative border-b border-neutral-100">
-                 <button onClick={() => setIsContactModalOpen(false)} className="absolute right-4 top-4 text-neutral-400 hover:text-secondary transition-colors">
+                 <button onClick={closeContactModal} className="absolute right-4 top-4 text-neutral-400 hover:text-secondary transition-colors">
                     <X className="w-5 h-5" />
                  </button>
                  <h2 className="text-xl font-bold uppercase tracking-wider text-secondary">{t('contactModalTitle')}</h2>
@@ -540,59 +662,50 @@ export function Layout() {
 
               {/* Body */}
               <div className="p-6 overflow-y-auto max-h-[70vh]">
-                 <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setContactFeedback(t('contactSuccess')); setTimeout(() => { setIsContactModalOpen(false); setContactFeedback(''); }, 1200); }}>
+                 <form className="space-y-4" onSubmit={(event) => { void handleContactSubmit(event); }}>
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">{t('contactName')}</label>
-                      <input type="text" required className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
+                      <input type="text" required value={contactForm.name} onChange={(event) => handleContactChange('name', event.target.value)} className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
                     </div>
                     
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">{t('contactEmail')}</label>
-                      <input type="email" required className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
+                      <input type="email" required value={contactForm.email} onChange={(event) => handleContactChange('email', event.target.value)} className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">{t('contactPhone')}</label>
-                        <input type="text" className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
+                        <input type="text" value={contactForm.phone} onChange={(event) => handleContactChange('phone', event.target.value)} className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
                       </div>
                       <div>
                         <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">{t('contactOrderNumber')}</label>
-                        <input type="text" className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
+                        <input type="text" value={contactForm.orderNumber} onChange={(event) => handleContactChange('orderNumber', event.target.value)} className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300" />
                       </div>
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-1">{t('contactMessage')}</label>
-                      <textarea required rows={4} className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300 resize-none"></textarea>
-                    </div>
-
-                    {/* Fake Recaptcha */}
-                    <div className="flex justify-center mt-6">
-                      <div className="border border-neutral-300 bg-neutral-50 px-4 py-3 rounded-sm flex items-center justify-between w-64 shadow-sm">
-                         <div className="flex items-center gap-3">
-                           <input type="checkbox" required className="w-6 h-6 border-neutral-300 text-primary focus:ring-primary rounded-sm cursor-pointer" />
-                           <span className="text-secondary text-sm">{t('contactNotRobot')}</span>
-                         </div>
-                         <div className="flex flex-col items-center">
-                           <img src="https://www.gstatic.com/recaptcha/api2/logo_48.png" alt="reCAPTCHA" className="w-7 h-7" />
-                           <span className="text-[9px] text-neutral-500 mt-0.5">reCAPTCHA</span>
-                         </div>
-                      </div>
+                      <textarea required rows={4} value={contactForm.message} onChange={(event) => handleContactChange('message', event.target.value)} className="w-full border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:border-primary rounded-sm placeholder:text-neutral-300 resize-none"></textarea>
                     </div>
 
                     {/* Actions */}
+                    {contactError && (
+                      <div className="bg-red-50 border border-red-100 text-red-700 text-sm font-semibold text-center px-4 py-3 rounded-sm">
+                        {contactError}
+                      </div>
+                    )}
                     {contactFeedback && (
                       <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm font-semibold text-center px-4 py-3 rounded-sm">
                         {contactFeedback}
                       </div>
                     )}
                     <div className="flex justify-center gap-3 pt-6 pb-2">
-                       <button type="button" onClick={() => setIsContactModalOpen(false)} className="bg-[#f0f0f0] text-secondary font-bold text-sm px-6 py-2.5 rounded-sm hover:bg-neutral-200 transition-colors">
+                       <button type="button" onClick={closeContactModal} className="bg-[#f0f0f0] text-secondary font-bold text-sm px-6 py-2.5 rounded-sm hover:bg-neutral-200 transition-colors">
                           {t('close')}
                        </button>
-                       <button type="submit" className="bg-[#c29656] text-white font-bold text-sm px-6 py-2.5 rounded-sm hover:bg-[#a67c42] transition-colors">
-                          {t('send')}
+                       <button type="submit" disabled={isSubmittingContact || Boolean(contactFeedback)} className="bg-[#c29656] text-white font-bold text-sm px-6 py-2.5 rounded-sm hover:bg-[#a67c42] transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                          {isSubmittingContact ? `${t('send')}...` : t('send')}
                        </button>
                     </div>
                  </form>

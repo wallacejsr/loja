@@ -3,7 +3,8 @@ import { X, Save, Box, DollarSign, Image as ImageIcon, Info, Plus, Trash2, Swatc
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { showToast } from '../../lib/adminUtils';
-import { useStoreData } from '../../hooks/useStoreData';
+import { useStoreActions, useStoreCategories } from '../../hooks/useStoreData';
+import { useAdminCurrency } from '../../hooks/useAdminCurrency';
 import { uploadProductImage } from '../../lib/storeApi';
 import { Product } from '../../data/mockData';
 
@@ -25,6 +26,7 @@ interface PendingImage {
 const defaultSizes = ['PP', 'P', 'M', 'G', 'GG', 'XG', '34', '36', '38', '40', '42', '44', '46'];
 
 export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
+  const { currencyCode } = useAdminCurrency();
   const [activeTab, setActiveTab] = useState<TabType>('info');
   const [isSaving, setIsSaving] = useState(false);
   const [images, setImages] = useState<PendingImage[]>([]);
@@ -37,15 +39,18 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
     nome: '',
     descricao: '',
     categoria: '',
+    subcategoria: '',
     sku: '',
     preco: '',
     precoPromocional: '',
     estoque: '',
+    shippingWeightGrams: '500',
     lancamento: false,
     maisVendido: false,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { categories, addProduct, editProduct } = useStoreData();
+  const categories = useStoreCategories();
+  const { addProduct, editProduct } = useStoreActions();
   const isEditing = Boolean(product);
 
   const tabs = [
@@ -56,6 +61,11 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
   ];
 
   const categoryOptions = useMemo(() => categories.map((category) => category.nome), [categories]);
+  const selectedCategory = useMemo(
+    () => categories.find((category) => category.nome === formData.categoria) || null,
+    [categories, formData.categoria],
+  );
+  const subcategoryOptions = selectedCategory?.subcategories || [];
 
   const releaseImagePreviews = (items: PendingImage[]) => {
     items.forEach((image) => {
@@ -70,10 +80,12 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
       nome: '',
       descricao: '',
       categoria: '',
+      subcategoria: '',
       sku: '',
       preco: '',
       precoPromocional: '',
       estoque: '',
+      shippingWeightGrams: '500',
       lancamento: false,
       maisVendido: false,
     });
@@ -95,10 +107,12 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
         nome: '',
         descricao: '',
         categoria: '',
+        subcategoria: '',
         sku: '',
         preco: '',
         precoPromocional: '',
         estoque: '',
+        shippingWeightGrams: '500',
         lancamento: false,
         maisVendido: false,
       });
@@ -120,10 +134,12 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
       nome: product.nome,
       descricao: product.descricao,
       categoria: product.categoria,
+      subcategoria: product.subcategoria || '',
       sku: product.id,
       preco: String(product.preco),
       precoPromocional: product.precoPromocional ? String(product.precoPromocional) : '',
       estoque: String(product.estoque),
+      shippingWeightGrams: String(product.shippingWeightGrams || 500),
       lancamento: Boolean(product.lancamento),
       maisVendido: Boolean(product.maisVendido),
     });
@@ -164,14 +180,14 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
 
   const toggleSize = (size: string) => {
     setIsOneSize(false);
-    setSelectedSizes((current) => current.includes(size) ? current.filter((item) => item !== size) : [...current, size]);
+    setSelectedSizes((current) => (current.includes(size) ? current.filter((item) => item !== size) : [...current, size]));
   };
 
   const addCustomSize = () => {
     const size = customSize.trim();
     if (!size) return;
     setIsOneSize(false);
-    setSelectedSizes((current) => current.includes(size) ? current : [...current, size]);
+    setSelectedSizes((current) => (current.includes(size) ? current : [...current, size]));
     setCustomSize('');
   };
 
@@ -213,22 +229,21 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
 
     setIsSaving(true);
     try {
-      const imageUrls = await Promise.all(images.map((image) => (
-        image.existingUrl || (image.file ? uploadProductImage(image.file) : '')
-      )));
+      const imageUrls = await Promise.all(images.map((image) => image.existingUrl || (image.file ? uploadProductImage(image.file) : '')));
       const payload = {
         id: formData.sku || undefined,
         nome: formData.nome,
         preco: Number(formData.preco),
         precoPromocional: formData.precoPromocional ? Number(formData.precoPromocional) : undefined,
         categoria: formData.categoria as Product['categoria'],
-        subcategoria: '',
+        subcategoria: formData.subcategoria,
         imagens: imageUrls,
         descricao: formData.descricao,
         composicao: '',
         tamanhos: sizesToSave,
         cores: colors,
         estoque: Number(formData.estoque),
+        shippingWeightGrams: Number(formData.shippingWeightGrams || 500),
         lancamento: formData.lancamento,
         maisVendido: formData.maisVendido,
       };
@@ -296,12 +311,7 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                 >
                   <tab.icon className="w-4 h-4" />
                   {tab.name}
-                  {activeTab === tab.id && (
-                    <motion.div
-                      layoutId="activeTab"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-neutral-900"
-                    />
-                  )}
+                  {activeTab === tab.id && <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-neutral-900" />}
                 </button>
               ))}
             </div>
@@ -321,6 +331,7 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                         className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
                       />
                     </div>
+
                     <div className="space-y-2">
                       <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Descrição Curta</label>
                       <textarea
@@ -331,22 +342,43 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                         className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] resize-none"
                       />
                     </div>
+
                     <div className="grid sm:grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Categoria</label>
                         <select
                           required
                           value={formData.categoria}
-                          onChange={(e) => setFormData((prev) => ({ ...prev, categoria: e.target.value }))}
+                          onChange={(e) => setFormData((prev) => ({ ...prev, categoria: e.target.value, subcategoria: '' }))}
                           className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] appearance-none"
                         >
                           <option value="">Selecione...</option>
                           {categoryOptions.map((category) => (
-                            <option key={category} value={category}>{category}</option>
+                            <option key={category} value={category}>
+                              {category}
+                            </option>
                           ))}
                         </select>
                       </div>
+
                       <div className="space-y-2">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Subcategoria</label>
+                        <select
+                          value={formData.subcategoria}
+                          onChange={(e) => setFormData((prev) => ({ ...prev, subcategoria: e.target.value }))}
+                          disabled={!subcategoryOptions.length}
+                          className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] appearance-none disabled:opacity-60"
+                        >
+                          <option value="">{subcategoryOptions.length ? 'Selecione...' : 'Sem subcategorias cadastradas'}</option>
+                          {subcategoryOptions.map((subcategory) => (
+                            <option key={subcategory} value={subcategory}>
+                              {subcategory}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2 sm:col-span-2">
                         <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">SKU / Referência</label>
                         <input
                           type="text"
@@ -365,7 +397,7 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                 <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                   <div className="grid sm:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Preço de Venda (R$)</label>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">{`Preço de Venda (${currencyCode})`}</label>
                       <input
                         type="number"
                         min="0"
@@ -378,7 +410,7 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Preço Promocional (R$)</label>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">{`Preço Promocional (${currencyCode})`}</label>
                       <input
                         type="number"
                         min="0"
@@ -404,6 +436,20 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                   </div>
 
                   <div className="grid sm:grid-cols-2 gap-4 border-t border-neutral-100 pt-6">
+                    <div className="space-y-2 sm:col-span-2">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Peso para Frete (g)</label>
+                      <input
+                        type="number"
+                        min="50"
+                        step="10"
+                        value={formData.shippingWeightGrams}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, shippingWeightGrams: e.target.value }))}
+                        placeholder="500"
+                        className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px]"
+                      />
+                      <p className="text-[11px] text-neutral-400">Usado no calculo das opcoes de frete internacional.</p>
+                    </div>
+
                     <label className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-100 bg-neutral-50/60 px-4 py-4 cursor-pointer hover:bg-neutral-50 transition-colors">
                       <div>
                         <span className="block text-[12px] font-bold text-neutral-900">Marcar como lançamento</span>
@@ -466,10 +512,10 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                               type="button"
                               onClick={() => toggleSize(size)}
                               className={cn(
-                                "h-10 rounded-lg border text-[12px] font-bold transition-colors",
+                                'h-10 rounded-lg border text-[12px] font-bold transition-colors',
                                 selectedSizes.includes(size)
-                                  ? "bg-neutral-950 text-white border-neutral-950"
-                                  : "bg-white text-neutral-700 border-neutral-200 hover:border-neutral-900"
+                                  ? 'bg-neutral-950 text-white border-neutral-950'
+                                  : 'bg-white text-neutral-700 border-neutral-200 hover:border-neutral-900',
                               )}
                             >
                               {size}

@@ -5,12 +5,14 @@ import { cn } from '../lib/utils';
 import { useCart } from '../context/CartContext';
 import { useSettings } from '../hooks/useSettings';
 import { useStorefront } from '../hooks/useStorefront';
-import { useStoreData } from '../hooks/useStoreData';
+import { useStoreProducts } from '../hooks/useStoreData';
+import { getWhatsAppUrl } from '../lib/customerForm';
+import { StoreImage } from '../components/StoreImage';
 
 export function ProductDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { products } = useStoreData();
+  const products = useStoreProducts();
   const product = products.find((p) => p.id === id);
   const { addToCart, wishlist, toggleWishlist } = useCart();
   const { settings } = useSettings();
@@ -55,7 +57,11 @@ export function ProductDetails() {
     return (sum / reviews.length).toFixed(1);
   };
 
-  const whatsappMessage = encodeURIComponent(`Hello! I am interested in ${product.nome} (ID: ${product.id}). Is it available?`);
+  const whatsappUrl = getWhatsAppUrl(
+    settings.supportSalesPhone || settings.phone,
+    settings.supportSalesPhoneCountry || settings.phoneCountry,
+    `Hello! I am interested in ${product.nome} (ID: ${product.id}). Is it available?`,
+  );
   const related = products.filter((p) => p.categoria === product.categoria && p.id !== product.id).slice(0, 4);
 
   return (
@@ -64,6 +70,17 @@ export function ProductDetails() {
         <Link to="/" className="hover:text-neutral-900 transition-colors">{t('home')}</Link>
         <ChevronRight className="w-3 h-3 mx-2" />
         <Link to={`/catalog?category=${product.categoria}`} className="hover:text-secondary transition-colors">{product.categoria}</Link>
+        {product.subcategoria && (
+          <>
+            <ChevronRight className="w-3 h-3 mx-2" />
+            <Link
+              to={`/catalog?category=${encodeURIComponent(product.categoria)}&subcategory=${encodeURIComponent(product.subcategoria)}`}
+              className="hover:text-secondary transition-colors"
+            >
+              {product.subcategoria}
+            </Link>
+          </>
+        )}
         <ChevronRight className="w-3 h-3 mx-2" />
         <span className="text-secondary">{product.nome}</span>
       </nav>
@@ -77,12 +94,19 @@ export function ProductDetails() {
                 onClick={() => setMainImage(img)}
                 className={cn('relative aspect-[3/4] w-20 sm:w-full overflow-hidden bg-neutral-100', mainImage === img ? 'ring-1 ring-primary' : 'opacity-70 hover:opacity-100 transition-opacity')}
               >
-                <img src={img} alt={`Thumb ${idx}`} className="absolute inset-0 w-full h-full object-cover" />
+                <StoreImage src={img} alt={`Thumb ${idx}`} className="absolute inset-0 w-full h-full object-cover" sizes="96px" />
               </button>
             ))}
           </div>
           <div className="relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden group cursor-zoom-in">
-            <img src={mainImage || product.imagens[0]} alt={product.nome} className="absolute inset-0 w-full h-full object-cover" />
+            <StoreImage
+              src={mainImage || product.imagens[0]}
+              alt={product.nome}
+              className="absolute inset-0 w-full h-full object-cover"
+              sizes="(min-width: 1024px) 50vw, 100vw"
+              loading="eager"
+              fetchPriority="high"
+            />
             <div className="absolute inset-0 bg-black/0 transition-colors duration-300" />
           </div>
         </div>
@@ -201,7 +225,7 @@ export function ProductDetails() {
           </div>
 
           <a
-            href={`https://wa.me/5564992023191?text=${whatsappMessage}`}
+            href={whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center w-full bg-[#25D366] text-white font-bold uppercase tracking-wider text-sm py-3 px-8 hover:bg-[#20bd5a] transition-colors mb-8"
@@ -252,7 +276,12 @@ export function ProductDetails() {
             {related.map((relatedProduct) => (
               <div key={relatedProduct.id} className="group relative flex flex-col">
                 <Link to={`/product/${relatedProduct.id}`} className="block relative aspect-[3/4] bg-neutral-100 overflow-hidden mb-4">
-                  <img src={relatedProduct.imagens[0]} alt={relatedProduct.nome} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                  <StoreImage
+                    src={relatedProduct.imagens[0]}
+                    alt={relatedProduct.nome}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    sizes="(min-width: 1280px) 23vw, (min-width: 768px) 25vw, 50vw"
+                  />
                 </Link>
                 <Link to={`/product/${relatedProduct.id}`} className="flex flex-col flex-1">
                   <h3 className="text-sm font-medium text-neutral-900 mb-1">{relatedProduct.nome}</h3>

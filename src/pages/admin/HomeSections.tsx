@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Save, Home as HomeIcon, LayoutList, Plus, Trash2, Image as ImageIcon } from 'lucide-react';
 import { showToast } from '../../lib/adminUtils';
-import { useStoreData } from '../../hooks/useStoreData';
+import {
+  useStoreActions,
+  useStoreCategories,
+  useStoreHomeCards,
+  useStoreHomeSections,
+} from '../../hooks/useStoreData';
 import { HomeCard, HomeCardInput, HomeSection, HomeSectionInput, HomeSectionSource } from '../../lib/storeApi';
 
 const sourceLabels: Record<HomeSectionSource, string> = {
@@ -44,15 +49,10 @@ const emptyCard = (position: number): HomeCardInput => ({
 });
 
 export function HomeSections() {
-  const {
-    homeSections,
-    homeCards,
-    categories,
-    editHomeSection,
-    addHomeCard,
-    editHomeCard,
-    removeHomeCard,
-  } = useStoreData();
+  const homeSections = useStoreHomeSections();
+  const homeCards = useStoreHomeCards();
+  const categories = useStoreCategories();
+  const { editHomeSection, addHomeCard, editHomeCard, removeHomeCard } = useStoreActions();
   const [drafts, setDrafts] = useState<Record<string, HomeSectionInput>>({});
   const [cardDrafts, setCardDrafts] = useState<Record<string, HomeCardInput>>({});
   const [newCard, setNewCard] = useState<HomeCardInput>(() => emptyCard(1));

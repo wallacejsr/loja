@@ -3,7 +3,7 @@ import { Plus, Edit, Trash2, Search, Link as LinkIcon, Menu, MoreHorizontal, Ale
 import { AnimatePresence, motion } from 'motion/react';
 import { showToast } from '../../lib/adminUtils';
 import { CategoryModal } from '../../components/admin/CategoryModal';
-import { useStoreData } from '../../hooks/useStoreData';
+import { useStoreActions, useStoreCategories } from '../../hooks/useStoreData';
 import { CategoryInput, StoreCategory } from '../../lib/storeApi';
 
 export function Categories() {
@@ -12,14 +12,18 @@ export function Categories() {
   const [selectedCategory, setSelectedCategory] = useState<StoreCategory | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<StoreCategory | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const { categories, addCategory, editCategory, removeCategory } = useStoreData();
+  const categories = useStoreCategories();
+  const { addCategory, editCategory, removeCategory } = useStoreActions();
 
   const menuCandidates = useMemo(() => categories
     .filter((categoria) => categoria.status === 'Ativo' && categoria.showInMenu)
     .sort((a, b) => a.menuOrder - b.menuOrder || a.nome.localeCompare(b.nome)), [categories]);
   const visibleMenuIds = new Set(menuCandidates.slice(0, 7).map((categoria) => categoria.id));
   const overflowMenuIds = new Set(menuCandidates.slice(7).map((categoria) => categoria.id));
-  const filteredCategories = categories.filter((categoria) => categoria.nome.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredCategories = categories.filter((categoria) => {
+    const term = searchTerm.toLowerCase();
+    return categoria.nome.toLowerCase().includes(term) || categoria.subcategories.some((subcategory) => subcategory.toLowerCase().includes(term));
+  });
 
   const openNewCategory = () => {
     setSelectedCategory(null);
@@ -69,7 +73,7 @@ export function Categories() {
         </button>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-neutral-200/40 p-5">
           <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Menu principal</p>
           <p className="text-2xl font-bold text-neutral-900 mt-1">{Math.min(menuCandidates.length, 7)} / 7</p>
@@ -81,6 +85,10 @@ export function Categories() {
         <div className="bg-white rounded-2xl border border-neutral-200/40 p-5">
           <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Entram no dropdown</p>
           <p className="text-2xl font-bold text-neutral-900 mt-1">{overflowMenuIds.size}</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-neutral-200/40 p-5">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Subcategorias cadastradas</p>
+          <p className="text-2xl font-bold text-neutral-900 mt-1">{categories.reduce((total, categoria) => total + categoria.subcategories.length, 0)}</p>
         </div>
       </div>
 
@@ -179,6 +187,7 @@ export function Categories() {
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Ordem</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Home</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Status</th>
+                <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Subcategorias</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Produtos</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">Ações</th>
               </tr>
@@ -224,6 +233,24 @@ export function Categories() {
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${categoria.status === 'Ativo' ? 'bg-emerald-50 text-emerald-600' : 'bg-neutral-100 text-neutral-600'}`}>
                       {categoria.status}
                     </span>
+                  </td>
+                  <td className="py-4 px-6 text-[13px] text-neutral-600">
+                    {categoria.subcategories.length ? (
+                      <div className="flex flex-wrap gap-1.5 max-w-[260px]">
+                        {categoria.subcategories.slice(0, 3).map((subcategory) => (
+                          <span key={subcategory} className="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-neutral-100 text-neutral-600">
+                            {subcategory}
+                          </span>
+                        ))}
+                        {categoria.subcategories.length > 3 && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold bg-neutral-100 text-neutral-500">
+                            +{categoria.subcategories.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-neutral-400">Sem subcategorias</span>
+                    )}
                   </td>
                   <td className="py-4 px-6 text-[13px] text-neutral-600">
                     {categoria.productCount || 0}

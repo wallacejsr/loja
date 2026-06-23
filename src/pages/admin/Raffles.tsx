@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { showToast } from '../../lib/adminUtils';
 import { cn } from '../../lib/utils';
 import { RaffleModal } from '../../components/admin/RaffleModal';
-import { useStoreData } from '../../hooks/useStoreData';
+import { useStoreActions, useStoreRaffles } from '../../hooks/useStoreData';
 import { Raffle, RaffleInput } from '../../lib/storeApi';
 
 export function AdminRaffles() {
@@ -13,7 +13,8 @@ export function AdminRaffles() {
   const [selectedRaffle, setSelectedRaffle] = useState<Raffle | null>(null);
   const [raffleToDelete, setRaffleToDelete] = useState<Raffle | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const { raffles, addRaffle, editRaffle, removeRaffle } = useStoreData();
+  const raffles = useStoreRaffles();
+  const { addRaffle, editRaffle, removeRaffle } = useStoreActions();
 
   const filteredRaffles = useMemo(() => raffles.filter((raffle) => (
     raffle.title.toLowerCase().includes(searchTerm.toLowerCase()) ||

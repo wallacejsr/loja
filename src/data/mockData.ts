@@ -24,6 +24,7 @@ export interface Product {
   maisVendido?: boolean;
   lancamento?: boolean;
   estoque: number;
+  shippingWeightGrams?: number;
 }
 
 export const categorias: { nome: Category; imagem: string }[] = [

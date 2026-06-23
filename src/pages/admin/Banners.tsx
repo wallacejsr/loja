@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { Plus, Edit, Trash2, MoveUp, MoveDown, Image as ImageIcon } from 'lucide-react';
 import { showToast } from '../../lib/adminUtils';
 import { BannerModal } from '../../components/admin/BannerModal';
-import { useStoreData } from '../../hooks/useStoreData';
+import { useStoreActions, useStoreBanners } from '../../hooks/useStoreData';
 
 export function Banners() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { banners, addBanner, removeBanner, reorderBanners } = useStoreData();
+  const banners = useStoreBanners();
+  const { addBanner, removeBanner, reorderBanners } = useStoreActions();
 
   const handleAction = (action: string, title?: string) => {
     showToast(`${action}${title ? `: ${title}` : ''}`);

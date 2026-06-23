@@ -4,12 +4,15 @@ import { Heart } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { cn } from '../lib/utils';
 import { useStorefront } from '../hooks/useStorefront';
-import { useStoreData } from '../hooks/useStoreData';
+import { useStoreProducts } from '../hooks/useStoreData';
+import { useCanHover } from '../hooks/useCanHover';
+import { StoreImage } from '../components/StoreImage';
 
 export function Wishlist() {
   const { wishlist, toggleWishlist } = useCart();
-  const { products } = useStoreData();
+  const products = useStoreProducts();
   const { t, formatCurrency } = useStorefront();
+  const canHover = useCanHover();
   const wishlistProducts = products.filter((product) => wishlist.includes(product.id));
 
   if (wishlistProducts.length === 0) {
@@ -37,20 +40,23 @@ export function Wishlist() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-10 sm:gap-x-6 xl:gap-x-8">
         {wishlistProducts.map((product) => {
           const hoverImage = product.imagens[1]?.trim();
-          const hasHoverImage = Boolean(hoverImage && hoverImage !== product.imagens[0]);
+          const hasHoverImage = Boolean(canHover && hoverImage && hoverImage !== product.imagens[0]);
 
           return (
             <div key={product.id} className="group relative flex flex-col">
               <Link to={`/product/${product.id}`} className="block relative aspect-[3/4] bg-neutral-100 overflow-hidden mb-4">
-                <img
+                <StoreImage
                   src={product.imagens[0]}
                   alt={product.nome}
+                  sizes="(min-width: 1280px) 23vw, (min-width: 1024px) 25vw, 50vw"
                   className={cn('w-full h-full object-cover transition-opacity duration-500', hasHoverImage && 'group-hover:opacity-0')}
                 />
                 {hasHoverImage && (
-                  <img
+                  <StoreImage
                     src={hoverImage}
                     alt={`${product.nome} alternate`}
+                    sizes="(min-width: 1280px) 23vw, (min-width: 1024px) 25vw, 50vw"
+                    fetchPriority="low"
                     className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
                   />
                 )}
