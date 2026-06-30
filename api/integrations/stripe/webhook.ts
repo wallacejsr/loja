@@ -290,7 +290,6 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
       if (sessionSnapshot && isHandledCheckoutEvent(eventType)) {
         await applyStripeWebhookSessionSnapshot({
           ...sessionSnapshot,
-          mode: verifiedSecret.mode,
           processedAt,
         });
       }
@@ -305,7 +304,7 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
       eventId: String(event.id || ''),
       eventType,
       livemode: Boolean(event.livemode),
-      webhookMode: verifiedSecret.mode,
+      webhookMode: Boolean(event.livemode) ? 'live' : 'test',
       webhookSource: verifiedSecret.source,
       handled: isHandledCheckoutEvent(eventType),
       orderNumber: sessionSnapshot?.orderNumber || '',

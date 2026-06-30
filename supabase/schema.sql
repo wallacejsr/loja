@@ -253,6 +253,7 @@ create table if not exists public.stripe_checkout_orders (
   discount numeric(10, 2) not null default 0,
   total numeric(10, 2) not null default 0,
   shipping_method text default '',
+  payment_method text not null default 'Stripe Checkout',
   customer jsonb not null default '{}'::jsonb,
   shipping_address jsonb not null default '{}'::jsonb,
   items jsonb not null default '[]'::jsonb,
@@ -261,9 +262,17 @@ create table if not exists public.stripe_checkout_orders (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   paid_at timestamptz,
+  shipped_at timestamptz,
+  delivered_at timestamptz,
   last_event_id text default '',
-  last_event_type text default ''
+  last_event_type text default '',
+  logs jsonb not null default '[]'::jsonb
 );
+
+alter table public.stripe_checkout_orders add column if not exists payment_method text not null default 'Stripe Checkout';
+alter table public.stripe_checkout_orders add column if not exists shipped_at timestamptz;
+alter table public.stripe_checkout_orders add column if not exists delivered_at timestamptz;
+alter table public.stripe_checkout_orders add column if not exists logs jsonb not null default '[]'::jsonb;
 
 create table if not exists public.stripe_webhook_logs (
   event_id text primary key,

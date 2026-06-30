@@ -62,6 +62,85 @@ export type StripeConnectionTestResponse = {
   timestamp: string;
 };
 
+export type StripeTrackedOrderStatus =
+  | 'Aguardando Pagamento'
+  | 'Pago'
+  | 'Em Separacao'
+  | 'Em Separação'
+  | 'Em SeparaÃ§Ã£o'
+  | 'Enviado'
+  | 'Entregue'
+  | 'Cancelado';
+
+export type StripeTrackedAdminOrder = {
+  customer: {
+    cpf?: string;
+    documentLabel?: string;
+    email: string;
+    name: string;
+    phone: string;
+    phoneCountry?: string;
+    phoneE164?: string;
+  };
+  discount: number;
+  history: {
+    createdAt: string;
+    deliveredAt?: string;
+    paidAt?: string;
+    shippedAt?: string;
+  };
+  id: string;
+  items: Array<{
+    id: string;
+    name: string;
+    quantity: number;
+    sku: string;
+    subtotal: number;
+    unitPrice: number;
+  }>;
+  logs: Array<{
+    action: string;
+    dateTime: string;
+    id: string;
+    ip: string;
+    user: string;
+  }>;
+  orderNumber: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  purchaseDate: string;
+  sessionStatus: string;
+  shipping: number;
+  shippingAddress: {
+    cep: string;
+    city: string;
+    complement?: string;
+    country?: string;
+    district: string;
+    number: string;
+    state: string;
+    street: string;
+  };
+  source: 'stripe-server';
+  status: StripeTrackedOrderStatus;
+  stripeMode: StripeMode;
+  subtotal: number;
+  total: number;
+};
+
+export type StripeTrackedOrdersResponse = {
+  backend: 'file' | 'supabase';
+  orders: StripeTrackedAdminOrder[];
+  success: true;
+  timestamp: string;
+};
+
+export type StripeTrackedOrderStatusUpdateResponse = {
+  order: StripeTrackedAdminOrder;
+  success: true;
+  timestamp: string;
+};
+
 export type SaveStripeCredentialsInput = {
   mode: StripeMode;
   publishableKey?: string;
@@ -111,5 +190,20 @@ export async function testStripeConnection(mode: StripeMode) {
   return requestStripeAdminApi<StripeConnectionTestResponse>('/api/integrations/stripe/test-connection', {
     method: 'POST',
     body: JSON.stringify({ mode }),
+  });
+}
+
+export async function getStripeTrackedOrders() {
+  return requestStripeAdminApi<StripeTrackedOrdersResponse>('/api/integrations/stripe/admin/orders');
+}
+
+export async function updateStripeTrackedOrderStatus(orderNumber: string, status: StripeTrackedOrderStatus, user = 'Admin Loja') {
+  return requestStripeAdminApi<StripeTrackedOrderStatusUpdateResponse>('/api/integrations/stripe/admin/order-status', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      orderNumber,
+      status,
+      user,
+    }),
   });
 }

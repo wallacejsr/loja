@@ -17,8 +17,14 @@ import { type AddressCountryCode, getAdminTaxIdLabel, getPhoneDisplay, getWhatsA
 import { ADMIN_ORDERS_STORAGE_KEY } from '../../lib/adminDataBridge';
 import { useAdminCurrency } from '../../hooks/useAdminCurrency';
 import { useDeferredSearchTerm } from '../../hooks/useDeferredSearchTerm';
+import {
+  getStripeTrackedOrders,
+  updateStripeTrackedOrderStatus,
+  type StripeTrackedAdminOrder,
+} from '../../lib/stripeAdminApi';
 
 type OrderStatus =
+  | StripeTrackedAdminOrder['status']
   | 'Aguardando Pagamento'
   | 'Pago'
   | 'Em Separação'
@@ -51,7 +57,7 @@ type OrderItem = {
 };
 
 type OrderAddress = {
-  country?: AddressCountryCode;
+  country?: AddressCountryCode | string;
   cep: string;
   street: string;
   number: string;
@@ -66,18 +72,21 @@ type OrderCustomer = {
   name: string;
   email: string;
   phone: string;
-  phoneCountry?: AddressCountryCode;
+  phoneCountry?: AddressCountryCode | string;
   phoneE164?: string;
   cpf?: string;
 };
 
 type AdminOrder = {
+  dataSource?: 'legacy-local' | 'stripe-server';
   id: string;
   orderNumber: string;
   purchaseDate: string;
   status: OrderStatus;
   total: number;
   paymentMethod: string;
+  paymentStatus?: string;
+  sessionStatus?: string;
   customer: OrderCustomer;
   shippingAddress: OrderAddress;
   items: OrderItem[];
@@ -86,6 +95,8 @@ type AdminOrder = {
   discount: number;
   history: OrderHistory;
   logs: OrderLog[];
+  source?: 'stripe-server';
+  stripeMode?: 'live' | 'test';
 };
 
 const statusOptions: OrderStatus[] = [
@@ -332,7 +343,7 @@ function getOrderDocumentLabel(order: AdminOrder) {
   return order.customer.documentLabel || getAdminTaxIdLabel(order.shippingAddress.country, 'F');
 }
 
-const statusTone: Record<OrderStatus, string> = {
+const statusTone: Record<string, string> = {
   'Aguardando Pagamento': 'bg-amber-50 text-amber-600',
   Pago: 'bg-emerald-50 text-emerald-600',
   'Em Separação': 'bg-violet-50 text-violet-600',
@@ -352,28 +363,108 @@ const shortDateFormatter = new Intl.DateTimeFormat('pt-BR', {
 
 const adminUserName = 'Admin Loja';
 
+function normalizeStatusKey(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function withOrderSource(order: AdminOrder, dataSource: 'legacy-local' | 'stripe-server'): AdminOrder {
+  return {
+    ...order,
+    dataSource,
+  };
+}
+
+function loadCachedOrders(): AdminOrder[] {
+  if (typeof window === 'undefined') {
+    return initialOrders.map((order) => withOrderSource(order, 'legacy-local'));
+  }
+
+  try {
+    const storedOrders = window.localStorage.getItem(ADMIN_ORDERS_STORAGE_KEY);
+
+    if (!storedOrders) {
+      return initialOrders.map((order) => withOrderSource(order, 'legacy-local'));
+    }
+
+    const parsed = JSON.parse(storedOrders) as AdminOrder[];
+    return Array.isArray(parsed)
+      ? parsed.map((order) => withOrderSource(order, order.dataSource || 'legacy-local'))
+      : initialOrders.map((order) => withOrderSource(order, 'legacy-local'));
+  } catch (error) {
+    console.error('Falha ao carregar pedidos do painel', error);
+    return initialOrders.map((order) => withOrderSource(order, 'legacy-local'));
+  }
+}
+
+function mergeOrders(serverOrders: StripeTrackedAdminOrder[], cachedOrders: AdminOrder[]) {
+  const merged = new Map<string, AdminOrder>();
+
+  for (const order of cachedOrders) {
+    merged.set(order.orderNumber, withOrderSource(order, order.dataSource || 'legacy-local'));
+  }
+
+  for (const order of serverOrders) {
+    merged.set(order.orderNumber, {
+      ...order,
+      dataSource: 'stripe-server',
+    });
+  }
+
+  return [...merged.values()].sort(
+    (left, right) => new Date(right.purchaseDate).getTime() - new Date(left.purchaseDate).getTime(),
+  );
+}
+
+function resolveStatusTone(status: string) {
+  if (statusTone[status]) {
+    return statusTone[status];
+  }
+
+  if (normalizeStatusKey(status) === 'em separacao') {
+    return 'bg-violet-50 text-violet-600';
+  }
+
+  return 'bg-neutral-100 text-neutral-600';
+}
+
 export function Orders() {
   const { formatCurrency } = useAdminCurrency();
-  const [orders, setOrders] = useState<AdminOrder[]>(initialOrders);
+  const [orders, setOrders] = useState<AdminOrder[]>(() => loadCachedOrders());
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [contactMenuOrderId, setContactMenuOrderId] = useState<string | null>(null);
   const [statusMenuOrderId, setStatusMenuOrderId] = useState<string | null>(null);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState('');
+  const [trackingBackend, setTrackingBackend] = useState<'file' | 'supabase' | null>(null);
   const normalizedSearchTerm = useDeferredSearchTerm(searchTerm);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+  const loadOrders = React.useCallback(async () => {
+    const cachedOrders = loadCachedOrders();
+    setOrders(cachedOrders);
+    setOrdersLoading(true);
+    setOrdersError('');
 
     try {
-      const storedOrders = window.localStorage.getItem(ADMIN_ORDERS_STORAGE_KEY);
-      if (storedOrders) {
-        setOrders(JSON.parse(storedOrders) as AdminOrder[]);
-      }
+      const payload = await getStripeTrackedOrders();
+      setTrackingBackend(payload.backend);
+      setOrders(mergeOrders(payload.orders, cachedOrders));
     } catch (error) {
-      console.error('Falha ao carregar pedidos do painel', error);
+      const message = error instanceof Error ? error.message : 'Nao foi possivel sincronizar os pedidos Stripe.';
+      setOrdersError(message);
+    } finally {
+      setOrdersLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    void loadOrders();
+  }, [loadOrders]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -432,21 +523,48 @@ export function Orders() {
     return hostname === 'localhost' || hostname === '127.0.0.1' ? '127.0.0.1' : hostname;
   };
 
-  const updateOrderStatus = (orderId: string, nextStatus: OrderStatus) => {
+  const updateOrderStatus = async (order: AdminOrder, nextStatus: OrderStatus) => {
+    if (order.status === nextStatus) {
+      setStatusMenuOrderId(null);
+      return;
+    }
+
+    if (order.dataSource === 'stripe-server') {
+      try {
+        const payload = await updateStripeTrackedOrderStatus(order.orderNumber, nextStatus, adminUserName);
+        setOrders((currentOrders) =>
+          currentOrders.map((currentOrder) =>
+            currentOrder.orderNumber === order.orderNumber
+              ? {
+                  ...payload.order,
+                  dataSource: 'stripe-server',
+                }
+              : currentOrder,
+          ),
+        );
+        showToast(`Status atualizado para ${nextStatus}.`);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Nao foi possivel atualizar o status deste pedido.');
+      } finally {
+        setStatusMenuOrderId(null);
+      }
+      return;
+    }
+
     setOrders((currentOrders) =>
-      currentOrders.map((order) => {
-        if (order.id !== orderId) return order;
-        if (order.status === nextStatus) return order;
+      currentOrders.map((currentOrder) => {
+        if (currentOrder.id !== order.id) return currentOrder;
+        if (currentOrder.status === nextStatus) return currentOrder;
 
         const now = new Date().toISOString();
-        const nextHistory: OrderHistory = { ...order.history };
+        const nextHistory: OrderHistory = { ...currentOrder.history };
 
         if (nextStatus === 'Pago' && !nextHistory.paidAt) nextHistory.paidAt = now;
         if (nextStatus === 'Enviado' && !nextHistory.shippedAt) nextHistory.shippedAt = now;
         if (nextStatus === 'Entregue' && !nextHistory.deliveredAt) nextHistory.deliveredAt = now;
 
         return {
-          ...order,
+          ...currentOrder,
           status: nextStatus,
           history: nextHistory,
           logs: [
@@ -457,7 +575,7 @@ export function Orders() {
               ip: getSessionIp(),
               action: `Status alterado para ${nextStatus}`,
             },
-            ...order.logs,
+            ...currentOrder.logs,
           ],
         };
       }),
@@ -611,7 +729,28 @@ export function Orders() {
           <h2 className="text-3xl font-serif text-neutral-900 tracking-tight">Pedidos</h2>
           <p className="text-neutral-500 text-[13px]">Gerencie, acompanhe e opere todos os pedidos da loja.</p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => void loadOrders()}
+          className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-[12px] font-semibold uppercase tracking-wider text-neutral-700 transition-colors hover:bg-neutral-50"
+        >
+          <RotateCw className={`h-4 w-4 ${ordersLoading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </button>
       </div>
+
+      {trackingBackend ? (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-[12px] leading-relaxed text-sky-700">
+          Pedidos Stripe sincronizados pelo backend <span className="font-semibold">{trackingBackend}</span>. Quando o cliente conclui o pagamento, o painel passa a enxergar a trilha server-side do checkout.
+        </div>
+      ) : null}
+
+      {ordersError ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] leading-relaxed text-amber-700">
+          Nao conseguimos sincronizar os pedidos Stripe agora. O painel segue exibindo o cache local enquanto a conexao nao volta. Detalhe: {ordersError}
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">
         <SummaryCard label="Total de pedidos" value={String(orderSummary.totalOrders)} />
@@ -765,7 +904,7 @@ export function Orders() {
                                 `}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  updateOrderStatus(order.id, status);
+                                  void updateOrderStatus(order, status);
                                 }}
                               >
                                 {status}
@@ -804,7 +943,7 @@ export function Orders() {
           order={selectedOrder}
           formatCurrency={formatCurrency}
           onClose={() => setSelectedOrderId(null)}
-          onChangeStatus={(status) => updateOrderStatus(selectedOrder.id, status)}
+          onChangeStatus={(status) => void updateOrderStatus(selectedOrder, status)}
           onOpenWhatsApp={() => openWhatsApp(selectedOrder)}
           onOpenEmail={() => openEmail(selectedOrder)}
           onPrint={() => printOrder(selectedOrder)}
@@ -1029,7 +1168,7 @@ function ActionButton({
 }
 
 function StatusBadge({ status }: { status: OrderStatus }) {
-  return <span className={`inline-flex px-2.5 py-1 text-[11px] font-semibold rounded-full capitalize ${statusTone[status]}`}>{status}</span>;
+  return <span className={`inline-flex px-2.5 py-1 text-[11px] font-semibold rounded-full capitalize ${resolveStatusTone(status)}`}>{status}</span>;
 }
 
 function Panel({
@@ -1102,8 +1241,8 @@ function formatDateTime(value: string) {
   return dateTimeFormatter.format(new Date(value));
 }
 
-function formatPhone(value: string, countryCode: AddressCountryCode = 'BR') {
-  return getPhoneDisplay(value, countryCode);
+function formatPhone(value: string, countryCode: AddressCountryCode | string = 'BR') {
+  return getPhoneDisplay(value, countryCode as AddressCountryCode);
 }
 
 function formatShortDate(value: string) {

@@ -186,6 +186,7 @@ CREATE TABLE IF NOT EXISTS stripe_checkout_orders (
   discount DECIMAL(10,2) NOT NULL DEFAULT 0,
   total DECIMAL(10,2) NOT NULL DEFAULT 0,
   shipping_method VARCHAR(191) NOT NULL DEFAULT '',
+  payment_method VARCHAR(191) NOT NULL DEFAULT 'Stripe Checkout',
   customer LONGTEXT NOT NULL,
   shipping_address LONGTEXT NOT NULL,
   items LONGTEXT NOT NULL,
@@ -194,10 +195,18 @@ CREATE TABLE IF NOT EXISTS stripe_checkout_orders (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   paid_at DATETIME NULL,
+  shipped_at DATETIME NULL,
+  delivered_at DATETIME NULL,
   last_event_id VARCHAR(191) NOT NULL DEFAULT '',
   last_event_type VARCHAR(120) NOT NULL DEFAULT '',
+  logs LONGTEXT NULL,
   UNIQUE KEY stripe_checkout_orders_session_unique (stripe_session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE stripe_checkout_orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(191) NOT NULL DEFAULT 'Stripe Checkout';
+ALTER TABLE stripe_checkout_orders ADD COLUMN IF NOT EXISTS shipped_at DATETIME NULL;
+ALTER TABLE stripe_checkout_orders ADD COLUMN IF NOT EXISTS delivered_at DATETIME NULL;
+ALTER TABLE stripe_checkout_orders ADD COLUMN IF NOT EXISTS logs LONGTEXT NULL;
 
 CREATE TABLE IF NOT EXISTS stripe_webhook_logs (
   event_id VARCHAR(191) NOT NULL PRIMARY KEY,
