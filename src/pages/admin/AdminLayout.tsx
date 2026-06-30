@@ -1,22 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  ShoppingBag, 
-  Users, 
-  Settings, 
-  Image as ImageIcon,
-  LogOut,
-  Menu,
-  X,
-  PackageSearch,
-  ShoppingCart,
+import {
   CheckCircle2,
+  Home as HomeIcon,
+  Image as ImageIcon,
+  LayoutDashboard,
+  LogOut,
+  Mail,
+  Menu,
+  PackageSearch,
+  Palette,
+  PlugZap,
+  Settings,
+  ShoppingBag,
+  ShoppingCart,
   Tag,
   Trophy,
-  Palette,
-  Home as HomeIcon,
-  Mail
+  Users,
+  X,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -31,8 +32,9 @@ export function AdminLayout() {
   useEffect(() => {
     const handleToast = (e: any) => {
       setToast({ message: e.detail, visible: true });
-      setTimeout(() => setToast(prev => ({ ...prev, visible: false })), 3000);
+      setTimeout(() => setToast((prev) => ({ ...prev, visible: false })), 3000);
     };
+
     window.addEventListener('admin-toast', handleToast);
     return () => window.removeEventListener('admin-toast', handleToast);
   }, []);
@@ -48,6 +50,7 @@ export function AdminLayout() {
     { name: 'Promoções', href: '/admin/promotions', icon: Tag },
     { name: 'Banners', href: '/admin/banners', icon: ImageIcon },
     { name: 'Home', href: '/admin/home', icon: HomeIcon },
+    { name: 'Integrações', href: '/admin/integrations', icon: PlugZap },
     { name: 'Layout', href: '/admin/layout', icon: Palette },
     { name: 'Configurações', href: '/admin/settings', icon: Settings },
   ];
@@ -57,7 +60,7 @@ export function AdminLayout() {
     <div className="min-h-screen bg-[#F5F5F7] flex font-sans text-neutral-900 relative">
       <AnimatePresence>
         {toast.visible && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -20, x: '-50%' }}
             animate={{ opacity: 1, y: 20, x: '-50%' }}
             exit={{ opacity: 0, y: -20, x: '-50%' }}
@@ -69,19 +72,19 @@ export function AdminLayout() {
         )}
       </AnimatePresence>
 
-      {/* Mobile sidebar overlay */}
       {isSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/40 z-40 lg:hidden backdrop-blur-sm transition-opacity"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
-      <aside className={cn(
-        "fixed inset-y-0 left-0 bg-[#0A0A0A] w-64 z-50 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:w-[280px] flex flex-col",
-        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-      )}>
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 bg-[#0A0A0A] w-64 z-50 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:w-[280px] flex flex-col',
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+      >
         <div className="h-[72px] flex items-center justify-between px-6 border-b border-white/5">
           <Link to="/admin" className="text-lg font-serif font-bold text-white tracking-widest uppercase">
             {brandParts.secondary ? (
@@ -105,16 +108,16 @@ export function AdminLayout() {
                 key={item.name}
                 to={item.href}
                 className={cn(
-                  "flex items-center px-3 py-2.5 text-[13px] font-medium tracking-wide rounded-lg transition-all group",
-                  isActive 
-                    ? "bg-white/10 text-white" 
-                    : "text-white/50 hover:bg-white/5 hover:text-white"
+                  'flex items-center px-3 py-2.5 text-[13px] font-medium tracking-wide rounded-lg transition-all group',
+                  isActive
+                    ? 'bg-white/10 text-white'
+                    : 'text-white/50 hover:bg-white/5 hover:text-white',
                 )}
               >
-                <item.icon className={cn("w-[18px] h-[18px] mr-3 shrink-0 transition-colors", isActive ? "text-white" : "text-white/40 group-hover:text-white/70")} />
+                <item.icon className={cn('w-[18px] h-[18px] mr-3 shrink-0 transition-colors', isActive ? 'text-white' : 'text-white/40 group-hover:text-white/70')} />
                 {item.name}
               </Link>
-            )
+            );
           })}
         </nav>
 
@@ -129,17 +132,15 @@ export function AdminLayout() {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header */}
         <header className="h-[72px] bg-[#F5F5F7]/80 backdrop-blur-xl sticky top-0 z-30 flex items-center px-6 lg:px-10 border-b border-neutral-200/60">
-          <button 
+          <button
             onClick={() => setIsSidebarOpen(true)}
             className="lg:hidden mr-4 p-2 -ml-2 text-neutral-600 hover:bg-black/5 rounded-lg transition-colors"
           >
             <Menu className="w-5 h-5" />
           </button>
-          
+
           <div className="flex-1 flex items-center justify-between">
             <h1 className="text-[13px] font-semibold text-neutral-500 uppercase tracking-widest hidden sm:block">
               Painel de Controle
@@ -156,7 +157,6 @@ export function AdminLayout() {
           </div>
         </header>
 
-        {/* Page Content */}
         <div className="flex-1 overflow-y-auto p-6 lg:p-10">
           <Outlet />
         </div>

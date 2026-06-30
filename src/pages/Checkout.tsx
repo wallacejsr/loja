@@ -1,13 +1,23 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle,
+  CreditCard,
+  HelpCircle,
+  Loader2,
+  LockKeyhole,
+  ShieldCheck,
+  WalletCards,
+} from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useCustomerSession } from '../context/CustomerSessionContext';
-import { CheckCircle, CreditCard, HelpCircle, Loader2 } from 'lucide-react';
 import { useLoyalty } from '../hooks/useLoyalty';
 import { useSettings } from '../hooks/useSettings';
 import { useShippingQuotes } from '../hooks/useShippingQuotes';
 import { useStorefront } from '../hooks/useStorefront';
-import { syncCheckoutOrderToAdmin } from '../lib/adminDataBridge';
+import { syncCheckoutOrderToAdmin, type CheckoutBridgePayload } from '../lib/adminDataBridge';
 import { StoreCountrySelect } from '../components/StoreCountrySelect';
 import { StorePhoneField } from '../components/StorePhoneField';
 import { StoreImage } from '../components/StoreImage';
@@ -24,6 +34,7 @@ import {
 } from '../lib/customerForm';
 
 type PostalStatusTone = 'error' | 'idle' | 'loading' | 'manual' | 'success' | 'warning';
+type StripeFlowState = 'creating' | 'error' | 'idle' | 'success' | 'verifying';
 
 type IdentificationFormData = {
   cpf: string;
@@ -42,6 +53,33 @@ type DeliveryFormData = {
   postalCode: string;
   region: string;
   street: string;
+};
+
+type StripeCheckoutSessionResponse = {
+  message?: string;
+  orderNumber?: string;
+  sessionId?: string;
+  success: boolean;
+  url?: string;
+};
+
+type StripeSessionStatusResponse = {
+  amountTotal: number | null;
+  currency: string | null;
+  customerEmail: string | null;
+  orderNumber: string;
+  paid: boolean;
+  paymentStatus: string | null;
+  sessionId: string;
+  sessionStatus: string | null;
+  success: true;
+};
+
+type PendingStripeCheckoutRecord = {
+  bridgePayload: CheckoutBridgePayload;
+  loyaltyPoints: number;
+  orderNumber: string;
+  sessionId: string;
 };
 
 const INITIAL_IDENTIFICATION_FORM: IdentificationFormData = {
@@ -64,6 +102,8 @@ const INITIAL_DELIVERY_FORM: DeliveryFormData = {
 };
 
 const CHECKOUT_COUNTRY: AddressCountryCode = 'US';
+const PENDING_STRIPE_CHECKOUTS_STORAGE_KEY = '@App:stripe-pending-checkouts';
+const PROCESSED_STRIPE_SESSIONS_STORAGE_KEY = '@App:stripe-processed-sessions';
 
 const inputClass =
   'w-full border border-neutral-300 px-4 py-3 bg-neutral-50 focus:bg-white focus:outline-none focus:border-neutral-900 transition-colors disabled:bg-neutral-100 disabled:text-neutral-400 disabled:cursor-not-allowed';
@@ -75,6 +115,70 @@ const postalToneClasses: Record<Exclude<PostalStatusTone, 'idle'>, string> = {
   success: 'text-emerald-600',
   warning: 'text-amber-600',
 };
+
+function readLocalStorageArray<T>(key: string): T[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error(`Falha ao ler ${key}`, error);
+    return [];
+  }
+}
+
+function writeLocalStorageArray<T>(key: string, value: T[]) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error(`Falha ao salvar ${key}`, error);
+  }
+}
+
+function upsertPendingStripeCheckoutRecord(record: PendingStripeCheckoutRecord) {
+  const records = readLocalStorageArray<PendingStripeCheckoutRecord>(PENDING_STRIPE_CHECKOUTS_STORAGE_KEY);
+  const nextRecords = [
+    record,
+    ...records.filter(
+      (item) => item.sessionId !== record.sessionId && item.orderNumber !== record.orderNumber,
+    ),
+  ];
+  writeLocalStorageArray(PENDING_STRIPE_CHECKOUTS_STORAGE_KEY, nextRecords);
+}
+
+function findPendingStripeCheckoutRecord(sessionId: string, orderNumber?: string) {
+  return readLocalStorageArray<PendingStripeCheckoutRecord>(PENDING_STRIPE_CHECKOUTS_STORAGE_KEY).find(
+    (record) => record.sessionId === sessionId || (orderNumber ? record.orderNumber === orderNumber : false),
+  ) || null;
+}
+
+function removePendingStripeCheckoutRecord(sessionId: string, orderNumber?: string) {
+  const nextRecords = readLocalStorageArray<PendingStripeCheckoutRecord>(PENDING_STRIPE_CHECKOUTS_STORAGE_KEY).filter(
+    (record) => record.sessionId !== sessionId && record.orderNumber !== orderNumber,
+  );
+  writeLocalStorageArray(PENDING_STRIPE_CHECKOUTS_STORAGE_KEY, nextRecords);
+}
+
+function hasProcessedStripeSession(sessionId: string) {
+  return readLocalStorageArray<string>(PROCESSED_STRIPE_SESSIONS_STORAGE_KEY).includes(sessionId);
+}
+
+function markStripeSessionAsProcessed(sessionId: string) {
+  const processedSessions = readLocalStorageArray<string>(PROCESSED_STRIPE_SESSIONS_STORAGE_KEY);
+  if (processedSessions.includes(sessionId)) return;
+  writeLocalStorageArray(PROCESSED_STRIPE_SESSIONS_STORAGE_KEY, [sessionId, ...processedSessions].slice(0, 50));
+}
+
+function createOrderNumber() {
+  const datePart = Date.now().toString().slice(-8);
+  const randomPart = Math.floor(10 + Math.random() * 90);
+  return `#SD${datePart}${randomPart}`;
+}
 
 function getPostalStatusMessage(
   tone: PostalStatusTone,
@@ -100,8 +204,9 @@ function getPostalStatusMessage(
 }
 
 export function Checkout() {
-  const { cart, cartTotal } = useCart();
+  const { cart, cartTotal, clearCart } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
   const { addPoints } = useLoyalty();
   const { settings } = useSettings();
   const { locale, t, formatCurrency } = useStorefront();
@@ -120,19 +225,49 @@ export function Checkout() {
   const [isSearchingPostalCode, setIsSearchingPostalCode] = useState(false);
   const [isDeliveryUnlocked, setIsDeliveryUnlocked] = useState(false);
   const [postalStatusTone, setPostalStatusTone] = useState<PostalStatusTone>('idle');
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'Cartao de credito' | 'Pix'>('Cartao de credito');
-  const orderNumber = useMemo(() => `#SD${Math.floor(Math.random() * 100000)}`, []);
+  const [stripeFlowState, setStripeFlowState] = useState<StripeFlowState>('idle');
+  const [stripeErrorMessage, setStripeErrorMessage] = useState('');
+  const [confirmedOrderNumber, setConfirmedOrderNumber] = useState('');
+  const orderNumber = useMemo(() => createOrderNumber(), []);
   const { quotes, selectedQuote, setSelectedQuoteId, loadQuotes, mode, status: shippingQuotesStatus, error: shippingQuotesError, resetQuotes } = useShippingQuotes(
     cart,
     cartTotal,
     settings,
   );
 
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const stripeSessionIdFromUrl = searchParams.get('session_id') || '';
+  const stripeOrderNumberFromUrl = searchParams.get('order_number') || '';
+  const isStripeSuccessReturn = location.pathname === '/checkout/success' && Boolean(stripeSessionIdFromUrl);
+
   const addressLabels = useMemo(() => getAddressLabels(deliveryData.country, locale), [deliveryData.country, locale]);
   const phonePlaceholder = useMemo(() => getPhonePlaceholder(identificationData.phoneCountry), [identificationData.phoneCountry]);
   const taxIdConfig = useMemo(() => getTaxIdFieldConfig(deliveryData.country, 'F', locale), [deliveryData.country, locale]);
+  const paymentMethodLabels = useMemo(() => {
+    const labels: string[] = [];
+
+    if (settings.stripeAllowCard) {
+      labels.push(t('creditCard'));
+    }
+
+    if (settings.stripeAllowApplePay) {
+      labels.push(t('stripeApplePay'));
+    }
+
+    if (settings.stripeAllowGooglePay) {
+      labels.push(t('stripeGooglePay'));
+    }
+
+    return labels;
+  }, [settings.stripeAllowApplePay, settings.stripeAllowCard, settings.stripeAllowGooglePay, t]);
+  const loyaltyPointsEarned = useMemo(
+    () => Math.floor(cartTotal * (settings.pointsPerReal || 1)),
+    [cartTotal, settings.pointsPerReal],
+  );
+
   const previousTaxIdKindRef = useRef<TaxIdFieldKind | null>(null);
   const hasHydratedCustomerDataRef = useRef(false);
+  const hasProcessedStripeReturnRef = useRef<string | null>(null);
 
   useEffect(() => {
     const previousKind = previousTaxIdKindRef.current;
@@ -205,87 +340,6 @@ export function Checkout() {
       hasHydratedCustomerDataRef.current = true;
     }
   }, [currentCustomer, guestShippingDraft, isLoggedIn, primaryAddress]);
-
-  if (cart.length === 0 && step !== 4) {
-    navigate('/cart');
-    return null;
-  }
-
-  const handleNext = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (step === 3) {
-      addPoints(Math.floor(cartTotal * (settings.pointsPerReal || 1)));
-
-      if (isLoggedIn) {
-        updateProfile({
-          fullName: identificationData.fullName,
-          phone: identificationData.phone,
-          phoneCountry: identificationData.phoneCountry,
-          taxId: taxIdConfig.visible ? identificationData.cpf : currentCustomer?.taxId || '',
-        });
-
-        saveAddress({
-          id: primaryAddress?.id || '',
-          label: primaryAddress?.label || t('homeAddress'),
-          country: deliveryData.country,
-          postalCode: deliveryData.postalCode,
-          street: deliveryData.street,
-          number: deliveryData.number,
-          complement: deliveryData.complement,
-          neighborhood: deliveryData.neighborhood,
-          city: deliveryData.city,
-          region: deliveryData.region,
-          isPrimary: true,
-        });
-      } else {
-        saveGuestShippingDraft({
-          country: deliveryData.country,
-          postalCode: deliveryData.postalCode,
-          street: deliveryData.street,
-          number: deliveryData.number,
-          complement: deliveryData.complement,
-          neighborhood: deliveryData.neighborhood,
-          city: deliveryData.city,
-          region: deliveryData.region,
-        });
-      }
-
-      syncCheckoutOrderToAdmin({
-        orderNumber,
-        paymentMethod: selectedPaymentMethod,
-        customer: {
-          name: identificationData.fullName,
-          email: identificationData.email,
-          phone: identificationData.phone,
-          phoneCountry: identificationData.phoneCountry,
-          cpf: taxIdConfig.visible ? identificationData.cpf : '',
-        },
-        shippingAddress: {
-          country: deliveryData.country,
-          postalCode: deliveryData.postalCode,
-          street: deliveryData.street,
-          number: deliveryData.number,
-          complement: deliveryData.complement,
-          neighborhood: deliveryData.neighborhood,
-          city: deliveryData.city,
-          region: deliveryData.region,
-        },
-        items: cart.map((item) => ({
-          id: item.product.id,
-          name: item.product.nome,
-          quantity: item.quantity,
-          unitPrice: item.product.precoPromocional || item.product.preco,
-          size: item.size,
-          color: item.color,
-        })),
-        subtotal: cartTotal,
-        shipping: shippingCost,
-        shippingMethod: selectedQuote?.service,
-        discount: 0,
-      });
-    }
-    setStep(step + 1);
-  };
 
   const updateIdentificationField = <K extends keyof IdentificationFormData>(field: K, value: IdentificationFormData[K]) => {
     setIdentificationData((prev) => ({ ...prev, [field]: value }));
@@ -429,20 +483,272 @@ export function Checkout() {
     step,
   ]);
 
-  if (step === 4) {
+  const buildCheckoutBridgePayload = (): CheckoutBridgePayload => ({
+    orderNumber,
+    paymentMethod: 'Stripe Checkout',
+    customer: {
+      name: identificationData.fullName,
+      email: identificationData.email,
+      phone: identificationData.phone,
+      phoneCountry: identificationData.phoneCountry,
+      cpf: taxIdConfig.visible ? identificationData.cpf : '',
+      documentLabel: taxIdConfig.label,
+    },
+    shippingAddress: {
+      country: deliveryData.country,
+      postalCode: deliveryData.postalCode,
+      street: deliveryData.street,
+      number: deliveryData.number,
+      complement: deliveryData.complement,
+      neighborhood: deliveryData.neighborhood,
+      city: deliveryData.city,
+      region: deliveryData.region,
+    },
+    items: cart.map((item) => ({
+      id: item.product.id,
+      name: item.product.nome,
+      quantity: item.quantity,
+      unitPrice: item.product.precoPromocional || item.product.preco,
+      size: item.size,
+      color: item.color,
+    })),
+    subtotal: cartTotal,
+    shipping: shippingCost,
+    shippingMethod: selectedQuote?.service,
+    discount: 0,
+  });
+
+  const startStripeCheckout = async () => {
+    if (!selectedQuote) {
+      setStripeErrorMessage(t('shippingMethodRequired'));
+      return;
+    }
+
+    setStripeFlowState('creating');
+    setStripeErrorMessage('');
+
+    const bridgePayload = buildCheckoutBridgePayload();
+
+    try {
+      const response = await fetch('/api/integrations/stripe/checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...bridgePayload,
+          settings: {
+            storeName: settings.storeName,
+            stripeEnabled: settings.stripeEnabled,
+            stripeMode: settings.stripeMode,
+            stripeCurrency: settings.stripeCurrency,
+            stripeAllowCard: settings.stripeAllowCard,
+            stripeAllowApplePay: settings.stripeAllowApplePay,
+            stripeAllowGooglePay: settings.stripeAllowGooglePay,
+            stripeSuccessUrl: settings.stripeSuccessUrl,
+            stripeCancelUrl: settings.stripeCancelUrl,
+          },
+        }),
+      });
+
+      const payload = await response.json() as StripeCheckoutSessionResponse;
+
+      if (!response.ok || !payload.success || !payload.url || !payload.sessionId) {
+        throw new Error(payload.message || t('stripeCheckoutError'));
+      }
+
+      upsertPendingStripeCheckoutRecord({
+        sessionId: payload.sessionId,
+        orderNumber: bridgePayload.orderNumber,
+        loyaltyPoints: loyaltyPointsEarned,
+        bridgePayload,
+      });
+
+      window.location.assign(payload.url);
+    } catch (error) {
+      setStripeFlowState('error');
+      setStripeErrorMessage(error instanceof Error ? error.message : t('stripeCheckoutError'));
+    }
+  };
+
+  useEffect(() => {
+    if (!isStripeSuccessReturn || !stripeSessionIdFromUrl) return;
+    if (hasProcessedStripeReturnRef.current === stripeSessionIdFromUrl) return;
+
+    hasProcessedStripeReturnRef.current = stripeSessionIdFromUrl;
+
+    const verifyStripeSession = async () => {
+      setStripeFlowState('verifying');
+      setStripeErrorMessage('');
+
+      try {
+        const response = await fetch(`/api/integrations/stripe/session-status?session_id=${encodeURIComponent(stripeSessionIdFromUrl)}`, {
+          cache: 'no-store',
+        });
+        const payload = await response.json() as StripeSessionStatusResponse | { message?: string; success?: false };
+
+        if (!response.ok || !('success' in payload) || payload.success !== true) {
+          throw new Error(('message' in payload && payload.message) || t('stripeVerificationError'));
+        }
+
+        const pendingRecord = findPendingStripeCheckoutRecord(stripeSessionIdFromUrl, stripeOrderNumberFromUrl);
+        const resolvedOrderNumber = payload.orderNumber || pendingRecord?.orderNumber || stripeOrderNumberFromUrl || orderNumber;
+
+        if (payload.paid && !hasProcessedStripeSession(stripeSessionIdFromUrl)) {
+          if (pendingRecord) {
+            if (isLoggedIn) {
+              updateProfile({
+                fullName: pendingRecord.bridgePayload.customer.name,
+                phone: pendingRecord.bridgePayload.customer.phone,
+                phoneCountry: pendingRecord.bridgePayload.customer.phoneCountry || CHECKOUT_COUNTRY,
+                taxId: pendingRecord.bridgePayload.customer.cpf || currentCustomer?.taxId || '',
+              });
+
+              saveAddress({
+                id: primaryAddress?.id || '',
+                label: primaryAddress?.label || t('homeAddress'),
+                country: pendingRecord.bridgePayload.shippingAddress.country,
+                postalCode: pendingRecord.bridgePayload.shippingAddress.postalCode,
+                street: pendingRecord.bridgePayload.shippingAddress.street,
+                number: pendingRecord.bridgePayload.shippingAddress.number,
+                complement: pendingRecord.bridgePayload.shippingAddress.complement || '',
+                neighborhood: pendingRecord.bridgePayload.shippingAddress.neighborhood,
+                city: pendingRecord.bridgePayload.shippingAddress.city,
+                region: pendingRecord.bridgePayload.shippingAddress.region,
+                isPrimary: true,
+              });
+            } else {
+              saveGuestShippingDraft({
+                country: pendingRecord.bridgePayload.shippingAddress.country,
+                postalCode: pendingRecord.bridgePayload.shippingAddress.postalCode,
+                street: pendingRecord.bridgePayload.shippingAddress.street,
+                number: pendingRecord.bridgePayload.shippingAddress.number,
+                complement: pendingRecord.bridgePayload.shippingAddress.complement || '',
+                neighborhood: pendingRecord.bridgePayload.shippingAddress.neighborhood,
+                city: pendingRecord.bridgePayload.shippingAddress.city,
+                region: pendingRecord.bridgePayload.shippingAddress.region,
+              });
+            }
+
+            syncCheckoutOrderToAdmin({
+              ...pendingRecord.bridgePayload,
+              orderNumber: resolvedOrderNumber,
+            });
+            addPoints(pendingRecord.loyaltyPoints);
+            clearCart();
+            removePendingStripeCheckoutRecord(stripeSessionIdFromUrl, pendingRecord.orderNumber);
+          }
+
+          markStripeSessionAsProcessed(stripeSessionIdFromUrl);
+        }
+
+        if (!payload.paid) {
+          throw new Error(t('stripePaymentNotConfirmed'));
+        }
+
+        setConfirmedOrderNumber(resolvedOrderNumber);
+        setStripeFlowState('success');
+      } catch (error) {
+        setStripeFlowState('error');
+        setStripeErrorMessage(error instanceof Error ? error.message : t('stripeVerificationError'));
+      }
+    };
+
+    void verifyStripeSession();
+  }, [
+    addPoints,
+    clearCart,
+    currentCustomer?.taxId,
+    isLoggedIn,
+    orderNumber,
+    primaryAddress?.id,
+    primaryAddress?.label,
+    saveAddress,
+    saveGuestShippingDraft,
+    stripeOrderNumberFromUrl,
+    stripeSessionIdFromUrl,
+    t,
+    updateProfile,
+    isStripeSuccessReturn,
+  ]);
+
+  const handleNext = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (step < 3) {
+      setStep((prev) => prev + 1);
+    }
+  };
+
+  if (isStripeSuccessReturn) {
+    const resolvedSuccessOrderNumber = confirmedOrderNumber || stripeOrderNumberFromUrl;
+
     return (
-      <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
-        <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mb-6">
-          <CheckCircle className="w-12 h-12 text-green-500" />
-        </div>
-        <h2 className="text-3xl font-serif font-bold text-neutral-900 mb-4">{t('checkoutConfirmed')}</h2>
-        <p className="text-neutral-600 mb-2">{t('thanksForPurchase', { store: settings.storeName })}</p>
-        <p className="text-neutral-500 mb-8 max-w-md">{t('orderNumberCopy', { orderNumber })}</p>
-        <button onClick={() => navigate('/')} className="bg-neutral-900 text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-neutral-800 transition-colors">
-          {t('backHome')}
-        </button>
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        {stripeFlowState === 'verifying' || stripeFlowState === 'idle' ? (
+          <div className="bg-white border border-neutral-200 p-8 sm:p-10 text-center">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-neutral-100">
+              <Loader2 className="h-10 w-10 animate-spin text-neutral-600" />
+            </div>
+            <h1 className="text-3xl font-serif font-bold text-neutral-900">{t('stripeCheckoutProcessingTitle')}</h1>
+            <p className="mt-3 text-neutral-500">{t('stripeCheckoutProcessingSubtitle')}</p>
+          </div>
+        ) : null}
+
+        {stripeFlowState === 'success' ? (
+          <div className="bg-white border border-neutral-200 p-8 sm:p-10 text-center">
+            <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-green-50">
+              <CheckCircle className="h-12 w-12 text-green-500" />
+            </div>
+            <h1 className="text-3xl font-serif font-bold text-neutral-900">{t('checkoutConfirmed')}</h1>
+            <p className="mt-3 text-neutral-600">{t('thanksForPurchase', { store: settings.storeName })}</p>
+            <p className="mt-2 text-neutral-500">{t('orderNumberCopy', { orderNumber: resolvedSuccessOrderNumber || orderNumber })}</p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <button
+                onClick={() => navigate('/')}
+                className="bg-neutral-900 text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-neutral-800 transition-colors"
+              >
+                {t('backHome')}
+              </button>
+              <button
+                onClick={() => navigate('/account')}
+                className="border border-neutral-300 px-8 py-3 font-bold uppercase tracking-wider text-sm text-neutral-700 hover:border-neutral-900 hover:text-neutral-900 transition-colors"
+              >
+                {t('myAccount')}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {stripeFlowState === 'error' ? (
+          <div className="bg-white border border-neutral-200 p-8 sm:p-10 text-center">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-amber-50">
+              <AlertTriangle className="h-10 w-10 text-amber-500" />
+            </div>
+            <h1 className="text-3xl font-serif font-bold text-neutral-900">{t('stripeCheckoutReturnErrorTitle')}</h1>
+            <p className="mt-3 text-neutral-500">{stripeErrorMessage || t('stripeVerificationError')}</p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <button
+                onClick={() => navigate('/cart')}
+                className="bg-neutral-900 text-white px-8 py-3 font-bold uppercase tracking-wider text-sm hover:bg-neutral-800 transition-colors"
+              >
+                {t('paymentReturnToCart')}
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="border border-neutral-300 px-8 py-3 font-bold uppercase tracking-wider text-sm text-neutral-700 hover:border-neutral-900 hover:text-neutral-900 transition-colors"
+              >
+                {t('tryAgain')}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
+  }
+
+  if (cart.length === 0) {
+    navigate('/cart');
+    return null;
   }
 
   return (
@@ -702,57 +1008,102 @@ export function Checkout() {
                   <span className="w-8">3.</span> {t('paymentTitle')}
                 </h2>
 
-                <div className="space-y-4 mb-8">
-                  <label className="flex items-center p-4 border border-neutral-900 bg-neutral-50 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="payment"
-                      className="text-neutral-900 focus:ring-neutral-900"
-                      checked={selectedPaymentMethod === 'Cartao de credito'}
-                      onChange={() => setSelectedPaymentMethod('Cartao de credito')}
-                    />
-                    <CreditCard className="w-5 h-5 ml-4 text-neutral-900" />
-                    <span className="ml-3 font-bold text-sm uppercase tracking-wider text-neutral-900">{t('creditCard')}</span>
-                  </label>
+                <div className="rounded-sm border border-neutral-200 bg-neutral-50/70 p-5 sm:p-6">
+                  <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-3">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-700">
+                        <LockKeyhole className="h-3.5 w-3.5" />
+                        {t('stripeSecureCheckout')}
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-serif font-bold text-neutral-900">{t('stripeCheckoutTitle')}</h3>
+                        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-neutral-500">
+                          {settings.stripeEnabled ? t('stripeCheckoutSubtitle') : t('stripeCheckoutDisabled')}
+                        </p>
+                      </div>
+                    </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-8 pr-4">
-                    <div className="md:col-span-2">
-                      <Field label={t('cardNumber')} />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Field label={t('cardHolder')} />
-                    </div>
-                    <Field label={t('validity')} />
-                    <Field label="CVV" />
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-2">{t('installments')}</label>
-                      <select className="w-full border border-neutral-300 px-4 py-3 bg-white focus:outline-none focus:border-neutral-900 transition-colors text-sm">
-                        <option>1x de {formatCurrency(cartTotal + shippingCost)}</option>
-                        <option>2x de {formatCurrency((cartTotal + shippingCost) / 2)}</option>
-                        <option>3x de {formatCurrency((cartTotal + shippingCost) / 3)}</option>
-                      </select>
+                    <div className="rounded-sm border border-neutral-200 bg-white px-4 py-4 md:max-w-[260px]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">{t('orderSummary')}</p>
+                      <p className="mt-2 text-xl font-bold text-neutral-900">{formatCurrency(cartTotal + shippingCost)}</p>
+                      <p className="mt-1 text-xs text-neutral-500">{t('stripeHostedCheckoutHint')}</p>
                     </div>
                   </div>
 
-                  <label className="flex items-center p-4 border border-neutral-200 cursor-pointer hover:border-neutral-400">
-                    <input
-                      type="radio"
-                      name="payment"
-                      className="text-neutral-900 focus:ring-neutral-900"
-                      checked={selectedPaymentMethod === 'Pix'}
-                      onChange={() => setSelectedPaymentMethod('Pix')}
-                    />
-                    <div className="ml-4 font-bold text-sm uppercase tracking-wider text-neutral-500">{t('pixDiscount')}</div>
-                  </label>
-                </div>
+                  <div className="mt-6 grid gap-4 md:grid-cols-2">
+                    <div className="rounded-sm border border-neutral-200 bg-white p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-white">
+                          <CreditCard className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-semibold text-neutral-900">{t('stripeAvailableMethods')}</p>
+                          <p className="text-[12px] text-neutral-500">
+                            {paymentMethodLabels.length > 0 ? paymentMethodLabels.join(', ') : t('stripeNoMethodEnabled')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
-                <div className="mt-8 flex justify-between flex-col-reverse sm:flex-row gap-4">
-                  <button type="button" onClick={() => setStep(2)} className="text-secondary/70 px-6 py-3 font-bold uppercase tracking-wider text-sm hover:text-secondary transition-colors text-center">
-                    {t('back')}
-                  </button>
-                  <button type="submit" className="bg-primary text-white px-8 py-4 font-bold uppercase tracking-wider text-sm hover:bg-primary-dark transition-colors shadow-lg rounded-sm">
-                    {t('completeOrder')}
-                  </button>
+                    <div className="rounded-sm border border-neutral-200 bg-white p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-white">
+                          <ShieldCheck className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-semibold text-neutral-900">{t('stripeProtectedPayment')}</p>
+                          <p className="text-[12px] text-neutral-500">{t('stripeProtectedPaymentCopy')}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 rounded-sm border border-neutral-200 bg-white p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">{t('purchaseSummary')}</p>
+                        <p className="mt-1 text-[13px] text-neutral-700">
+                          {selectedQuote?.service || t('shipping')}
+                          {' | '}
+                          {formatCurrency(shippingCost, selectedQuote?.currency || settings.storeCurrency)}
+                        </p>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-700">
+                        <WalletCards className="h-3.5 w-3.5" />
+                        {t('stripeRewardsOnApproval', { points: loyaltyPointsEarned })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {stripeErrorMessage ? (
+                    <div className="mt-6 rounded-sm border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
+                      {stripeErrorMessage}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-8 flex justify-between flex-col-reverse sm:flex-row gap-4">
+                    <button type="button" onClick={() => setStep(2)} className="text-secondary/70 px-6 py-3 font-bold uppercase tracking-wider text-sm hover:text-secondary transition-colors text-center">
+                      {t('back')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void startStripeCheckout()}
+                      disabled={!settings.stripeEnabled || stripeFlowState === 'creating' || !selectedQuote}
+                      className="bg-primary text-white px-8 py-4 font-bold uppercase tracking-wider text-sm hover:bg-primary-dark transition-colors shadow-lg rounded-sm disabled:opacity-70 disabled:cursor-not-allowed inline-flex items-center justify-center"
+                    >
+                      {stripeFlowState === 'creating' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {t('stripeRedirecting')}
+                        </>
+                      ) : (
+                        <>
+                          {t('stripeContinueToCheckout')}
+                          <ArrowRight className="w-4 h-4 ml-2" />
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Product } from '../../src/data/mockData';
-import { normalizeStoreSettings, type StoreSettings } from '../../src/types/settings';
+import { normalizeStoreSettings, type StoreSettings, type StripeMode } from '../../src/types/settings';
 import type {
   Banner,
   CategoryInput,
@@ -18,8 +18,19 @@ import type {
   RaffleInput,
   StoreCategory,
 } from '../../src/lib/storeApiSupabase';
+import {
+  applyStripeCredentialInput,
+  buildStripeCredentialSummary,
+  createEmptyStoredStripeCredentialSet,
+  decodeStoredStripeCredentials,
+} from '../integrations/stripeCredentials';
 import { createDefaultStoreSnapshot, createId } from './defaultData';
-import type { ListOptions, StoreRepository } from './types';
+import type {
+  ListOptions,
+  StoreRepository,
+  StoredStripeCredentialSet,
+  StripeCredentialInput,
+} from './types';
 
 type MariaDbPool = any;
 type MariaDbConnection = any;
@@ -229,13 +240,15 @@ export class MariaDbStoreRepository implements StoreRepository {
             id, store_name, site_title, admin_panel_name, site_language, allow_business_registration,
             store_currency, logo_url, email, phone, phone_country, instagram, facebook, tiktok,
             description, primary_color, secondary_color, points_per_real, support_sales_phone,
-            support_sales_phone_country, support_sac_phone, support_sac_phone_country, support_email,
-            support_week_hours, support_saturday_hours, shipping_origin_country,
-            shipping_origin_postal_code, shipping_origin_city, shipping_origin_region,
-            shipping_origin_street, shipping_origin_number, shipping_free_threshold,
-            shipping_default_product_weight_grams, shipping_package_length_cm,
-            shipping_package_width_cm, shipping_package_height_cm, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+          support_sales_phone_country, support_sac_phone, support_sac_phone_country, support_email,
+          support_week_hours, support_saturday_hours, shipping_origin_country,
+          shipping_origin_postal_code, shipping_origin_city, shipping_origin_region,
+          shipping_origin_street, shipping_origin_number, shipping_free_threshold,
+          shipping_default_product_weight_grams, shipping_package_length_cm,
+          shipping_package_width_cm, shipping_package_height_cm, stripe_enabled, stripe_mode,
+          stripe_currency, stripe_allow_card, stripe_allow_apple_pay, stripe_allow_google_pay,
+          stripe_success_url, stripe_cancel_url, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         `,
         [
           1,
@@ -274,6 +287,14 @@ export class MariaDbStoreRepository implements StoreRepository {
           snapshot.settings.shippingPackageLengthCm,
           snapshot.settings.shippingPackageWidthCm,
           snapshot.settings.shippingPackageHeightCm,
+          snapshot.settings.stripeEnabled ? 1 : 0,
+          snapshot.settings.stripeMode,
+          snapshot.settings.stripeCurrency,
+          snapshot.settings.stripeAllowCard ? 1 : 0,
+          snapshot.settings.stripeAllowApplePay ? 1 : 0,
+          snapshot.settings.stripeAllowGooglePay ? 1 : 0,
+          snapshot.settings.stripeSuccessUrl,
+          snapshot.settings.stripeCancelUrl,
         ],
       );
 
@@ -451,7 +472,42 @@ export class MariaDbStoreRepository implements StoreRepository {
       shippingPackageLengthCm: toNumber(row.shipping_package_length_cm, 30),
       shippingPackageWidthCm: toNumber(row.shipping_package_width_cm, 24),
       shippingPackageHeightCm: toNumber(row.shipping_package_height_cm, 6),
+      stripeEnabled: toBoolean(row.stripe_enabled),
+      stripeMode: row.stripe_mode === 'live' ? 'live' : 'test',
+      stripeCurrency: row.stripe_currency || 'USD',
+      stripeAllowCard: row.stripe_allow_card === null || row.stripe_allow_card === undefined ? true : toBoolean(row.stripe_allow_card),
+      stripeAllowApplePay: toBoolean(row.stripe_allow_apple_pay),
+      stripeAllowGooglePay: toBoolean(row.stripe_allow_google_pay),
+      stripeSuccessUrl: row.stripe_success_url || '/checkout/success?session_id={CHECKOUT_SESSION_ID}',
+      stripeCancelUrl: row.stripe_cancel_url || '/cart',
     });
+  }
+
+  private mapStoredStripeCredentialSet(row: any): StoredStripeCredentialSet {
+    return {
+      publishableKeyEncrypted: row?.publishable_key_encrypted || '',
+      secretKeyEncrypted: row?.secret_key_encrypted || '',
+      webhookSecretEncrypted: row?.webhook_secret_encrypted || '',
+      updatedAt: row?.updated_at
+        ? new Date(row.updated_at).toISOString()
+        : null,
+    };
+  }
+
+  private async getStoredStripeCredentialSet(mode: StripeMode) {
+    const [row] = await this.queryRows(
+      `
+        SELECT publishable_key_encrypted, secret_key_encrypted, webhook_secret_encrypted, updated_at
+        FROM payment_gateway_credentials
+        WHERE provider = 'stripe' AND mode = ?
+        LIMIT 1
+      `,
+      [mode],
+    );
+
+    return row
+      ? this.mapStoredStripeCredentialSet(row)
+      : createEmptyStoredStripeCredentialSet();
   }
 
   async getProducts(options: ListOptions = {}) {
@@ -841,6 +897,53 @@ export class MariaDbStoreRepository implements StoreRepository {
     return settingsRow ? this.mapSettings(settingsRow) : createDefaultStoreSnapshot().settings;
   }
 
+  async getStripeCredentialSummary(mode: StripeMode) {
+    return buildStripeCredentialSummary(mode, await this.getStoredStripeCredentialSet(mode));
+  }
+
+  async listStripeCredentialSummaries() {
+    const [test, live] = await Promise.all([
+      this.getStoredStripeCredentialSet('test'),
+      this.getStoredStripeCredentialSet('live'),
+    ]);
+
+    return {
+      test: buildStripeCredentialSummary('test', test),
+      live: buildStripeCredentialSummary('live', live),
+    };
+  }
+
+  async getStripeCredentials(mode: StripeMode) {
+    return decodeStoredStripeCredentials(mode, await this.getStoredStripeCredentialSet(mode));
+  }
+
+  async saveStripeCredentials(input: StripeCredentialInput) {
+    const current = await this.getStoredStripeCredentialSet(input.mode);
+    const next = applyStripeCredentialInput(current, input);
+
+    await this.pool.query(
+      `
+        INSERT INTO payment_gateway_credentials (
+          provider, mode, publishable_key_encrypted, secret_key_encrypted, webhook_secret_encrypted, updated_at
+        ) VALUES ('stripe', ?, ?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE
+          publishable_key_encrypted = VALUES(publishable_key_encrypted),
+          secret_key_encrypted = VALUES(secret_key_encrypted),
+          webhook_secret_encrypted = VALUES(webhook_secret_encrypted),
+          updated_at = NOW()
+      `,
+      [
+        input.mode,
+        next.publishableKeyEncrypted,
+        next.secretKeyEncrypted,
+        next.webhookSecretEncrypted,
+      ],
+    );
+
+    const saved = await this.getStoredStripeCredentialSet(input.mode);
+    return buildStripeCredentialSummary(input.mode, saved);
+  }
+
   async saveStoreSettings(settings: StoreSettings) {
     const normalized = normalizeStoreSettings(settings);
 
@@ -854,8 +957,10 @@ export class MariaDbStoreRepository implements StoreRepository {
           support_week_hours, support_saturday_hours, shipping_origin_country, shipping_origin_postal_code,
           shipping_origin_city, shipping_origin_region, shipping_origin_street, shipping_origin_number,
           shipping_free_threshold, shipping_default_product_weight_grams, shipping_package_length_cm,
-          shipping_package_width_cm, shipping_package_height_cm, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+          shipping_package_width_cm, shipping_package_height_cm, stripe_enabled, stripe_mode,
+          stripe_currency, stripe_allow_card, stripe_allow_apple_pay, stripe_allow_google_pay,
+          stripe_success_url, stripe_cancel_url, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         ON DUPLICATE KEY UPDATE
           store_name = VALUES(store_name),
           site_title = VALUES(site_title),
@@ -892,6 +997,14 @@ export class MariaDbStoreRepository implements StoreRepository {
           shipping_package_length_cm = VALUES(shipping_package_length_cm),
           shipping_package_width_cm = VALUES(shipping_package_width_cm),
           shipping_package_height_cm = VALUES(shipping_package_height_cm),
+          stripe_enabled = VALUES(stripe_enabled),
+          stripe_mode = VALUES(stripe_mode),
+          stripe_currency = VALUES(stripe_currency),
+          stripe_allow_card = VALUES(stripe_allow_card),
+          stripe_allow_apple_pay = VALUES(stripe_allow_apple_pay),
+          stripe_allow_google_pay = VALUES(stripe_allow_google_pay),
+          stripe_success_url = VALUES(stripe_success_url),
+          stripe_cancel_url = VALUES(stripe_cancel_url),
           updated_at = NOW()
       `,
       [
@@ -931,6 +1044,14 @@ export class MariaDbStoreRepository implements StoreRepository {
         normalized.shippingPackageLengthCm,
         normalized.shippingPackageWidthCm,
         normalized.shippingPackageHeightCm,
+        normalized.stripeEnabled ? 1 : 0,
+        normalized.stripeMode,
+        normalized.stripeCurrency,
+        normalized.stripeAllowCard ? 1 : 0,
+        normalized.stripeAllowApplePay ? 1 : 0,
+        normalized.stripeAllowGooglePay ? 1 : 0,
+        normalized.stripeSuccessUrl,
+        normalized.stripeCancelUrl,
       ],
     );
 

@@ -4,7 +4,7 @@ import { getAdminTaxIdLabel, getPhoneDisplay, getPhoneE164 } from './customerFor
 export const ADMIN_ORDERS_STORAGE_KEY = 'admin-orders-v1';
 export const ADMIN_CUSTOMERS_STORAGE_KEY = 'admin-customers-v1';
 
-type CheckoutBridgeItem = {
+export type CheckoutBridgeItem = {
   id: string;
   name: string;
   quantity: number;
@@ -13,7 +13,7 @@ type CheckoutBridgeItem = {
   color?: string;
 };
 
-type CheckoutBridgeCustomer = {
+export type CheckoutBridgeCustomer = {
   documentLabel?: string;
   name: string;
   email: string;
@@ -22,7 +22,7 @@ type CheckoutBridgeCustomer = {
   cpf?: string;
 };
 
-type CheckoutBridgeAddress = {
+export type CheckoutBridgeAddress = {
   country: AddressCountryCode;
   postalCode: string;
   street: string;
@@ -33,7 +33,7 @@ type CheckoutBridgeAddress = {
   region: string;
 };
 
-type CheckoutBridgePayload = {
+export type CheckoutBridgePayload = {
   orderNumber: string;
   paymentMethod: string;
   customer: CheckoutBridgeCustomer;

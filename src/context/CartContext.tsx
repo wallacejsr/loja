@@ -11,6 +11,7 @@ export interface CartItem {
 interface CartContextData {
   cart: CartItem[];
   addToCart: (product: Product, quantity: number, size: string, color: string) => void;
+  clearCart: () => void;
   removeFromCart: (productId: string, size: string, color: string) => void;
   updateQuantity: (productId: string, size: string, color: string, quantity: number) => void;
   cartCount: number;
@@ -64,6 +65,10 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
+  const clearCart = () => {
+    setCart([]);
+  };
+
   const updateQuantity = (productId: string, size: string, color: string, quantity: number) => {
     if (quantity <= 0) {
       removeFromCart(productId, size, color);
@@ -95,6 +100,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       value={{
         cart,
         addToCart,
+        clearCart,
         removeFromCart,
         updateQuantity,
         cartCount,

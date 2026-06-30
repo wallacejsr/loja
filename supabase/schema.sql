@@ -184,6 +184,14 @@ create table if not exists public.store_settings (
   shipping_package_length_cm numeric(10, 2) not null default 30,
   shipping_package_width_cm numeric(10, 2) not null default 24,
   shipping_package_height_cm numeric(10, 2) not null default 6,
+  stripe_enabled boolean not null default false,
+  stripe_mode text not null default 'test',
+  stripe_currency text not null default 'USD',
+  stripe_allow_card boolean not null default true,
+  stripe_allow_apple_pay boolean not null default false,
+  stripe_allow_google_pay boolean not null default false,
+  stripe_success_url text not null default '/checkout/success?session_id={CHECKOUT_SESSION_ID}',
+  stripe_cancel_url text not null default '/cart',
   updated_at timestamptz not null default now()
 );
 
@@ -211,6 +219,24 @@ alter table public.store_settings add column if not exists shipping_default_prod
 alter table public.store_settings add column if not exists shipping_package_length_cm numeric(10, 2) not null default 30;
 alter table public.store_settings add column if not exists shipping_package_width_cm numeric(10, 2) not null default 24;
 alter table public.store_settings add column if not exists shipping_package_height_cm numeric(10, 2) not null default 6;
+alter table public.store_settings add column if not exists stripe_enabled boolean not null default false;
+alter table public.store_settings add column if not exists stripe_mode text not null default 'test';
+alter table public.store_settings add column if not exists stripe_currency text not null default 'USD';
+alter table public.store_settings add column if not exists stripe_allow_card boolean not null default true;
+alter table public.store_settings add column if not exists stripe_allow_apple_pay boolean not null default false;
+alter table public.store_settings add column if not exists stripe_allow_google_pay boolean not null default false;
+alter table public.store_settings add column if not exists stripe_success_url text not null default '/checkout/success?session_id={CHECKOUT_SESSION_ID}';
+alter table public.store_settings add column if not exists stripe_cancel_url text not null default '/cart';
+
+create table if not exists public.payment_gateway_credentials (
+  provider text not null,
+  mode text not null,
+  publishable_key_encrypted text not null default '',
+  secret_key_encrypted text not null default '',
+  webhook_secret_encrypted text not null default '',
+  updated_at timestamptz not null default now(),
+  primary key (provider, mode)
+);
 
 drop view if exists public.categories_with_product_count;
 
@@ -231,6 +257,9 @@ alter table public.raffles enable row level security;
 alter table public.contact_messages enable row level security;
 alter table public.instagram_posts enable row level security;
 alter table public.store_settings enable row level security;
+alter table public.payment_gateway_credentials enable row level security;
+
+revoke all on table public.payment_gateway_credentials from anon, authenticated;
 
 drop policy if exists "Public read products" on public.products;
 drop policy if exists "Public read categories" on public.categories;

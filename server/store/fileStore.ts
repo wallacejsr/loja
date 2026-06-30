@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Product } from '../../src/data/mockData';
-import { normalizeStoreSettings, type StoreSettings } from '../../src/types/settings';
+import { normalizeStoreSettings, type StoreSettings, type StripeMode } from '../../src/types/settings';
 import type {
   Banner,
   CategoryInput,
@@ -18,8 +18,21 @@ import type {
   RaffleInput,
   StoreCategory,
 } from '../../src/lib/storeApiSupabase';
+import {
+  applyStripeCredentialInput,
+  buildStripeCredentialSummary,
+  createEmptyStoredStripeCredentialSet,
+  decodeStoredStripeCredentials,
+} from '../integrations/stripeCredentials';
 import { cloneStoreSnapshot, createDefaultStoreSnapshot, createId } from './defaultData';
-import type { ListOptions, StoreRepository, StoreSnapshot, StoredProduct } from './types';
+import type {
+  ListOptions,
+  StoreRepository,
+  StoreSnapshot,
+  StoredProduct,
+  StripeCredentialInput,
+  StoredStripeCredentialSet,
+} from './types';
 
 function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -68,6 +81,20 @@ function createStoredProduct(input: ProductInput, id = input.id || createId('pro
   };
 }
 
+function ensureStripeCredentials(snapshot: StoreSnapshot) {
+  if (!snapshot.stripeCredentials) {
+    snapshot.stripeCredentials = {
+      test: createEmptyStoredStripeCredentialSet(),
+      live: createEmptyStoredStripeCredentialSet(),
+    };
+  }
+
+  snapshot.stripeCredentials.test ||= createEmptyStoredStripeCredentialSet();
+  snapshot.stripeCredentials.live ||= createEmptyStoredStripeCredentialSet();
+
+  return snapshot.stripeCredentials as Record<StripeMode, StoredStripeCredentialSet>;
+}
+
 export class FileStoreRepository implements StoreRepository {
   constructor(private readonly filePath: string) {}
 
@@ -81,6 +108,7 @@ export class FileStoreRepository implements StoreRepository {
     try {
       const fileContents = await readFile(this.filePath, 'utf8');
       const parsed = JSON.parse(fileContents) as StoreSnapshot;
+      ensureStripeCredentials(parsed);
       return deepClone(parsed);
     } catch (error) {
       const snapshot = createDefaultStoreSnapshot();
@@ -448,6 +476,36 @@ export class FileStoreRepository implements StoreRepository {
       const normalized = normalizeStoreSettings(settings);
       snapshot.settings = normalized;
       return normalized;
+    });
+  }
+
+  async getStripeCredentialSummary(mode: StripeMode) {
+    const snapshot = await this.readSnapshot();
+    const credentials = ensureStripeCredentials(snapshot);
+    return buildStripeCredentialSummary(mode, credentials[mode]);
+  }
+
+  async listStripeCredentialSummaries() {
+    const snapshot = await this.readSnapshot();
+    const credentials = ensureStripeCredentials(snapshot);
+
+    return {
+      test: buildStripeCredentialSummary('test', credentials.test),
+      live: buildStripeCredentialSummary('live', credentials.live),
+    };
+  }
+
+  async getStripeCredentials(mode: StripeMode) {
+    const snapshot = await this.readSnapshot();
+    const credentials = ensureStripeCredentials(snapshot);
+    return decodeStoredStripeCredentials(mode, credentials[mode]);
+  }
+
+  async saveStripeCredentials(input: StripeCredentialInput) {
+    return this.mutate(async (snapshot) => {
+      const credentials = ensureStripeCredentials(snapshot);
+      credentials[input.mode] = applyStripeCredentialInput(credentials[input.mode], input);
+      return buildStripeCredentialSummary(input.mode, credentials[input.mode]);
     });
   }
 

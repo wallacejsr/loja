@@ -34,6 +34,7 @@ const Promotions = lazy(() => import('./pages/admin/Promotions').then((module) =
 const AdminRaffles = lazy(() => import('./pages/admin/Raffles').then((module) => ({ default: module.AdminRaffles })));
 const LayoutTheme = lazy(() => import('./pages/admin/LayoutTheme').then((module) => ({ default: module.LayoutTheme })));
 const HomeSections = lazy(() => import('./pages/admin/HomeSections').then((module) => ({ default: module.HomeSections })));
+const Integrations = lazy(() => import('./pages/admin/Integrations').then((module) => ({ default: module.Integrations })));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -92,6 +93,7 @@ export default function App() {
                   <Route path="promotions" element={lazyRoute(<Promotions />)} />
                   <Route path="raffles" element={lazyRoute(<AdminRaffles />)} />
                   <Route path="layout" element={lazyRoute(<LayoutTheme />)} />
+                  <Route path="integrations" element={lazyRoute(<Integrations />)} />
                 </Route>
 
                 <Route path="/" element={<Layout />}>
@@ -100,6 +102,7 @@ export default function App() {
                   <Route path="product/:id" element={lazyRoute(<ProductDetails />)} />
                   <Route path="cart" element={lazyRoute(<Cart />)} />
                   <Route path="checkout" element={lazyRoute(<Checkout />)} />
+                  <Route path="checkout/success" element={lazyRoute(<Checkout />)} />
                   <Route path="account" element={lazyRoute(<Account />)} />
                   <Route path="sorteios" element={lazyRoute(<Raffles />)} />
                   <Route path="register" element={lazyRoute(<Register />)} />

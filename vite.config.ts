@@ -47,6 +47,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
+        '/api/integrations': 'http://127.0.0.1:4000',
         '/api/shipping': 'http://127.0.0.1:4000',
         '/api/store': 'http://127.0.0.1:4000',
         '/uploads': 'http://127.0.0.1:4000',

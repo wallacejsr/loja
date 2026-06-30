@@ -352,6 +352,14 @@ const toSettings = (row: any): StoreSettings => normalizeStoreSettings({
   shippingPackageLengthCm: Number(row.shipping_package_length_cm ?? defaultSettings.shippingPackageLengthCm),
   shippingPackageWidthCm: Number(row.shipping_package_width_cm ?? defaultSettings.shippingPackageWidthCm),
   shippingPackageHeightCm: Number(row.shipping_package_height_cm ?? defaultSettings.shippingPackageHeightCm),
+  stripeEnabled: row.stripe_enabled ?? defaultSettings.stripeEnabled,
+  stripeMode: row.stripe_mode === 'live' ? 'live' : defaultSettings.stripeMode,
+  stripeCurrency: row.stripe_currency || defaultSettings.stripeCurrency,
+  stripeAllowCard: row.stripe_allow_card ?? defaultSettings.stripeAllowCard,
+  stripeAllowApplePay: row.stripe_allow_apple_pay ?? defaultSettings.stripeAllowApplePay,
+  stripeAllowGooglePay: row.stripe_allow_google_pay ?? defaultSettings.stripeAllowGooglePay,
+  stripeSuccessUrl: row.stripe_success_url || defaultSettings.stripeSuccessUrl,
+  stripeCancelUrl: row.stripe_cancel_url || defaultSettings.stripeCancelUrl,
 });
 
 const fromSettings = (settings: StoreSettings) => ({
@@ -391,6 +399,14 @@ const fromSettings = (settings: StoreSettings) => ({
   shipping_package_length_cm: settings.shippingPackageLengthCm,
   shipping_package_width_cm: settings.shippingPackageWidthCm,
   shipping_package_height_cm: settings.shippingPackageHeightCm,
+  stripe_enabled: settings.stripeEnabled,
+  stripe_mode: settings.stripeMode,
+  stripe_currency: settings.stripeCurrency,
+  stripe_allow_card: settings.stripeAllowCard,
+  stripe_allow_apple_pay: settings.stripeAllowApplePay,
+  stripe_allow_google_pay: settings.stripeAllowGooglePay,
+  stripe_success_url: settings.stripeSuccessUrl,
+  stripe_cancel_url: settings.stripeCancelUrl,
   updated_at: new Date().toISOString(),
 });
 

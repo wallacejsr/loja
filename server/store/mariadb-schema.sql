@@ -141,7 +141,34 @@ CREATE TABLE IF NOT EXISTS store_settings (
   shipping_package_length_cm DECIMAL(10,2) NOT NULL DEFAULT 30,
   shipping_package_width_cm DECIMAL(10,2) NOT NULL DEFAULT 24,
   shipping_package_height_cm DECIMAL(10,2) NOT NULL DEFAULT 6,
+  stripe_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  stripe_mode VARCHAR(10) NOT NULL DEFAULT 'test',
+  stripe_currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+  stripe_allow_card TINYINT(1) NOT NULL DEFAULT 1,
+  stripe_allow_apple_pay TINYINT(1) NOT NULL DEFAULT 0,
+  stripe_allow_google_pay TINYINT(1) NOT NULL DEFAULT 0,
+  stripe_success_url VARCHAR(255) NOT NULL DEFAULT '/checkout/success?session_id={CHECKOUT_SESSION_ID}',
+  stripe_cancel_url VARCHAR(255) NOT NULL DEFAULT '/cart',
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS stripe_enabled TINYINT(1) NOT NULL DEFAULT 0;
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS stripe_mode VARCHAR(10) NOT NULL DEFAULT 'test';
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS stripe_currency VARCHAR(10) NOT NULL DEFAULT 'USD';
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS stripe_allow_card TINYINT(1) NOT NULL DEFAULT 1;
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS stripe_allow_apple_pay TINYINT(1) NOT NULL DEFAULT 0;
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS stripe_allow_google_pay TINYINT(1) NOT NULL DEFAULT 0;
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS stripe_success_url VARCHAR(255) NOT NULL DEFAULT '/checkout/success?session_id={CHECKOUT_SESSION_ID}';
+ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS stripe_cancel_url VARCHAR(255) NOT NULL DEFAULT '/cart';
+
+CREATE TABLE IF NOT EXISTS payment_gateway_credentials (
+  provider VARCHAR(40) NOT NULL,
+  mode VARCHAR(10) NOT NULL,
+  publishable_key_encrypted LONGTEXT NOT NULL,
+  secret_key_encrypted LONGTEXT NOT NULL,
+  webhook_secret_encrypted LONGTEXT NOT NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (provider, mode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS contact_messages (

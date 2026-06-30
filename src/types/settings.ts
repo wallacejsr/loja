@@ -1,6 +1,7 @@
 import type { AddressCountryCode } from '../lib/customerForm';
 
 export type StoreCurrencyCode = 'AUD' | 'BRL' | 'CAD' | 'EUR' | 'GBP' | 'USD';
+export type StripeMode = 'live' | 'test';
 
 export interface StoreSettings {
   storeName: string;
@@ -38,6 +39,14 @@ export interface StoreSettings {
   shippingPackageLengthCm: number;
   shippingPackageWidthCm: number;
   shippingPackageHeightCm: number;
+  stripeEnabled: boolean;
+  stripeMode: StripeMode;
+  stripeCurrency: StoreCurrencyCode;
+  stripeAllowCard: boolean;
+  stripeAllowApplePay: boolean;
+  stripeAllowGooglePay: boolean;
+  stripeSuccessUrl: string;
+  stripeCancelUrl: string;
 }
 
 export function normalizeStoreSettings(settings: StoreSettings): StoreSettings {
@@ -91,4 +100,12 @@ export const defaultSettings: StoreSettings = {
   shippingPackageLengthCm: 30,
   shippingPackageWidthCm: 24,
   shippingPackageHeightCm: 6,
+  stripeEnabled: false,
+  stripeMode: 'test',
+  stripeCurrency: 'USD',
+  stripeAllowCard: true,
+  stripeAllowApplePay: false,
+  stripeAllowGooglePay: false,
+  stripeSuccessUrl: '/checkout/success?session_id={CHECKOUT_SESSION_ID}',
+  stripeCancelUrl: '/cart',
 };

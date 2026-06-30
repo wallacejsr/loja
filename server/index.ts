@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
+import { registerStripeRoutes } from './integrations/registerStripeRoutes';
 import { registerShippingRoute } from './shipping/registerShippingRoute';
 import { createStoreRepository } from './store/repository';
 import { registerStoreRoutes } from './store/registerStoreRoutes';
@@ -53,6 +54,7 @@ async function main() {
     response.json({ ok: true, service: 'api' });
   });
 
+  app.use('/api/integrations', registerStripeRoutes());
   app.use('/api/store', registerStoreRoutes(repository, uploadsRoot));
   app.use('/api/shipping', registerShippingRoute());
 

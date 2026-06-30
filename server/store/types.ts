@@ -1,5 +1,5 @@
 import type { Product } from '../../src/data/mockData';
-import type { StoreSettings } from '../../src/types/settings';
+import type { StoreSettings, StripeMode } from '../../src/types/settings';
 import type {
   Banner,
   CategoryInput,
@@ -29,6 +29,13 @@ export type StoredInstagramPost = InstagramPost & {
   status: StoredStatus;
 };
 
+export type StoredStripeCredentialSet = {
+  publishableKeyEncrypted: string;
+  secretKeyEncrypted: string;
+  updatedAt: string | null;
+  webhookSecretEncrypted: string;
+};
+
 export interface StoreSnapshot {
   banners: Banner[];
   categories: StoreCategory[];
@@ -39,10 +46,38 @@ export interface StoreSnapshot {
   products: StoredProduct[];
   raffles: Raffle[];
   settings: StoreSettings;
+  stripeCredentials?: Partial<Record<StripeMode, StoredStripeCredentialSet>>;
 }
 
 export type ListOptions = {
   onlyActive?: boolean;
+};
+
+export type StripeCredentialInput = {
+  mode: StripeMode;
+  publishableKey?: string;
+  secretKey?: string;
+  webhookSecret?: string;
+};
+
+export type StripeCredentialSummary = {
+  mode: StripeMode;
+  publishableKeyConfigured: boolean;
+  publishableKeyMasked: string;
+  ready: boolean;
+  secretKeyConfigured: boolean;
+  secretKeyMasked: string;
+  updatedAt: string | null;
+  webhookSecretConfigured: boolean;
+  webhookSecretMasked: string;
+};
+
+export type StripeCredentials = {
+  mode: StripeMode;
+  publishableKey: string;
+  secretKey: string;
+  updatedAt: string | null;
+  webhookSecret: string;
 };
 
 export interface StoreRepository {
@@ -65,8 +100,12 @@ export interface StoreRepository {
   getInstagramFeed(): Promise<InstagramPost[]>;
   getProducts(options?: ListOptions): Promise<Product[]>;
   getRaffles(options?: ListOptions): Promise<Raffle[]>;
+  getStripeCredentials(mode: StripeMode): Promise<StripeCredentials | null>;
+  getStripeCredentialSummary(mode: StripeMode): Promise<StripeCredentialSummary>;
   getStoreSettings(): Promise<StoreSettings>;
+  listStripeCredentialSummaries(): Promise<Record<StripeMode, StripeCredentialSummary>>;
   saveStoreSettings(settings: StoreSettings): Promise<StoreSettings>;
+  saveStripeCredentials(input: StripeCredentialInput): Promise<StripeCredentialSummary>;
   updateBannerPositions(banners: Banner[]): Promise<void>;
   updateCategory(id: string, input: CategoryInput): Promise<StoreCategory>;
   updateContactMessage(id: string, input: ContactMessageUpdateInput): Promise<ContactMessage>;
