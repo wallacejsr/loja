@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { resolveStripeSecretKey as resolveStoredStripeSecretKey } from './runtime.js';
+import { persistStripeCheckoutDraft } from './tracking.js';
 
 type StripeMode = 'live' | 'test';
 
@@ -461,6 +462,25 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
     const lineItems = buildLineItems(req, body, products);
     const params = buildStripeCheckoutParams(req, body, lineItems);
     const session = await createStripeCheckoutSession(secretKey, params);
+
+    try {
+      await persistStripeCheckoutDraft({
+        mode: stripeMode,
+        currency: body.settings.stripeCurrency,
+        orderNumber: body.orderNumber,
+        sessionId: session.id,
+        customer: body.customer,
+        shippingAddress: body.shippingAddress,
+        items: body.items,
+        subtotal: body.subtotal,
+        shipping: body.shipping,
+        shippingMethod: body.shippingMethod,
+        discount: body.discount,
+        total: Math.max(0, body.subtotal + body.shipping - body.discount),
+      });
+    } catch (error) {
+      console.error('Stripe checkout tracking warning:', error);
+    }
 
     res.status(200).json({
       success: true,

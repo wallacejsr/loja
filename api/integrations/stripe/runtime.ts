@@ -638,6 +638,54 @@ export async function getStripeCandidateSecretKeys() {
   return [...keys];
 }
 
+export async function getStripeCandidateWebhookSecrets() {
+  const secrets = new Map<string, { mode: StripeMode; secret: string; source: 'database' | 'environment' }>();
+
+  for (const mode of ['test', 'live'] as StripeMode[]) {
+    try {
+      const storedCredentials = await getStoredStripeCredentials(mode);
+      const storedWebhookSecret = storedCredentials?.webhookSecret?.trim() || '';
+
+      if (storedWebhookSecret) {
+        secrets.set(`database:${mode}:${storedWebhookSecret}`, {
+          mode,
+          secret: storedWebhookSecret,
+          source: 'database',
+        });
+      }
+    } catch {
+      // Ignore storage read failures and continue with env fallbacks.
+    }
+
+    const directModeSecret = process.env[`STRIPE_${mode.toUpperCase()}_WEBHOOK_SECRET`]?.trim() || '';
+
+    if (directModeSecret) {
+      secrets.set(`environment:${mode}:${directModeSecret}`, {
+        mode,
+        secret: directModeSecret,
+        source: 'environment',
+      });
+    }
+  }
+
+  const genericSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim() || '';
+
+  if (genericSecret) {
+    secrets.set(`environment:test:${genericSecret}`, {
+      mode: 'test',
+      secret: genericSecret,
+      source: 'environment',
+    });
+    secrets.set(`environment:live:${genericSecret}`, {
+      mode: 'live',
+      secret: genericSecret,
+      source: 'environment',
+    });
+  }
+
+  return [...secrets.values()];
+}
+
 async function fetchStripeAccount(secretKey: string) {
   const response = await fetch('https://api.stripe.com/v1/account', {
     headers: {

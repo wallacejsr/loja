@@ -171,6 +171,46 @@ CREATE TABLE IF NOT EXISTS payment_gateway_credentials (
   PRIMARY KEY (provider, mode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS stripe_checkout_orders (
+  order_number VARCHAR(191) NOT NULL PRIMARY KEY,
+  stripe_session_id VARCHAR(191) NULL,
+  stripe_payment_intent_id VARCHAR(191) NOT NULL DEFAULT '',
+  provider VARCHAR(40) NOT NULL DEFAULT 'stripe',
+  mode VARCHAR(10) NOT NULL DEFAULT 'test',
+  session_status VARCHAR(40) NOT NULL DEFAULT 'open',
+  payment_status VARCHAR(40) NOT NULL DEFAULT 'unpaid',
+  order_status VARCHAR(60) NOT NULL DEFAULT 'Aguardando Pagamento',
+  currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+  subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+  shipping DECIMAL(10,2) NOT NULL DEFAULT 0,
+  discount DECIMAL(10,2) NOT NULL DEFAULT 0,
+  total DECIMAL(10,2) NOT NULL DEFAULT 0,
+  shipping_method VARCHAR(191) NOT NULL DEFAULT '',
+  customer LONGTEXT NOT NULL,
+  shipping_address LONGTEXT NOT NULL,
+  items LONGTEXT NOT NULL,
+  source VARCHAR(80) NOT NULL DEFAULT 'stripe_checkout',
+  metadata LONGTEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  paid_at DATETIME NULL,
+  last_event_id VARCHAR(191) NOT NULL DEFAULT '',
+  last_event_type VARCHAR(120) NOT NULL DEFAULT '',
+  UNIQUE KEY stripe_checkout_orders_session_unique (stripe_session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS stripe_webhook_logs (
+  event_id VARCHAR(191) NOT NULL PRIMARY KEY,
+  event_type VARCHAR(120) NOT NULL,
+  order_number VARCHAR(191) NOT NULL DEFAULT '',
+  stripe_session_id VARCHAR(191) NOT NULL DEFAULT '',
+  livemode TINYINT(1) NOT NULL DEFAULT 0,
+  status VARCHAR(40) NOT NULL DEFAULT 'received',
+  message TEXT NOT NULL,
+  payload LONGTEXT NOT NULL,
+  processed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS contact_messages (
   id VARCHAR(191) NOT NULL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,

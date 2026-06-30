@@ -238,6 +238,45 @@ create table if not exists public.payment_gateway_credentials (
   primary key (provider, mode)
 );
 
+create table if not exists public.stripe_checkout_orders (
+  order_number text primary key,
+  stripe_session_id text unique,
+  stripe_payment_intent_id text default '',
+  provider text not null default 'stripe',
+  mode text not null default 'test',
+  session_status text not null default 'open',
+  payment_status text not null default 'unpaid',
+  order_status text not null default 'Aguardando Pagamento',
+  currency text not null default 'USD',
+  subtotal numeric(10, 2) not null default 0,
+  shipping numeric(10, 2) not null default 0,
+  discount numeric(10, 2) not null default 0,
+  total numeric(10, 2) not null default 0,
+  shipping_method text default '',
+  customer jsonb not null default '{}'::jsonb,
+  shipping_address jsonb not null default '{}'::jsonb,
+  items jsonb not null default '[]'::jsonb,
+  source text not null default 'stripe_checkout',
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  paid_at timestamptz,
+  last_event_id text default '',
+  last_event_type text default ''
+);
+
+create table if not exists public.stripe_webhook_logs (
+  event_id text primary key,
+  event_type text not null,
+  order_number text default '',
+  stripe_session_id text default '',
+  livemode boolean not null default false,
+  status text not null default 'received',
+  message text default '',
+  payload jsonb not null default '{}'::jsonb,
+  processed_at timestamptz not null default now()
+);
+
 drop view if exists public.categories_with_product_count;
 
 create view public.categories_with_product_count as
@@ -258,8 +297,12 @@ alter table public.contact_messages enable row level security;
 alter table public.instagram_posts enable row level security;
 alter table public.store_settings enable row level security;
 alter table public.payment_gateway_credentials enable row level security;
+alter table public.stripe_checkout_orders enable row level security;
+alter table public.stripe_webhook_logs enable row level security;
 
 revoke all on table public.payment_gateway_credentials from anon, authenticated;
+revoke all on table public.stripe_checkout_orders from anon, authenticated;
+revoke all on table public.stripe_webhook_logs from anon, authenticated;
 
 drop policy if exists "Public read products" on public.products;
 drop policy if exists "Public read categories" on public.categories;

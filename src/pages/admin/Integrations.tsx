@@ -233,10 +233,169 @@ export function Integrations() {
                 updateSettings(draft);
               }}
             />
+          ) : activeTab === 'webhooks' ? (
+            <WebhooksTab settings={settings} />
           ) : (
             <PlaceholderTab tab={activeTabConfig} />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WebhooksTab({ settings }: { settings: StoreSettings }) {
+  const webhookUrl = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return '/api/integrations/stripe/webhook';
+    }
+
+    return `${window.location.origin}/api/integrations/stripe/webhook`;
+  }, []);
+
+  const stripeEvents = [
+    'checkout.session.completed',
+    'checkout.session.async_payment_succeeded',
+    'checkout.session.async_payment_failed',
+    'checkout.session.expired',
+  ];
+
+  const copyValue = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      showToast(`${label} copiado.`);
+    } catch {
+      showToast(`Nao foi possivel copiar ${label.toLowerCase()}.`);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
+        <section className="rounded-2xl border border-neutral-200/50 bg-white p-6 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <span className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">
+                <Webhook className="h-3.5 w-3.5" />
+                Stripe webhook
+              </span>
+              <h3 className="text-2xl font-serif font-bold text-neutral-900">Endpoint pronto para colar na Stripe</h3>
+              <p className="max-w-2xl text-[13px] leading-relaxed text-neutral-500">
+                Este endpoint valida a assinatura oficial da Stripe, registra os eventos recebidos e atualiza a trilha server-side do checkout.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] font-semibold text-amber-700">
+              Modo atual: {getModeLabel(settings.stripeMode)}
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-neutral-200/60 bg-neutral-50/70 p-4">
+            <label className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+              URL do webhook
+            </label>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+              <div className="min-w-0 flex-1 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-[13px] font-medium text-neutral-900 break-all">
+                {webhookUrl}
+              </div>
+              <button
+                type="button"
+                onClick={() => void copyValue(webhookUrl, 'URL do webhook')}
+                className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-[12px] font-semibold text-neutral-700 transition-all hover:border-neutral-300 hover:text-neutral-900"
+              >
+                <Link2 className="h-4 w-4" />
+                Copiar URL
+              </button>
+            </div>
+            <p className={helperTextClass}>
+              No painel da Stripe, crie um endpoint novo apontando para essa URL e depois copie o valor `whsec_...` gerado para a aba Pagamentos.
+            </p>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-neutral-200/50 bg-neutral-950 p-6 text-white shadow-[0_12px_34px_rgba(15,23,42,0.18)]">
+          <div className="space-y-2">
+            <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Fluxo recomendado
+            </span>
+            <h3 className="text-xl font-serif font-bold">Segredo do endpoint separado da secret key</h3>
+          </div>
+
+          <div className="mt-5 space-y-3 text-[13px] leading-relaxed text-white/75">
+            <p>
+              A Stripe vai gerar um `whsec_...` exclusivo para este endpoint. Ele nao e a mesma coisa que a sua secret key `sk_...`.
+            </p>
+            <p>
+              Salve o segredo de teste quando estiver em homologacao e o segredo de producao quando trocar o modo para live.
+            </p>
+          </div>
+        </section>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
+        <section className="rounded-2xl border border-neutral-200/50 bg-white p-6 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
+          <div className="space-y-2">
+            <h4 className="text-lg font-serif font-bold text-neutral-900">Eventos para assinar</h4>
+            <p className="text-[12px] leading-relaxed text-neutral-500">
+              Estes sao os eventos que ja tratamos operacionalmente nesta etapa.
+            </p>
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            {stripeEvents.map((eventName) => (
+              <div
+                key={eventName}
+                className="flex flex-col gap-2 rounded-2xl border border-neutral-200/60 bg-neutral-50/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="space-y-1">
+                  <p className="text-[13px] font-semibold text-neutral-900">{eventName}</p>
+                  <p className="text-[11px] leading-relaxed text-neutral-500">
+                    {eventName === 'checkout.session.completed' && 'Confirma o fechamento inicial da sessao de checkout.'}
+                    {eventName === 'checkout.session.async_payment_succeeded' && 'Marca pagamentos assincronos aprovados depois do retorno do cliente.'}
+                    {eventName === 'checkout.session.async_payment_failed' && 'Registra falhas de pagamento assincrono para conciliacao.'}
+                    {eventName === 'checkout.session.expired' && 'Encerra sessoes expiradas sem depender do navegador do cliente.'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void copyValue(eventName, 'Nome do evento')}
+                  className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[11px] font-semibold text-neutral-700 transition-all hover:border-neutral-300 hover:text-neutral-900"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  Copiar
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-neutral-200/50 bg-neutral-50/80 p-6 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
+          <div className="space-y-2">
+            <h4 className="text-lg font-serif font-bold text-neutral-900">Checklist rapido</h4>
+            <p className="text-[12px] leading-relaxed text-neutral-500">
+              O caminho mais limpo para fechar a configuracao sem ruído.
+            </p>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {[
+              'Criar o endpoint na dashboard da Stripe usando a URL acima.',
+              'Selecionar os quatro eventos de checkout listados nesta aba.',
+              'Copiar o signing secret gerado pela Stripe.',
+              'Voltar na aba Pagamentos e salvar esse valor no campo Webhook secret do modo correspondente.',
+              'Usar "Send test webhook" na Stripe para validar o retorno 200.',
+            ].map((item, index) => (
+              <div key={item} className="flex items-start gap-3 rounded-2xl border border-neutral-200/60 bg-white px-4 py-4">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-950 text-[11px] font-semibold text-white">
+                  {index + 1}
+                </div>
+                <p className="pt-1 text-[12px] leading-relaxed text-neutral-600">{item}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

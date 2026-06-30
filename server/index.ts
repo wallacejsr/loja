@@ -45,7 +45,12 @@ async function main() {
   await mkdir(uploadsRoot, { recursive: true });
 
   app.use(createCorsMiddleware());
-  app.use(express.json({ limit: '5mb' }));
+  app.use(express.json({
+    limit: '5mb',
+    verify: (request, _response, buffer) => {
+      (request as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+    },
+  }));
   app.use('/uploads', express.static(uploadsRoot));
 
   const repository = await createStoreRepository();

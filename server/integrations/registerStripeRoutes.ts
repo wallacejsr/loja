@@ -4,6 +4,7 @@ import stripeCredentialsHandler from '../../api/integrations/stripe/credentials'
 import stripeSessionStatusHandler from '../../api/integrations/stripe/session-status';
 import stripeStatusHandler from '../../api/integrations/stripe/status';
 import stripeTestConnectionHandler from '../../api/integrations/stripe/test-connection';
+import stripeWebhookHandler from '../../api/integrations/stripe/webhook';
 
 type ExpressLikeHandler = (request: Request, response: Response) => Promise<void>;
 
@@ -21,6 +22,7 @@ export function registerStripeRoutes() {
   router.post('/stripe/test-connection', forward(stripeTestConnectionHandler as ExpressLikeHandler));
   router.post('/stripe/checkout-session', forward(stripeCheckoutSessionHandler as ExpressLikeHandler));
   router.get('/stripe/session-status', forward(stripeSessionStatusHandler as ExpressLikeHandler));
+  router.post('/stripe/webhook', forward(stripeWebhookHandler as ExpressLikeHandler));
 
   return router;
 }
