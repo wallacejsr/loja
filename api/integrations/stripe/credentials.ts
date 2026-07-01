@@ -1,4 +1,4 @@
-import type { StripeMode } from '../../../src/types/settings.js';
+import type { StripeMode } from '../../../src/types/settings.ts';
 import { getStripeStatusPayload, saveStripeCredentialsToActiveStorage } from './runtime.js';
 
 type StripeCredentialSaveRequestBody = {

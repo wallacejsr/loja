@@ -3,7 +3,7 @@ import {
   type ShippingQuote,
   type ShippingQuoteRequest,
   type ShippingQuoteResponse,
-} from '../../src/lib/shipping';
+} from '../../src/lib/shipping.ts';
 
 type BasicRequest = {
   body?: unknown;

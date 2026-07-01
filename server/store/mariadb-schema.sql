@@ -234,3 +234,301 @@ CREATE TABLE IF NOT EXISTS contact_messages (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   replied_at DATETIME NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  email VARCHAR(255) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'Ativo',
+  source VARCHAR(80) NOT NULL DEFAULT 'footer-newsletter',
+  coupon_code VARCHAR(80) NOT NULL DEFAULT 'BEMVINDA10',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY newsletter_subscribers_email_unique (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- Foundation for production-grade customer accounts, sessions, carts and orders
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS customers (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  email VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  full_name VARCHAR(255) NOT NULL,
+  tax_document VARCHAR(80) NOT NULL DEFAULT '',
+  tax_document_type VARCHAR(30) NOT NULL DEFAULT 'tax_id',
+  birth_date DATE NULL,
+  gender VARCHAR(40) NOT NULL DEFAULT '',
+  phone_e164 VARCHAR(40) NOT NULL DEFAULT '',
+  phone_country VARCHAR(20) NOT NULL DEFAULT 'US',
+  phone_national VARCHAR(80) NOT NULL DEFAULT '',
+  registration_type VARCHAR(10) NOT NULL DEFAULT 'F',
+  corporate_name VARCHAR(255) NOT NULL DEFAULT '',
+  state_registration VARCHAR(120) NOT NULL DEFAULT '',
+  allow_marketing TINYINT(1) NOT NULL DEFAULT 1,
+  block_purchases TINYINT(1) NOT NULL DEFAULT 0,
+  newsletter_subscribed TINYINT(1) NOT NULL DEFAULT 0,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  email_verified_at DATETIME NULL,
+  last_login_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY customers_email_unique (email),
+  KEY customers_status_idx (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS customer_addresses (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  customer_id VARCHAR(191) NOT NULL,
+  label VARCHAR(120) NOT NULL,
+  country VARCHAR(20) NOT NULL DEFAULT 'US',
+  postal_code VARCHAR(30) NOT NULL,
+  street VARCHAR(255) NOT NULL,
+  number VARCHAR(50) NOT NULL DEFAULT '',
+  complement VARCHAR(255) NOT NULL DEFAULT '',
+  neighborhood VARCHAR(120) NOT NULL DEFAULT '',
+  city VARCHAR(120) NOT NULL,
+  region VARCHAR(120) NOT NULL,
+  is_primary TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY customer_addresses_customer_idx (customer_id),
+  KEY customer_addresses_primary_idx (customer_id, is_primary),
+  CONSTRAINT customer_addresses_customer_fk
+    FOREIGN KEY (customer_id) REFERENCES customers (id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  email VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  full_name VARCHAR(255) NOT NULL,
+  role VARCHAR(40) NOT NULL DEFAULT 'admin',
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  last_login_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY admin_users_email_unique (email),
+  KEY admin_users_status_idx (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS customer_sessions (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  customer_id VARCHAR(191) NOT NULL,
+  session_token_hash CHAR(64) NOT NULL,
+  ip_address VARCHAR(80) NOT NULL DEFAULT '',
+  user_agent VARCHAR(255) NOT NULL DEFAULT '',
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME NOT NULL,
+  revoked_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY customer_sessions_token_hash_unique (session_token_hash),
+  KEY customer_sessions_customer_idx (customer_id),
+  KEY customer_sessions_expires_idx (expires_at),
+  CONSTRAINT customer_sessions_customer_fk
+    FOREIGN KEY (customer_id) REFERENCES customers (id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS customer_benefits (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  customer_id VARCHAR(191) NOT NULL,
+  benefit_type VARCHAR(60) NOT NULL,
+  source VARCHAR(80) NOT NULL DEFAULT '',
+  status VARCHAR(30) NOT NULL DEFAULT 'available',
+  coupon_code VARCHAR(80) NOT NULL DEFAULT '',
+  discount_type VARCHAR(30) NOT NULL DEFAULT 'percentage',
+  discount_value DECIMAL(10,2) NOT NULL DEFAULT 0,
+  linked_email VARCHAR(255) NOT NULL DEFAULT '',
+  linked_newsletter_subscriber_id VARCHAR(191) NULL,
+  metadata LONGTEXT NULL,
+  available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  used_at DATETIME NULL,
+  used_order_id VARCHAR(191) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY customer_benefits_customer_idx (customer_id),
+  KEY customer_benefits_status_idx (status),
+  KEY customer_benefits_used_order_idx (used_order_id),
+  CONSTRAINT customer_benefits_customer_fk
+    FOREIGN KEY (customer_id) REFERENCES customers (id)
+    ON DELETE CASCADE,
+  CONSTRAINT customer_benefits_newsletter_fk
+    FOREIGN KEY (linked_newsletter_subscriber_id) REFERENCES newsletter_subscribers (id)
+    ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS coupons (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  code VARCHAR(80) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  description TEXT NOT NULL,
+  coupon_type VARCHAR(30) NOT NULL DEFAULT 'percentage',
+  coupon_value DECIMAL(10,2) NOT NULL DEFAULT 0,
+  min_order_value DECIMAL(10,2) NOT NULL DEFAULT 0,
+  usage_limit_total INT NOT NULL DEFAULT 0,
+  usage_limit_per_customer INT NOT NULL DEFAULT 1,
+  starts_at DATETIME NULL,
+  expires_at DATETIME NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  applies_to_scope VARCHAR(40) NOT NULL DEFAULT 'all',
+  applies_to_payload LONGTEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  archived_at DATETIME NULL,
+  UNIQUE KEY coupons_code_unique (code),
+  KEY coupons_status_idx (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS carts (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  customer_id VARCHAR(191) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+  subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+  discount DECIMAL(10,2) NOT NULL DEFAULT 0,
+  shipping DECIMAL(10,2) NOT NULL DEFAULT 0,
+  tax DECIMAL(10,2) NOT NULL DEFAULT 0,
+  total DECIMAL(10,2) NOT NULL DEFAULT 0,
+  shipping_method VARCHAR(191) NOT NULL DEFAULT '',
+  shipping_quote_snapshot LONGTEXT NULL,
+  applied_coupon_id VARCHAR(191) NULL,
+  applied_benefit_id VARCHAR(191) NULL,
+  converted_order_id VARCHAR(191) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  converted_at DATETIME NULL,
+  KEY carts_customer_status_idx (customer_id, status),
+  KEY carts_status_idx (status),
+  CONSTRAINT carts_customer_fk
+    FOREIGN KEY (customer_id) REFERENCES customers (id)
+    ON DELETE CASCADE,
+  CONSTRAINT carts_coupon_fk
+    FOREIGN KEY (applied_coupon_id) REFERENCES coupons (id)
+    ON DELETE SET NULL,
+  CONSTRAINT carts_benefit_fk
+    FOREIGN KEY (applied_benefit_id) REFERENCES customer_benefits (id)
+    ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS cart_items (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  cart_id VARCHAR(191) NOT NULL,
+  product_id VARCHAR(191) NOT NULL,
+  product_name_snapshot VARCHAR(255) NOT NULL,
+  sku_snapshot VARCHAR(191) NOT NULL DEFAULT '',
+  unit_price_snapshot DECIMAL(10,2) NOT NULL DEFAULT 0,
+  quantity INT NOT NULL DEFAULT 1,
+  size_label VARCHAR(80) NOT NULL DEFAULT '',
+  color_label VARCHAR(80) NOT NULL DEFAULT '',
+  metadata LONGTEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY cart_items_line_unique (cart_id, product_id, size_label, color_label),
+  KEY cart_items_cart_idx (cart_id),
+  CONSTRAINT cart_items_cart_fk
+    FOREIGN KEY (cart_id) REFERENCES carts (id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS orders (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  order_number VARCHAR(191) NOT NULL,
+  customer_id VARCHAR(191) NULL,
+  cart_id VARCHAR(191) NULL,
+  source VARCHAR(80) NOT NULL DEFAULT 'storefront',
+  status VARCHAR(60) NOT NULL DEFAULT 'pending_payment',
+  payment_provider VARCHAR(40) NOT NULL DEFAULT '',
+  payment_method VARCHAR(80) NOT NULL DEFAULT '',
+  payment_reference VARCHAR(191) NOT NULL DEFAULT '',
+  currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+  subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+  discount DECIMAL(10,2) NOT NULL DEFAULT 0,
+  shipping DECIMAL(10,2) NOT NULL DEFAULT 0,
+  tax DECIMAL(10,2) NOT NULL DEFAULT 0,
+  total DECIMAL(10,2) NOT NULL DEFAULT 0,
+  coupon_id VARCHAR(191) NULL,
+  customer_benefit_id VARCHAR(191) NULL,
+  customer_snapshot LONGTEXT NOT NULL,
+  billing_address_snapshot LONGTEXT NULL,
+  shipping_address_snapshot LONGTEXT NOT NULL,
+  metadata LONGTEXT NULL,
+  placed_at DATETIME NULL,
+  paid_at DATETIME NULL,
+  shipped_at DATETIME NULL,
+  delivered_at DATETIME NULL,
+  cancelled_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY orders_order_number_unique (order_number),
+  KEY orders_customer_idx (customer_id),
+  KEY orders_status_idx (status),
+  CONSTRAINT orders_customer_fk
+    FOREIGN KEY (customer_id) REFERENCES customers (id)
+    ON DELETE SET NULL,
+  CONSTRAINT orders_cart_fk
+    FOREIGN KEY (cart_id) REFERENCES carts (id)
+    ON DELETE SET NULL,
+  CONSTRAINT orders_coupon_fk
+    FOREIGN KEY (coupon_id) REFERENCES coupons (id)
+    ON DELETE SET NULL,
+  CONSTRAINT orders_benefit_fk
+    FOREIGN KEY (customer_benefit_id) REFERENCES customer_benefits (id)
+    ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS order_items (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  order_id VARCHAR(191) NOT NULL,
+  product_id VARCHAR(191) NOT NULL,
+  product_name_snapshot VARCHAR(255) NOT NULL,
+  sku_snapshot VARCHAR(191) NOT NULL DEFAULT '',
+  unit_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  quantity INT NOT NULL DEFAULT 1,
+  subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+  size_label VARCHAR(80) NOT NULL DEFAULT '',
+  color_label VARCHAR(80) NOT NULL DEFAULT '',
+  metadata LONGTEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY order_items_order_idx (order_id),
+  CONSTRAINT order_items_order_fk
+    FOREIGN KEY (order_id) REFERENCES orders (id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS order_status_logs (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  order_id VARCHAR(191) NOT NULL,
+  status VARCHAR(60) NOT NULL,
+  actor_type VARCHAR(30) NOT NULL DEFAULT 'system',
+  actor_id VARCHAR(191) NOT NULL DEFAULT '',
+  actor_name VARCHAR(191) NOT NULL DEFAULT '',
+  ip_address VARCHAR(80) NOT NULL DEFAULT '',
+  message TEXT NOT NULL,
+  metadata LONGTEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY order_status_logs_order_idx (order_id),
+  CONSTRAINT order_status_logs_order_fk
+    FOREIGN KEY (order_id) REFERENCES orders (id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  actor_type VARCHAR(30) NOT NULL DEFAULT 'system',
+  actor_id VARCHAR(191) NOT NULL DEFAULT '',
+  actor_email VARCHAR(255) NOT NULL DEFAULT '',
+  entity_type VARCHAR(60) NOT NULL,
+  entity_id VARCHAR(191) NOT NULL,
+  action VARCHAR(80) NOT NULL,
+  ip_address VARCHAR(80) NOT NULL DEFAULT '',
+  user_agent VARCHAR(255) NOT NULL DEFAULT '',
+  diff_json LONGTEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY audit_logs_entity_idx (entity_type, entity_id),
+  KEY audit_logs_actor_idx (actor_type, actor_id),
+  KEY audit_logs_action_idx (action)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

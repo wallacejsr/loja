@@ -1,7 +1,14 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Product } from '../../src/data/mockData';
-import { normalizeStoreSettings, type StoreSettings, type StripeMode } from '../../src/types/settings';
+import type { Product } from '../../src/data/mockData.ts';
+import {
+  createNewsletterSubscriberId,
+  isValidNewsletterEmail,
+  NEWSLETTER_DEFAULT_SOURCE,
+  normalizeNewsletterEmail,
+  WELCOME_NEWSLETTER_COUPON_CODE,
+} from '../../src/lib/newsletter.ts';
+import { normalizeStoreSettings, type StoreSettings, type StripeMode } from '../../src/types/settings.ts';
 import type {
   Banner,
   CategoryInput,
@@ -13,11 +20,13 @@ import type {
   HomeSection,
   HomeSectionInput,
   InstagramPost,
+  NewsletterSubscriber,
+  NewsletterSubscriberInput,
   ProductInput,
   Raffle,
   RaffleInput,
   StoreCategory,
-} from '../../src/lib/storeApiSupabase';
+} from '../../src/lib/storeApiSupabase.ts';
 import {
   applyStripeCredentialInput,
   buildStripeCredentialSummary,
@@ -60,6 +69,56 @@ function toNumber(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function padDatePart(value: number) {
+  return String(value).padStart(2, '0');
+}
+
+function toSqlDateTime(value: string | Date | null | undefined) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return [
+    date.getUTCFullYear(),
+    padDatePart(date.getUTCMonth() + 1),
+    padDatePart(date.getUTCDate()),
+  ].join('-')
+    + ` ${padDatePart(date.getUTCHours())}:${padDatePart(date.getUTCMinutes())}:${padDatePart(date.getUTCSeconds())}`;
+}
+
+function toIsoDateTime(value: unknown, fallback = new Date().toISOString()) {
+  if (value === null || value === undefined || value === '') {
+    return fallback;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const raw = String(value).trim();
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)
+    ? `${raw.replace(' ', 'T')}Z`
+    : raw;
+  const parsed = new Date(normalized);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return fallback;
+  }
+
+  return parsed.toISOString();
+}
+
 async function loadMariaDbModule() {
   const moduleName = 'mysql2/promise';
 
@@ -97,6 +156,11 @@ export class MariaDbStoreRepository implements StoreRepository {
 
   private async bootstrap() {
     await this.ensureSchema();
+
+    if (process.env.STORE_SKIP_DEFAULT_SEED === '1' || process.env.STORE_SKIP_DEFAULT_SEED === 'true') {
+      return;
+    }
+
     await this.seedDefaultsIfEmpty();
   }
 
@@ -146,8 +210,8 @@ export class MariaDbStoreRepository implements StoreRepository {
             product.estoque,
             product.shippingWeightGrams ?? 500,
             product.status,
-            product.createdAt,
-            product.updatedAt,
+            toSqlDateTime(product.createdAt) || toSqlDateTime(new Date()),
+            toSqlDateTime(product.updatedAt) || toSqlDateTime(new Date()),
           ],
         );
       }
@@ -429,9 +493,21 @@ export class MariaDbStoreRepository implements StoreRepository {
       status: row.status || 'Novo',
       source: row.source || 'site-contact',
       adminNotes: row.admin_notes || '',
-      createdAt: row.created_at || new Date().toISOString(),
-      updatedAt: row.updated_at || row.created_at || new Date().toISOString(),
-      repliedAt: row.replied_at || undefined,
+      createdAt: toIsoDateTime(row.created_at),
+      updatedAt: toIsoDateTime(row.updated_at || row.created_at),
+      repliedAt: row.replied_at ? toIsoDateTime(row.replied_at) : undefined,
+    };
+  }
+
+  private mapNewsletterSubscriber(row: any): NewsletterSubscriber {
+    return {
+      id: String(row.id),
+      email: row.email || '',
+      status: row.status || 'Ativo',
+      source: row.source || NEWSLETTER_DEFAULT_SOURCE,
+      couponCode: row.coupon_code || WELCOME_NEWSLETTER_COUPON_CODE,
+      createdAt: toIsoDateTime(row.created_at),
+      updatedAt: toIsoDateTime(row.updated_at || row.created_at),
     };
   }
 
@@ -489,7 +565,7 @@ export class MariaDbStoreRepository implements StoreRepository {
       secretKeyEncrypted: row?.secret_key_encrypted || '',
       webhookSecretEncrypted: row?.webhook_secret_encrypted || '',
       updatedAt: row?.updated_at
-        ? new Date(row.updated_at).toISOString()
+        ? toIsoDateTime(row.updated_at)
         : null,
     };
   }
@@ -1063,9 +1139,14 @@ export class MariaDbStoreRepository implements StoreRepository {
     return rows.map((row) => this.mapContactMessage(row));
   }
 
+  async getNewsletterSubscribers() {
+    const rows = await this.queryRows('SELECT * FROM newsletter_subscribers ORDER BY created_at DESC');
+    return rows.map((row) => this.mapNewsletterSubscriber(row));
+  }
+
   async createContactMessage(input: ContactMessageInput) {
     const id = createId('contact');
-    const timestamp = new Date().toISOString();
+    const timestamp = toSqlDateTime(new Date());
 
     await this.pool.query(
       `
@@ -1091,11 +1172,43 @@ export class MariaDbStoreRepository implements StoreRepository {
             updated_at = NOW()
         WHERE id = ?
       `,
-      [input.status ?? null, input.adminNotes ?? null, input.repliedAt ?? null, id],
+      [input.status ?? null, input.adminNotes ?? null, toSqlDateTime(input.repliedAt) ?? null, id],
     );
 
     const [updated] = await this.queryRows('SELECT * FROM contact_messages WHERE id = ? LIMIT 1', [id]);
     if (!updated) throw new Error('Mensagem nao encontrada.');
     return this.mapContactMessage(updated);
+  }
+
+  async createNewsletterSubscriber(input: NewsletterSubscriberInput) {
+    const normalizedEmail = normalizeNewsletterEmail(input.email);
+
+    if (!isValidNewsletterEmail(normalizedEmail)) {
+      throw new Error('Informe um e-mail valido para receber o cupom.');
+    }
+
+    const id = createNewsletterSubscriberId(normalizedEmail);
+    const source = input.source?.trim() || NEWSLETTER_DEFAULT_SOURCE;
+
+    await this.pool.query(
+      `
+        INSERT INTO newsletter_subscribers (
+          id, email, status, source, coupon_code, created_at, updated_at
+        ) VALUES (?, ?, 'Ativo', ?, ?, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+          status = VALUES(status),
+          source = VALUES(source),
+          coupon_code = VALUES(coupon_code),
+          updated_at = NOW()
+      `,
+      [id, normalizedEmail, source, WELCOME_NEWSLETTER_COUPON_CODE],
+    );
+
+    const [created] = await this.queryRows('SELECT * FROM newsletter_subscribers WHERE email = ? LIMIT 1', [normalizedEmail]);
+    if (!created) {
+      throw new Error('Nao foi possivel salvar o cadastro da newsletter.');
+    }
+
+    return this.mapNewsletterSubscriber(created);
   }
 }

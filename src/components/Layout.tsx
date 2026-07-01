@@ -6,20 +6,27 @@ import { cn } from '../lib/utils';
 import { useSettings } from '../hooks/useSettings';
 import { useStorefront } from '../hooks/useStorefront';
 import { useStoreCategories } from '../hooks/useStoreData';
-import { createContactMessage } from '../lib/storeApi';
+import { createContactMessage, createNewsletterSubscriber } from '../lib/storeApi';
+import { useCustomerSession } from '../context/CustomerSessionContext';
 import { getWhatsAppUrl } from '../lib/customerForm';
+import { WELCOME_NEWSLETTER_COUPON_CODE } from '../lib/newsletter';
 import { StoreImage } from './StoreImage';
 
 export function Layout() {
   const { t } = useStorefront();
   const { settings, loading: settingsLoading } = useSettings();
   const categories = useStoreCategories();
+  const { activateNewsletterBenefitForCurrentCustomer } = useCustomerSession();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [contactFeedback, setContactFeedback] = useState('');
   const [contactError, setContactError] = useState('');
   const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+  const [newsletterEmail, setNewsletterEmail] = useState('');
+  const [newsletterFeedback, setNewsletterFeedback] = useState('');
+  const [newsletterError, setNewsletterError] = useState('');
+  const [isSubmittingNewsletter, setIsSubmittingNewsletter] = useState(false);
   const [contactForm, setContactForm] = useState({
     name: '',
     email: '',
@@ -94,6 +101,36 @@ export function Layout() {
     } catch (error) {
       setContactError(error instanceof Error ? error.message : 'Não foi possível enviar a sua mensagem.');
       setIsSubmittingContact(false);
+    }
+  };
+
+  const handleNewsletterSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!newsletterEmail.trim()) {
+      return;
+    }
+
+    setNewsletterError('');
+    setNewsletterFeedback('');
+    setIsSubmittingNewsletter(true);
+
+    try {
+      const subscriber = await createNewsletterSubscriber({
+        email: newsletterEmail,
+        source: 'footer-newsletter',
+      });
+      await activateNewsletterBenefitForCurrentCustomer(subscriber);
+      setNewsletterFeedback(
+        t('newsletterSuccess', {
+          coupon: subscriber.couponCode || WELCOME_NEWSLETTER_COUPON_CODE,
+        }),
+      );
+      setNewsletterEmail('');
+    } catch (error) {
+      setNewsletterError(error instanceof Error ? error.message : t('newsletterError'));
+    } finally {
+      setIsSubmittingNewsletter(false);
     }
   };
 
@@ -544,19 +581,34 @@ export function Layout() {
                {t('newsletterTitle')}
              </h3>
              <p className="text-secondary/70 text-sm mb-6">{t('newsletterSubtitle')}</p>
-             <form className="flex flex-col sm:flex-row gap-2 max-w-md mx-auto" onSubmit={(e) => e.preventDefault()}>
+             <form className="flex flex-col sm:flex-row gap-2 max-w-md mx-auto" onSubmit={(event) => { void handleNewsletterSubmit(event); }}>
                <input
                  type="email"
+                 value={newsletterEmail}
+                 onChange={(event) => setNewsletterEmail(event.target.value)}
                  placeholder={t('newsletterEmailPlaceholder')}
+                 required
+                 autoComplete="email"
                  className="flex-grow bg-white border border-neutral-300 px-4 py-3 text-sm focus:outline-none focus:border-primary rounded"
                />
                <button
                  type="submit"
+                 disabled={isSubmittingNewsletter}
                  className="bg-primary text-white px-6 py-3 text-sm font-bold hover:bg-primary-dark transition-colors rounded uppercase tracking-wider"
                >
-                 {t('subscribe')}
+                 {isSubmittingNewsletter ? t('newsletterSubmitting') : t('subscribe')}
                </button>
              </form>
+             {newsletterFeedback && (
+               <p className="mt-4 text-sm font-semibold text-emerald-700">
+                 {newsletterFeedback}
+               </p>
+             )}
+             {newsletterError && (
+               <p className="mt-4 text-sm font-semibold text-red-600">
+                 {newsletterError}
+               </p>
+             )}
           </div>
         </div>
 

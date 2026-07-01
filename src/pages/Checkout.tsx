@@ -22,6 +22,11 @@ import { StoreCountrySelect } from '../components/StoreCountrySelect';
 import { StorePhoneField } from '../components/StorePhoneField';
 import { StoreImage } from '../components/StoreImage';
 import {
+  clearCartPromotionDraft,
+  readCartPromotionDraft,
+  resolveActiveWelcomePromotion,
+} from '../lib/welcomeBenefit';
+import {
   AddressCountryCode,
   formatPostalCode,
   getAddressLabels,
@@ -79,6 +84,7 @@ type PendingStripeCheckoutRecord = {
   bridgePayload: CheckoutBridgePayload;
   loyaltyPoints: number;
   orderNumber: string;
+  promotionDraft: ReturnType<typeof readCartPromotionDraft>;
   sessionId: string;
 };
 
@@ -214,6 +220,8 @@ export function Checkout() {
     currentCustomer,
     primaryAddress,
     isLoggedIn,
+    availableWelcomeBenefit,
+    consumeWelcomeBenefit,
     guestShippingDraft,
     saveGuestShippingDraft,
     updateProfile,
@@ -228,10 +236,17 @@ export function Checkout() {
   const [stripeFlowState, setStripeFlowState] = useState<StripeFlowState>('idle');
   const [stripeErrorMessage, setStripeErrorMessage] = useState('');
   const [confirmedOrderNumber, setConfirmedOrderNumber] = useState('');
+  const [promotionDraft, setPromotionDraft] = useState(() => readCartPromotionDraft());
   const orderNumber = useMemo(() => createOrderNumber(), []);
+  const activePromotion = useMemo(
+    () => resolveActiveWelcomePromotion(promotionDraft, currentCustomer?.id, availableWelcomeBenefit, cartTotal),
+    [availableWelcomeBenefit, cartTotal, currentCustomer?.id, promotionDraft],
+  );
+  const discountAmount = activePromotion?.discountAmount ?? 0;
+  const discountedSubtotal = Math.max(0, cartTotal - discountAmount);
   const { quotes, selectedQuote, setSelectedQuoteId, loadQuotes, mode, status: shippingQuotesStatus, error: shippingQuotesError, resetQuotes } = useShippingQuotes(
     cart,
-    cartTotal,
+    discountedSubtotal,
     settings,
   );
 
@@ -261,13 +276,34 @@ export function Checkout() {
     return labels;
   }, [settings.stripeAllowApplePay, settings.stripeAllowCard, settings.stripeAllowGooglePay, t]);
   const loyaltyPointsEarned = useMemo(
-    () => Math.floor(cartTotal * (settings.pointsPerReal || 1)),
-    [cartTotal, settings.pointsPerReal],
+    () => Math.floor(discountedSubtotal * (settings.pointsPerReal || 1)),
+    [discountedSubtotal, settings.pointsPerReal],
   );
 
   const previousTaxIdKindRef = useRef<TaxIdFieldKind | null>(null);
   const hasHydratedCustomerDataRef = useRef(false);
   const hasProcessedStripeReturnRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const storedDraft = readCartPromotionDraft();
+    const resolvedPromotion = resolveActiveWelcomePromotion(
+      storedDraft,
+      currentCustomer?.id,
+      availableWelcomeBenefit,
+      cartTotal,
+    );
+
+    if (!resolvedPromotion) {
+      if (storedDraft) {
+        clearCartPromotionDraft();
+      }
+
+      setPromotionDraft(null);
+      return;
+    }
+
+    setPromotionDraft(storedDraft);
+  }, [availableWelcomeBenefit, cartTotal, currentCustomer?.id]);
 
   useEffect(() => {
     const previousKind = previousTaxIdKindRef.current;
@@ -436,6 +472,7 @@ export function Checkout() {
     deliveryData.region.trim().length > 0 &&
     isAddressLookupComplete(deliveryData.country, deliveryData.postalCode);
   const shippingCost = selectedQuote?.amount ?? 0;
+  const orderTotal = discountedSubtotal + shippingCost;
 
   const handleRefreshShipping = async () => {
     if (!canRequestShippingQuotes) return;
@@ -515,7 +552,7 @@ export function Checkout() {
     subtotal: cartTotal,
     shipping: shippingCost,
     shippingMethod: selectedQuote?.service,
-    discount: 0,
+    discount: discountAmount,
   });
 
   const startStripeCheckout = async () => {
@@ -562,6 +599,7 @@ export function Checkout() {
         orderNumber: bridgePayload.orderNumber,
         loyaltyPoints: loyaltyPointsEarned,
         bridgePayload,
+        promotionDraft,
       });
 
       window.location.assign(payload.url);
@@ -634,6 +672,15 @@ export function Checkout() {
               ...pendingRecord.bridgePayload,
               orderNumber: resolvedOrderNumber,
             });
+
+            if (pendingRecord.promotionDraft) {
+              if (currentCustomer?.id === pendingRecord.promotionDraft.customerId) {
+                consumeWelcomeBenefit(pendingRecord.promotionDraft.benefitId, resolvedOrderNumber);
+              } else {
+                clearCartPromotionDraft();
+              }
+            }
+
             addPoints(pendingRecord.loyaltyPoints);
             clearCart();
             removePendingStripeCheckoutRecord(stripeSessionIdFromUrl, pendingRecord.orderNumber);
@@ -658,6 +705,8 @@ export function Checkout() {
   }, [
     addPoints,
     clearCart,
+    consumeWelcomeBenefit,
+    currentCustomer?.id,
     currentCustomer?.taxId,
     isLoggedIn,
     orderNumber,
@@ -1025,8 +1074,13 @@ export function Checkout() {
 
                     <div className="rounded-sm border border-neutral-200 bg-white px-4 py-4 md:max-w-[260px]">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">{t('orderSummary')}</p>
-                      <p className="mt-2 text-xl font-bold text-neutral-900">{formatCurrency(cartTotal + shippingCost)}</p>
+                      <p className="mt-2 text-xl font-bold text-neutral-900">{formatCurrency(orderTotal)}</p>
                       <p className="mt-1 text-xs text-neutral-500">{t('stripeHostedCheckoutHint')}</p>
+                      {discountAmount > 0 ? (
+                        <p className="mt-2 text-xs font-medium text-emerald-600">
+                          {t('checkoutWelcomeDiscountApplied', { discount: formatCurrency(discountAmount) })}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1067,6 +1121,11 @@ export function Checkout() {
                           {' | '}
                           {formatCurrency(shippingCost, selectedQuote?.currency || settings.storeCurrency)}
                         </p>
+                        {discountAmount > 0 ? (
+                          <p className="mt-1 text-[12px] text-emerald-600">
+                            {t('discount')}: - {formatCurrency(discountAmount)}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="inline-flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-700">
                         <WalletCards className="h-3.5 w-3.5" />
@@ -1132,6 +1191,12 @@ export function Checkout() {
                 <dt>{t('subtotal')}</dt>
                 <dd className="font-medium text-neutral-900">{formatCurrency(cartTotal)}</dd>
               </div>
+              {discountAmount > 0 ? (
+                <div className="flex justify-between text-emerald-600">
+                  <dt>{t('discount')}</dt>
+                  <dd className="font-medium">- {formatCurrency(discountAmount)}</dd>
+                </div>
+              ) : null}
               <div className="flex justify-between">
                 <dt>{t('shipping')}</dt>
                 <dd className="font-medium text-neutral-900">
@@ -1142,7 +1207,7 @@ export function Checkout() {
 
             <div className="flex items-center justify-between font-bold text-lg text-neutral-900 border-t border-neutral-200 pt-4">
               <span>{t('total')}</span>
-              <span>{formatCurrency(cartTotal + shippingCost)}</span>
+              <span>{formatCurrency(orderTotal)}</span>
             </div>
           </div>
         </div>

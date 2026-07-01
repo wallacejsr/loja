@@ -147,6 +147,21 @@ alter table public.contact_messages add column if not exists admin_notes text de
 alter table public.contact_messages add column if not exists replied_at timestamptz;
 alter table public.contact_messages add column if not exists updated_at timestamptz not null default now();
 
+create table if not exists public.newsletter_subscribers (
+  id text primary key,
+  email text not null unique,
+  status text not null default 'Ativo',
+  source text not null default 'footer-newsletter',
+  coupon_code text not null default 'BEMVINDA10',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.newsletter_subscribers add column if not exists status text not null default 'Ativo';
+alter table public.newsletter_subscribers add column if not exists source text not null default 'footer-newsletter';
+alter table public.newsletter_subscribers add column if not exists coupon_code text not null default 'BEMVINDA10';
+alter table public.newsletter_subscribers add column if not exists updated_at timestamptz not null default now();
+
 create table if not exists public.store_settings (
   id integer primary key default 1 check (id = 1),
   store_name text not null,
@@ -303,6 +318,7 @@ alter table public.home_sections enable row level security;
 alter table public.home_cards enable row level security;
 alter table public.raffles enable row level security;
 alter table public.contact_messages enable row level security;
+alter table public.newsletter_subscribers enable row level security;
 alter table public.instagram_posts enable row level security;
 alter table public.store_settings enable row level security;
 alter table public.payment_gateway_credentials enable row level security;
@@ -320,6 +336,7 @@ drop policy if exists "Public read home sections" on public.home_sections;
 drop policy if exists "Public read home cards" on public.home_cards;
 drop policy if exists "Public read raffles" on public.raffles;
 drop policy if exists "Public read contact messages" on public.contact_messages;
+drop policy if exists "Public read newsletter subscribers" on public.newsletter_subscribers;
 drop policy if exists "Public read instagram posts" on public.instagram_posts;
 drop policy if exists "Public read store settings" on public.store_settings;
 drop policy if exists "Anon write products" on public.products;
@@ -330,6 +347,7 @@ drop policy if exists "Anon write home cards" on public.home_cards;
 drop policy if exists "Anon write raffles" on public.raffles;
 drop policy if exists "Anon write contact messages" on public.contact_messages;
 drop policy if exists "Anon write instagram posts" on public.instagram_posts;
+drop policy if exists "Anon write newsletter subscribers" on public.newsletter_subscribers;
 drop policy if exists "Anon write store settings" on public.store_settings;
 
 create policy "Public read products" on public.products for select using (status = 'Ativo');
@@ -339,6 +357,7 @@ create policy "Public read home sections" on public.home_sections for select usi
 create policy "Public read home cards" on public.home_cards for select using (status = 'Ativo');
 create policy "Public read raffles" on public.raffles for select using (true);
 create policy "Public read contact messages" on public.contact_messages for select using (true);
+create policy "Public read newsletter subscribers" on public.newsletter_subscribers for select using (true);
 create policy "Public read instagram posts" on public.instagram_posts for select using (status = 'Ativo');
 create policy "Public read store settings" on public.store_settings for select using (true);
 
@@ -349,6 +368,7 @@ create policy "Anon write home sections" on public.home_sections for all using (
 create policy "Anon write home cards" on public.home_cards for all using (true) with check (true);
 create policy "Anon write raffles" on public.raffles for all using (true) with check (true);
 create policy "Anon write contact messages" on public.contact_messages for all using (true) with check (true);
+create policy "Anon write newsletter subscribers" on public.newsletter_subscribers for all using (true) with check (true);
 create policy "Anon write instagram posts" on public.instagram_posts for all using (true) with check (true);
 create policy "Anon write store settings" on public.store_settings for all using (true) with check (true);
 

@@ -251,9 +251,25 @@ export function registerStoreRoutes(repository: StoreRepository, uploadsRoot: st
     }
   });
 
+  router.get('/newsletter-subscribers', async (_request, response) => {
+    try {
+      response.json(await repository.getNewsletterSubscribers());
+    } catch (error) {
+      handleRouteError(response, error);
+    }
+  });
+
   router.post('/contact-messages', async (request, response) => {
     try {
       response.status(201).json(await repository.createContactMessage(request.body));
+    } catch (error) {
+      handleRouteError(response, error);
+    }
+  });
+
+  router.post('/newsletter-subscribers', async (request, response) => {
+    try {
+      response.status(201).json(await repository.createNewsletterSubscriber(request.body));
     } catch (error) {
       handleRouteError(response, error);
     }

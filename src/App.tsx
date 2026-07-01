@@ -28,6 +28,7 @@ const Orders = lazy(() => import('./pages/admin/Orders').then((module) => ({ def
 const Categories = lazy(() => import('./pages/admin/Categories').then((module) => ({ default: module.Categories })));
 const Customers = lazy(() => import('./pages/admin/Customers').then((module) => ({ default: module.Customers })));
 const Messages = lazy(() => import('./pages/admin/Messages').then((module) => ({ default: module.Messages })));
+const Newsletter = lazy(() => import('./pages/admin/Newsletter').then((module) => ({ default: module.Newsletter })));
 const Banners = lazy(() => import('./pages/admin/Banners').then((module) => ({ default: module.Banners })));
 const Settings = lazy(() => import('./pages/admin/Settings').then((module) => ({ default: module.Settings })));
 const Promotions = lazy(() => import('./pages/admin/Promotions').then((module) => ({ default: module.Promotions })));
@@ -87,6 +88,7 @@ export default function App() {
                   <Route path="categories" element={lazyRoute(<Categories />)} />
                   <Route path="customers" element={lazyRoute(<Customers />)} />
                   <Route path="messages" element={lazyRoute(<Messages />)} />
+                  <Route path="newsletter" element={lazyRoute(<Newsletter />)} />
                   <Route path="banners" element={lazyRoute(<Banners />)} />
                   <Route path="home" element={lazyRoute(<HomeSections />)} />
                   <Route path="settings" element={lazyRoute(<Settings />)} />

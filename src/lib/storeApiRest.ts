@@ -12,6 +12,8 @@ import type {
   HomeSection,
   HomeSectionInput,
   InstagramPost,
+  NewsletterSubscriber,
+  NewsletterSubscriberInput,
   ProductInput,
   Raffle,
   RaffleInput,
@@ -208,8 +210,19 @@ export async function getContactMessages(): Promise<ContactMessage[]> {
   return requestStoreApi<ContactMessage[]>('/contact-messages');
 }
 
+export async function getNewsletterSubscribers(): Promise<NewsletterSubscriber[]> {
+  return requestStoreApi<NewsletterSubscriber[]>('/newsletter-subscribers');
+}
+
 export async function createContactMessage(input: ContactMessageInput): Promise<ContactMessage> {
   return requestStoreApi<ContactMessage>('/contact-messages', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function createNewsletterSubscriber(input: NewsletterSubscriberInput): Promise<NewsletterSubscriber> {
+  return requestStoreApi<NewsletterSubscriber>('/newsletter-subscribers', {
     method: 'POST',
     body: JSON.stringify(input),
   });

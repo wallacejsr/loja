@@ -1,5 +1,5 @@
-import type { Product } from '../../src/data/mockData';
-import type { StoreSettings, StripeMode } from '../../src/types/settings';
+import type { Product } from '../../src/data/mockData.ts';
+import type { StoreSettings, StripeMode } from '../../src/types/settings.ts';
 import type {
   Banner,
   CategoryInput,
@@ -11,11 +11,13 @@ import type {
   HomeSection,
   HomeSectionInput,
   InstagramPost,
+  NewsletterSubscriber,
+  NewsletterSubscriberInput,
   ProductInput,
   Raffle,
   RaffleInput,
   StoreCategory,
-} from '../../src/lib/storeApiSupabase';
+} from '../../src/lib/storeApiSupabase.ts';
 
 export type StoredStatus = 'Ativo' | 'Inativo';
 
@@ -43,6 +45,7 @@ export interface StoreSnapshot {
   homeCards: HomeCard[];
   homeSections: HomeSection[];
   instagramFeed: StoredInstagramPost[];
+  newsletterSubscribers: NewsletterSubscriber[];
   products: StoredProduct[];
   raffles: Raffle[];
   settings: StoreSettings;
@@ -84,6 +87,7 @@ export interface StoreRepository {
   createBanner(input: Pick<Banner, 'title' | 'desktop' | 'mobile' | 'link'>): Promise<Banner>;
   createCategory(input: CategoryInput): Promise<StoreCategory>;
   createContactMessage(input: ContactMessageInput): Promise<ContactMessage>;
+  createNewsletterSubscriber(input: NewsletterSubscriberInput): Promise<NewsletterSubscriber>;
   createHomeCard(input: HomeCardInput): Promise<HomeCard>;
   createProduct(input: ProductInput): Promise<Product>;
   createRaffle(input: RaffleInput): Promise<Raffle>;
@@ -98,6 +102,7 @@ export interface StoreRepository {
   getHomeCards(options?: ListOptions): Promise<HomeCard[]>;
   getHomeSections(options?: ListOptions): Promise<HomeSection[]>;
   getInstagramFeed(): Promise<InstagramPost[]>;
+  getNewsletterSubscribers(): Promise<NewsletterSubscriber[]>;
   getProducts(options?: ListOptions): Promise<Product[]>;
   getRaffles(options?: ListOptions): Promise<Raffle[]>;
   getStripeCredentials(mode: StripeMode): Promise<StripeCredentials | null>;

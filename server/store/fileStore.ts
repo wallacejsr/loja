@@ -1,7 +1,14 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Product } from '../../src/data/mockData';
-import { normalizeStoreSettings, type StoreSettings, type StripeMode } from '../../src/types/settings';
+import type { Product } from '../../src/data/mockData.ts';
+import {
+  createNewsletterSubscriberId,
+  isValidNewsletterEmail,
+  NEWSLETTER_DEFAULT_SOURCE,
+  normalizeNewsletterEmail,
+  WELCOME_NEWSLETTER_COUPON_CODE,
+} from '../../src/lib/newsletter.ts';
+import { normalizeStoreSettings, type StoreSettings, type StripeMode } from '../../src/types/settings.ts';
 import type {
   Banner,
   CategoryInput,
@@ -13,11 +20,13 @@ import type {
   HomeSection,
   HomeSectionInput,
   InstagramPost,
+  NewsletterSubscriber,
+  NewsletterSubscriberInput,
   ProductInput,
   Raffle,
   RaffleInput,
   StoreCategory,
-} from '../../src/lib/storeApiSupabase';
+} from '../../src/lib/storeApiSupabase.ts';
 import {
   applyStripeCredentialInput,
   buildStripeCredentialSummary,
@@ -108,6 +117,7 @@ export class FileStoreRepository implements StoreRepository {
     try {
       const fileContents = await readFile(this.filePath, 'utf8');
       const parsed = JSON.parse(fileContents) as StoreSnapshot;
+      parsed.newsletterSubscribers ||= [];
       ensureStripeCredentials(parsed);
       return deepClone(parsed);
     } catch (error) {
@@ -514,6 +524,11 @@ export class FileStoreRepository implements StoreRepository {
     return [...snapshot.contactMessages].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
+  async getNewsletterSubscribers(): Promise<NewsletterSubscriber[]> {
+    const snapshot = await this.readSnapshot();
+    return [...snapshot.newsletterSubscribers].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
   async createContactMessage(input: ContactMessageInput): Promise<ContactMessage> {
     return this.mutate(async (snapshot) => {
       const timestamp = new Date().toISOString();
@@ -554,6 +569,47 @@ export class FileStoreRepository implements StoreRepository {
 
       snapshot.contactMessages[index] = updated;
       return updated;
+    });
+  }
+
+  async createNewsletterSubscriber(input: NewsletterSubscriberInput): Promise<NewsletterSubscriber> {
+    return this.mutate(async (snapshot) => {
+      const normalizedEmail = normalizeNewsletterEmail(input.email);
+
+      if (!isValidNewsletterEmail(normalizedEmail)) {
+        throw new Error('Informe um e-mail valido para receber o cupom.');
+      }
+
+      const timestamp = new Date().toISOString();
+      const existingIndex = snapshot.newsletterSubscribers.findIndex(
+        (subscriber) => normalizeNewsletterEmail(subscriber.email) === normalizedEmail,
+      );
+
+      if (existingIndex >= 0) {
+        const current = snapshot.newsletterSubscribers[existingIndex];
+        const updated: NewsletterSubscriber = {
+          ...current,
+          status: 'Ativo',
+          source: input.source?.trim() || NEWSLETTER_DEFAULT_SOURCE,
+          couponCode: WELCOME_NEWSLETTER_COUPON_CODE,
+          updatedAt: timestamp,
+        };
+        snapshot.newsletterSubscribers[existingIndex] = updated;
+        return updated;
+      }
+
+      const created: NewsletterSubscriber = {
+        id: createNewsletterSubscriberId(normalizedEmail),
+        email: normalizedEmail,
+        status: 'Ativo',
+        source: input.source?.trim() || NEWSLETTER_DEFAULT_SOURCE,
+        couponCode: WELCOME_NEWSLETTER_COUPON_CODE,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+
+      snapshot.newsletterSubscribers.unshift(created);
+      return created;
     });
   }
 }

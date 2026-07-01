@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { categorias, instagramFeed, produtos } from '../../src/data/mockData';
-import { defaultSettings, normalizeStoreSettings } from '../../src/types/settings';
+import { categorias, instagramFeed, produtos } from '../../src/data/mockData.ts';
+import { defaultSettings, normalizeStoreSettings } from '../../src/types/settings.ts';
 import { createEmptyStoredStripeCredentialSet } from '../integrations/stripeCredentials';
 import type { StoreSnapshot, StoredInstagramPost, StoredProduct } from './types';
 
@@ -136,6 +136,7 @@ export function createDefaultStoreSnapshot(): StoreSnapshot {
     instagramFeed: instagramFeed.map(toStoredInstagramPost),
     settings: normalizeStoreSettings(defaultSettings),
     contactMessages: [],
+    newsletterSubscribers: [],
     stripeCredentials: {
       test: createEmptyStoredStripeCredentialSet(),
       live: createEmptyStoredStripeCredentialSet(),

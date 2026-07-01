@@ -17,6 +17,14 @@ import {
   lookupAddressByCountry,
   type AddressCountryCode,
 } from '../lib/customerForm';
+import {
+  clearCartPromotionDraft,
+  createCartPromotionDraft,
+  normalizeCouponCode,
+  readCartPromotionDraft,
+  resolveActiveWelcomePromotion,
+  saveCartPromotionDraft,
+} from '../lib/welcomeBenefit';
 import { StoreImage } from '../components/StoreImage';
 
 type ShippingPostalTone = 'error' | 'idle' | 'loading' | 'success' | 'warning';
@@ -42,13 +50,15 @@ export function Cart() {
     currentCustomer,
     primaryAddress,
     isLoggedIn,
+    availableWelcomeBenefit,
     guestShippingDraft,
     saveGuestShippingDraft,
     clearGuestShippingDraft,
   } = useCustomerSession();
   const [coupon, setCoupon] = useState('');
-  const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponFeedback, setCouponFeedback] = useState('');
+  const [couponFeedbackTone, setCouponFeedbackTone] = useState<'error' | 'info' | 'success'>('info');
+  const [promotionDraft, setPromotionDraft] = useState(() => readCartPromotionDraft());
   const [guestShippingAddress, setGuestShippingAddress] = useState<GuestShippingDraft>(
     () => guestShippingDraft || EMPTY_GUEST_SHIPPING_ADDRESS,
   );
@@ -58,10 +68,17 @@ export function Cart() {
   const [isGuestAddressUnlocked, setIsGuestAddressUnlocked] = useState(
     () => Boolean(guestShippingDraft?.postalCode),
   );
+  const [lastGuestQuotedSubtotal, setLastGuestQuotedSubtotal] = useState<number | null>(null);
   const addressLabels = getAddressLabels(CART_COUNTRY, locale);
+  const activePromotion = useMemo(
+    () => resolveActiveWelcomePromotion(promotionDraft, currentCustomer?.id, availableWelcomeBenefit, cartTotal),
+    [availableWelcomeBenefit, cartTotal, currentCustomer?.id, promotionDraft],
+  );
+  const couponDiscount = activePromotion?.discountAmount ?? 0;
+  const discountedSubtotal = Math.max(0, cartTotal - couponDiscount);
   const { quotes, selectedQuote, setSelectedQuoteId, loadQuotes, mode, status, error, resetQuotes } = useShippingQuotes(
     cart,
-    Math.max(0, cartTotal - couponDiscount),
+    discountedSubtotal,
     settings,
   );
 
@@ -89,6 +106,28 @@ export function Cart() {
       ].every((value) => value.trim().length === 0),
     [guestShippingAddress],
   );
+
+  useEffect(() => {
+    const storedDraft = readCartPromotionDraft();
+    const resolvedPromotion = resolveActiveWelcomePromotion(
+      storedDraft,
+      currentCustomer?.id,
+      availableWelcomeBenefit,
+      cartTotal,
+    );
+
+    if (!resolvedPromotion) {
+      if (storedDraft) {
+        clearCartPromotionDraft();
+      }
+
+      setPromotionDraft(null);
+      return;
+    }
+
+    setPromotionDraft(storedDraft);
+    setCoupon((previousValue) => previousValue || storedDraft?.couponCode || '');
+  }, [availableWelcomeBenefit, cartTotal, currentCustomer?.id]);
 
   useEffect(() => {
     if (usingSavedAddress) {
@@ -135,14 +174,79 @@ export function Cart() {
     usingSavedAddress,
   ]);
 
-  const applyCoupon = () => {
-    if (coupon.toUpperCase() === 'BEMVINDA10') {
-      setCouponDiscount(cartTotal * 0.1);
-      setCouponFeedback(t('couponApplied'));
-    } else {
-      setCouponFeedback(t('invalidCoupon'));
-      setCouponDiscount(0);
+  useEffect(() => {
+    if (usingSavedAddress || !guestAddressReady || status === 'idle') return;
+    if (lastGuestQuotedSubtotal === discountedSubtotal) return;
+
+    setLastGuestQuotedSubtotal(discountedSubtotal);
+    void loadQuotes({
+      country: CART_COUNTRY,
+      postalCode: guestShippingAddress.postalCode,
+      street: guestShippingAddress.street,
+      number: guestShippingAddress.number,
+      city: guestShippingAddress.city,
+      region: guestShippingAddress.region,
+      name: currentCustomer?.fullName,
+      phone: currentCustomer?.phone,
+      email: currentCustomer?.email,
+    });
+  }, [
+    currentCustomer?.email,
+    currentCustomer?.fullName,
+    currentCustomer?.phone,
+    discountedSubtotal,
+    guestAddressReady,
+    guestShippingAddress.city,
+    guestShippingAddress.number,
+    guestShippingAddress.postalCode,
+    guestShippingAddress.region,
+    guestShippingAddress.street,
+    lastGuestQuotedSubtotal,
+    loadQuotes,
+    status,
+    usingSavedAddress,
+  ]);
+
+  const applyCoupon = (rawCoupon = coupon) => {
+    const normalizedCoupon = normalizeCouponCode(rawCoupon);
+
+    if (!normalizedCoupon) {
+      setCouponFeedback('');
+      return;
     }
+
+    if (!isLoggedIn || !currentCustomer) {
+      setCouponFeedback(t('newsletterBenefitLoginRequired'));
+      setCouponFeedbackTone('error');
+      return;
+    }
+
+    if (!availableWelcomeBenefit) {
+      setCouponFeedback(t('newsletterBenefitUnavailable'));
+      setCouponFeedbackTone('error');
+      return;
+    }
+
+    if (normalizedCoupon !== normalizeCouponCode(availableWelcomeBenefit.couponCode)) {
+      setCouponFeedback(t('invalidCoupon'));
+      setCouponFeedbackTone('error');
+      return;
+    }
+
+    const nextDraft = createCartPromotionDraft(currentCustomer.id, availableWelcomeBenefit);
+    saveCartPromotionDraft(nextDraft);
+    setPromotionDraft(nextDraft);
+    setCoupon(availableWelcomeBenefit.couponCode);
+    setCouponFeedback(t('newsletterBenefitApplied'));
+    setCouponFeedbackTone('success');
+  };
+
+  const removeCoupon = () => {
+    clearCartPromotionDraft();
+    setPromotionDraft(null);
+    setCoupon('');
+    setCouponFeedback(t('welcomeDiscountRemoved'));
+    setCouponFeedbackTone('info');
   };
 
   const handleGuestShippingFieldChange = <K extends keyof GuestShippingDraft>(
@@ -150,6 +254,7 @@ export function Cart() {
     value: GuestShippingDraft[K],
   ) => {
     resetQuotes();
+    setLastGuestQuotedSubtotal(null);
     setGuestShippingAddress((previousAddress) => ({
       ...previousAddress,
       [field]: value,
@@ -172,6 +277,7 @@ export function Cart() {
     setIsGuestAddressUnlocked(false);
     setShippingPostalTone('idle');
     resetQuotes();
+    setLastGuestQuotedSubtotal(null);
 
     if (!isAddressLookupComplete(CART_COUNTRY, formattedPostalCode)) {
       return;
@@ -232,11 +338,12 @@ export function Cart() {
       email: currentCustomer?.email,
     };
 
+    setLastGuestQuotedSubtotal(discountedSubtotal);
     await loadQuotes(destination);
   };
 
   const shippingAmount = selectedQuote?.amount ?? 0;
-  const finalTotal = cartTotal - couponDiscount + shippingAmount;
+  const finalTotal = discountedSubtotal + shippingAmount;
 
   if (cart.length === 0) {
     return (
@@ -470,13 +577,30 @@ export function Cart() {
                 </div>
               )}
 
-              {settings.shippingFreeThreshold > 0 && cartTotal >= settings.shippingFreeThreshold && (
+              {settings.shippingFreeThreshold > 0 && discountedSubtotal >= settings.shippingFreeThreshold && (
                 <p className="text-xs text-green-600 font-bold mt-2">{t('freeShippingReached')}</p>
               )}
             </div>
 
             <div className="mb-8 border-t border-neutral-200 pt-6">
               <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('discountCoupon')}</label>
+              {isLoggedIn && availableWelcomeBenefit && !activePromotion ? (
+                <div className="mb-3 rounded-sm border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <p className="text-xs font-semibold text-emerald-700">
+                    {t('newsletterBenefitAvailable', {
+                      coupon: availableWelcomeBenefit.couponCode,
+                      discount: availableWelcomeBenefit.discountValue,
+                    })}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => applyCoupon(availableWelcomeBenefit.couponCode)}
+                    className="mt-2 text-xs font-bold uppercase tracking-wider text-emerald-700 hover:text-emerald-800"
+                  >
+                    {t('applyWelcomeDiscount')}
+                  </button>
+                </div>
+              ) : null}
               <div className="flex text-sm border border-neutral-300 focus-within:border-primary rounded-sm overflow-hidden">
                 <input
                   type="text"
@@ -485,15 +609,33 @@ export function Cart() {
                   onChange={(e) => setCoupon(e.target.value)}
                   className="w-full px-3 py-2 bg-white focus:outline-none uppercase"
                 />
-                <button onClick={applyCoupon} className="bg-neutral-100 text-secondary px-4 py-2 font-medium uppercase tracking-wider hover:bg-neutral-200 transition-colors">
+                <button type="button" onClick={() => applyCoupon()} className="bg-neutral-100 text-secondary px-4 py-2 font-medium uppercase tracking-wider hover:bg-neutral-200 transition-colors">
                   {t('apply')}
                 </button>
               </div>
               {couponFeedback && (
-                <p className={cn('mt-2 text-xs font-semibold', couponDiscount > 0 ? 'text-emerald-600' : 'text-red-600')}>
+                <p
+                  className={cn(
+                    'mt-2 text-xs font-semibold',
+                    couponFeedbackTone === 'success'
+                      ? 'text-emerald-600'
+                      : couponFeedbackTone === 'info'
+                        ? 'text-neutral-500'
+                        : 'text-red-600',
+                  )}
+                >
                   {couponFeedback}
                 </p>
               )}
+              {activePromotion ? (
+                <button
+                  type="button"
+                  onClick={removeCoupon}
+                  className="mt-2 text-xs font-bold uppercase tracking-wider text-neutral-500 hover:text-neutral-900"
+                >
+                  {t('removeDiscount')}
+                </button>
+              ) : null}
             </div>
 
             <button onClick={() => navigate('/checkout')} className="w-full flex items-center justify-center bg-primary text-white px-8 py-4 font-bold uppercase tracking-wider text-sm hover:bg-primary-dark transition-colors shadow-lg rounded-sm">

@@ -60,6 +60,10 @@ type StripeSessionResponse = {
   url: string;
 };
 
+type StripeCouponResponse = {
+  id: string;
+};
+
 type StoreProductRecord = {
   id: string;
   images: string[];
@@ -311,8 +315,12 @@ function validateRequestBody(body: CheckoutSessionRequestBody | undefined) {
     throw new Error('Stripe checkout is currently limited to shipping addresses in the United States.');
   }
 
-  if (body.discount > 0) {
-    throw new Error('Discounts are not yet supported in the Stripe hosted checkout flow.');
+  if (!Number.isFinite(body.discount) || body.discount < 0) {
+    throw new Error('Invalid discount amount sent to Stripe checkout.');
+  }
+
+  if (body.discount > body.subtotal) {
+    throw new Error('Discount amount cannot exceed the order subtotal.');
   }
 
   const hasSupportedMethod =
@@ -373,7 +381,12 @@ function buildLineItems(
   return productLineItems;
 }
 
-function buildStripeCheckoutParams(request: VercelRequestLike, body: CheckoutSessionRequestBody, lineItems: ReturnType<typeof buildLineItems>) {
+function buildStripeCheckoutParams(
+  request: VercelRequestLike,
+  body: CheckoutSessionRequestBody,
+  lineItems: ReturnType<typeof buildLineItems>,
+  couponId?: string,
+) {
   const params = new URLSearchParams();
   const currency = sanitizeCurrency(body.settings.stripeCurrency || 'USD');
   const mode = body.settings.stripeMode === 'live' ? 'live' : 'test';
@@ -396,10 +409,18 @@ function buildStripeCheckoutParams(request: VercelRequestLike, body: CheckoutSes
   params.set('metadata[destination_country]', body.shippingAddress.country);
   params.set('metadata[destination_postal_code]', body.shippingAddress.postalCode);
   params.set('metadata[shipping_method]', body.shippingMethod || '');
+  params.set('metadata[discount_amount]', body.discount.toFixed(2));
 
   params.set('payment_intent_data[metadata][order_number]', body.orderNumber);
   params.set('payment_intent_data[metadata][payment_provider]', 'stripe');
   params.set('payment_intent_data[metadata][checkout_mode]', mode);
+  params.set('payment_intent_data[metadata][discount_amount]', body.discount.toFixed(2));
+
+  if (couponId) {
+    params.set('discounts[0][coupon]', couponId);
+    params.set('metadata[stripe_coupon_id]', couponId);
+    params.set('payment_intent_data[metadata][stripe_coupon_id]', couponId);
+  }
 
   lineItems.forEach((item, index) => {
     params.set(`line_items[${index}][quantity]`, String(item.quantity));
@@ -439,6 +460,40 @@ async function createStripeCheckoutSession(secretKey: string, params: URLSearchP
   return payload as StripeSessionResponse;
 }
 
+async function createStripeCoupon(
+  secretKey: string,
+  currency: string,
+  discountAmount: number,
+  orderNumber: string,
+) {
+  const params = new URLSearchParams();
+
+  params.set('duration', 'once');
+  params.set('amount_off', String(toStripeAmount(discountAmount)));
+  params.set('currency', sanitizeCurrency(currency));
+  params.set('name', `Welcome discount ${orderNumber}`);
+  params.set('metadata[order_number]', orderNumber);
+  params.set('metadata[source]', 'newsletter-welcome');
+
+  const response = await fetch('https://api.stripe.com/v1/coupons', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${secretKey}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const stripeMessage = payload?.error?.message || `Stripe coupon request failed with status ${response.status}.`;
+    throw new Error(stripeMessage);
+  }
+
+  return payload as StripeCouponResponse;
+}
+
 export default async function handler(req: VercelRequestLike, res: VercelResponseLike) {
   if (req.method !== 'POST') {
     res.status(405).json({
@@ -460,7 +515,10 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
 
     const { products } = await resolveServerProducts(req, body.items);
     const lineItems = buildLineItems(req, body, products);
-    const params = buildStripeCheckoutParams(req, body, lineItems);
+    const stripeCoupon = body.discount > 0
+      ? await createStripeCoupon(secretKey, body.settings.stripeCurrency, body.discount, body.orderNumber)
+      : null;
+    const params = buildStripeCheckoutParams(req, body, lineItems, stripeCoupon?.id);
     const session = await createStripeCheckoutSession(secretKey, params);
 
     try {

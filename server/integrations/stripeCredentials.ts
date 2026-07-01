@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import type { StripeMode } from '../../src/types/settings';
+import type { StripeMode } from '../../src/types/settings.ts';
 import type {
   StoredStripeCredentialSet,
   StripeCredentialInput,

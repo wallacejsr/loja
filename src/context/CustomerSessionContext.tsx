@@ -8,6 +8,15 @@ import React, {
   type ReactNode,
 } from 'react';
 import type { AddressCountryCode } from '../lib/customerForm';
+import { getNewsletterSubscribers, type NewsletterSubscriber } from '../lib/storeApi';
+import { normalizeNewsletterEmail } from '../lib/newsletter';
+import {
+  type StoreCustomerWelcomeBenefit,
+  clearCartPromotionDraft,
+  createWelcomeBenefitFromSubscriber,
+  getAvailableWelcomeBenefit,
+  normalizeStoredWelcomeBenefits,
+} from '../lib/welcomeBenefit';
 
 const STOREFRONT_CUSTOMERS_STORAGE_KEY = '@App:storefront-customers';
 const STOREFRONT_SESSION_STORAGE_KEY = '@App:storefront-session';
@@ -56,6 +65,7 @@ export type StoreCustomerRecord = {
   createdAt: string;
   updatedAt: string;
   addresses: StoreCustomerAddress[];
+  welcomeBenefits: StoreCustomerWelcomeBenefit[];
 };
 
 type CustomerSessionState = {
@@ -94,15 +104,18 @@ type SaveAddressInput = Omit<StoreCustomerAddress, 'isPrimary'> & {
 type CustomerSessionContextData = {
   customers: StoreCustomerRecord[];
   currentCustomer: StoreCustomerRecord | null;
+  availableWelcomeBenefit: StoreCustomerWelcomeBenefit | null;
   primaryAddress: StoreCustomerAddress | null;
   guestShippingDraft: GuestShippingDraft | null;
   isLoggedIn: boolean;
-  registerCustomer: (input: RegisterCustomerInput) => { ok: true } | { ok: false; error: 'EMAIL_EXISTS' };
+  registerCustomer: (input: RegisterCustomerInput) => Promise<{ ok: true } | { ok: false; error: 'EMAIL_EXISTS' }>;
   login: (email: string, password: string) => { ok: true } | { ok: false; error: 'INVALID_CREDENTIALS' };
   logout: () => void;
   updateProfile: (input: UpdateCustomerProfileInput) => void;
   saveAddress: (input: SaveAddressInput) => StoreCustomerAddress | null;
   removeAddress: (addressId: string) => void;
+  activateNewsletterBenefitForCurrentCustomer: (subscriber?: NewsletterSubscriber | null) => Promise<StoreCustomerWelcomeBenefit | null>;
+  consumeWelcomeBenefit: (benefitId: string, orderNumber: string) => void;
   saveGuestShippingDraft: (draft: GuestShippingDraft) => void;
   clearGuestShippingDraft: () => void;
 };
@@ -151,9 +164,29 @@ function ensureSinglePrimaryAddress(addresses: StoreCustomerAddress[]) {
   }));
 }
 
+function normalizeCustomerRecord(value: StoreCustomerRecord): StoreCustomerRecord {
+  return {
+    ...value,
+    email: normalizeNewsletterEmail(value.email || ''),
+    phoneCountry: value.phoneCountry || 'US',
+    addresses: Array.isArray(value.addresses) ? ensureSinglePrimaryAddress(value.addresses) : [],
+    welcomeBenefits: normalizeStoredWelcomeBenefits(value.welcomeBenefits),
+  };
+}
+
+async function findNewsletterSubscriberByEmail(email: string) {
+  try {
+    const subscribers = await getNewsletterSubscribers();
+    return subscribers.find((subscriber) => normalizeNewsletterEmail(subscriber.email) === email) || null;
+  } catch (error) {
+    console.error('Falha ao reconciliar newsletter com cadastro do cliente', error);
+    return null;
+  }
+}
+
 export function CustomerSessionProvider({ children }: { children: ReactNode }) {
   const [customers, setCustomers] = useState<StoreCustomerRecord[]>(() =>
-    readStorageValue<StoreCustomerRecord[]>(STOREFRONT_CUSTOMERS_STORAGE_KEY, []),
+    readStorageValue<StoreCustomerRecord[]>(STOREFRONT_CUSTOMERS_STORAGE_KEY, []).map(normalizeCustomerRecord),
   );
   const [session, setSession] = useState<CustomerSessionState>(() =>
     readStorageValue<CustomerSessionState>(STOREFRONT_SESSION_STORAGE_KEY, null),
@@ -179,14 +212,20 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
     return customers.find((customer) => customer.id === session.customerId) || null;
   }, [customers, session]);
 
+  const availableWelcomeBenefit = useMemo(() => {
+    if (!currentCustomer) return null;
+    return getAvailableWelcomeBenefit(currentCustomer.welcomeBenefits);
+  }, [currentCustomer]);
+
   const primaryAddress = useMemo(() => {
     if (!currentCustomer) return null;
     return currentCustomer.addresses.find((address) => address.isPrimary) || currentCustomer.addresses[0] || null;
   }, [currentCustomer]);
 
-  const registerCustomer = useCallback((input: RegisterCustomerInput) => {
+  const registerCustomer = useCallback(async (input: RegisterCustomerInput) => {
     const normalizedEmail = input.email.trim().toLowerCase();
     const now = new Date().toISOString();
+    const matchingSubscriber = await findNewsletterSubscriberByEmail(normalizedEmail);
     let result: { ok: true } | { ok: false; error: 'EMAIL_EXISTS' } = { ok: true };
     let nextSession: CustomerSessionState = null;
 
@@ -216,6 +255,7 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
         stateRegistration: input.stateRegistration.trim(),
         createdAt: now,
         updatedAt: now,
+        welcomeBenefits: matchingSubscriber ? [createWelcomeBenefitFromSubscriber(normalizedEmail, matchingSubscriber, now)] : [],
         addresses: input.address
           ? ensureSinglePrimaryAddress([
               {
@@ -273,6 +313,7 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     setSession(null);
+    clearCartPromotionDraft();
   }, []);
 
   const updateProfile = useCallback(
@@ -379,6 +420,88 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
     [currentCustomer],
   );
 
+  const activateNewsletterBenefitForCurrentCustomer = useCallback(
+    async (subscriber?: NewsletterSubscriber | null) => {
+      if (!currentCustomer) return null;
+
+      const normalizedEmail = normalizeNewsletterEmail(currentCustomer.email);
+      const matchingSubscriber =
+        subscriber && normalizeNewsletterEmail(subscriber.email) === normalizedEmail
+          ? subscriber
+          : await findNewsletterSubscriberByEmail(normalizedEmail);
+
+      if (!matchingSubscriber) {
+        return currentCustomer.welcomeBenefits.find((benefit) => benefit.type === 'newsletter-welcome') || null;
+      }
+
+      const timestamp = new Date().toISOString();
+      let resolvedBenefit: StoreCustomerWelcomeBenefit | null = null;
+
+      setCustomers((previousCustomers) =>
+        previousCustomers.map((customer) => {
+          if (customer.id !== currentCustomer.id) return customer;
+
+          const existingBenefit = customer.welcomeBenefits.find((benefit) => benefit.type === 'newsletter-welcome') || null;
+          if (existingBenefit) {
+            resolvedBenefit = existingBenefit;
+            return customer;
+          }
+
+          const nextBenefit = createWelcomeBenefitFromSubscriber(normalizedEmail, matchingSubscriber, timestamp);
+          resolvedBenefit = nextBenefit;
+
+          return {
+            ...customer,
+            updatedAt: timestamp,
+            welcomeBenefits: [nextBenefit, ...customer.welcomeBenefits],
+          };
+        }),
+      );
+
+      return resolvedBenefit;
+    },
+    [currentCustomer],
+  );
+
+  const consumeWelcomeBenefit = useCallback(
+    (benefitId: string, orderNumber: string) => {
+      if (!currentCustomer) return;
+
+      const timestamp = new Date().toISOString();
+
+      setCustomers((previousCustomers) =>
+        previousCustomers.map((customer) => {
+          if (customer.id !== currentCustomer.id) return customer;
+
+          return {
+            ...customer,
+            updatedAt: timestamp,
+            welcomeBenefits: customer.welcomeBenefits.map((benefit) =>
+              benefit.id === benefitId && benefit.status === 'available'
+                ? {
+                    ...benefit,
+                    status: 'used',
+                    usedAt: timestamp,
+                    usedOrderNumber: orderNumber,
+                  }
+                : benefit,
+            ),
+          };
+        }),
+      );
+
+      clearCartPromotionDraft();
+    },
+    [currentCustomer],
+  );
+
+  useEffect(() => {
+    if (!currentCustomer) return;
+    if (currentCustomer.welcomeBenefits.some((benefit) => benefit.type === 'newsletter-welcome')) return;
+
+    void activateNewsletterBenefitForCurrentCustomer();
+  }, [activateNewsletterBenefitForCurrentCustomer, currentCustomer]);
+
   const saveGuestShippingDraft = useCallback((draft: GuestShippingDraft) => {
     setGuestShippingDraft({
       country: draft.country,
@@ -401,6 +524,7 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
       value={{
         customers,
         currentCustomer,
+        availableWelcomeBenefit,
         primaryAddress,
         guestShippingDraft,
         isLoggedIn: Boolean(currentCustomer),
@@ -410,6 +534,8 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
         updateProfile,
         saveAddress,
         removeAddress,
+        activateNewsletterBenefitForCurrentCustomer,
+        consumeWelcomeBenefit,
         saveGuestShippingDraft,
         clearGuestShippingDraft,
       }}

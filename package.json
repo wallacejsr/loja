@@ -7,10 +7,13 @@
     "api:dev": "tsx server/index.ts",
     "api:start": "tsx server/index.ts",
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "deploy:vps": "bash scripts/deploy-vps.sh",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "migrate:supabase:mariadb": "tsx scripts/migrate-supabase-to-mariadb.ts --execute --replace-target",
+    "migrate:supabase:mariadb:dry": "tsx scripts/migrate-supabase-to-mariadb.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -25,6 +28,7 @@
     "libphonenumber-js": "^1.13.4",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "mysql2": "^3.15.3",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-i18next": "^17.0.6",

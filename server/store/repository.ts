@@ -5,13 +5,13 @@ import type { StoreRepository } from './types';
 
 export type StoreDataDriver = 'file' | 'mariadb';
 
-function getConfiguredDriver(): StoreDataDriver {
+export function getConfiguredStoreDriver(): StoreDataDriver {
   const driver = String(process.env.STORE_DATA_DRIVER || 'file').toLowerCase();
   return driver === 'mariadb' ? 'mariadb' : 'file';
 }
 
 export async function createStoreRepository(): Promise<StoreRepository> {
-  const driver = getConfiguredDriver();
+  const driver = getConfiguredStoreDriver();
 
   if (driver === 'mariadb') {
     return MariaDbStoreRepository.createFromEnv();

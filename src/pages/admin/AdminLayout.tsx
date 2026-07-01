@@ -46,6 +46,7 @@ export function AdminLayout() {
     { name: 'Categorias', href: '/admin/categories', icon: PackageSearch },
     { name: 'Clientes', href: '/admin/customers', icon: Users },
     { name: 'Mensagens', href: '/admin/messages', icon: Mail },
+    { name: 'Newsletter', href: '/admin/newsletter', icon: Mail },
     { name: 'Sorteios', href: '/admin/raffles', icon: Trophy },
     { name: 'Promoções', href: '/admin/promotions', icon: Tag },
     { name: 'Banners', href: '/admin/banners', icon: ImageIcon },

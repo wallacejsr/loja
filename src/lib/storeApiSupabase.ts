@@ -1,4 +1,11 @@
 import { categorias as mockCategories, instagramFeed as mockInstagramFeed, produtos as mockProducts, Product } from '../data/mockData';
+import {
+  createNewsletterSubscriberId,
+  isValidNewsletterEmail,
+  NEWSLETTER_DEFAULT_SOURCE,
+  normalizeNewsletterEmail,
+  WELCOME_NEWSLETTER_COUPON_CODE,
+} from './newsletter';
 import { defaultSettings, normalizeStoreSettings, StoreSettings } from '../types/settings';
 import { isSupabaseConfigured, supabase } from './supabase';
 
@@ -158,6 +165,21 @@ export interface ContactMessageUpdateInput {
   repliedAt?: string;
 }
 
+export interface NewsletterSubscriber {
+  id: string;
+  email: string;
+  status: 'Ativo' | 'Inativo';
+  source: string;
+  couponCode: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewsletterSubscriberInput {
+  email: string;
+  source?: string;
+}
+
 export interface ProductInput {
   id?: string;
   nome: string;
@@ -178,6 +200,7 @@ export interface ProductInput {
 
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const CONTACT_MESSAGES_STORAGE_KEY = 'dani_brand_contact_messages';
+const NEWSLETTER_SUBSCRIBERS_STORAGE_KEY = 'dani_brand_newsletter_subscribers';
 
 const getLocalContactMessages = (): ContactMessage[] => {
   if (typeof window === 'undefined') return [];
@@ -200,6 +223,30 @@ const saveLocalContactMessages = (messages: ContactMessage[]) => {
     window.localStorage.setItem(CONTACT_MESSAGES_STORAGE_KEY, JSON.stringify(messages));
   } catch (error) {
     console.error('Falha ao persistir mensagens de contato locais', error);
+  }
+};
+
+const getLocalNewsletterSubscribers = (): NewsletterSubscriber[] => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const stored = window.localStorage.getItem(NEWSLETTER_SUBSCRIBERS_STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as NewsletterSubscriber[];
+    return Array.isArray(parsed) ? parsed.map((item) => toNewsletterSubscriber(item)) : [];
+  } catch (error) {
+    console.error('Falha ao carregar inscritos da newsletter', error);
+    return [];
+  }
+};
+
+const saveLocalNewsletterSubscribers = (subscribers: NewsletterSubscriber[]) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(NEWSLETTER_SUBSCRIBERS_STORAGE_KEY, JSON.stringify(subscribers));
+  } catch (error) {
+    console.error('Falha ao persistir inscritos da newsletter', error);
   }
 };
 
@@ -314,6 +361,16 @@ const toContactMessage = (row: any): ContactMessage => ({
   createdAt: row.created_at || new Date().toISOString(),
   updatedAt: row.updated_at || row.created_at || new Date().toISOString(),
   repliedAt: row.replied_at || undefined,
+});
+
+const toNewsletterSubscriber = (row: any): NewsletterSubscriber => ({
+  id: String(row.id),
+  email: row.email || '',
+  status: row.status || 'Ativo',
+  source: row.source || NEWSLETTER_DEFAULT_SOURCE,
+  couponCode: row.coupon_code || WELCOME_NEWSLETTER_COUPON_CODE,
+  createdAt: row.created_at || new Date().toISOString(),
+  updatedAt: row.updated_at || row.created_at || new Date().toISOString(),
 });
 
 const toSettings = (row: any): StoreSettings => normalizeStoreSettings({
@@ -1125,6 +1182,79 @@ export async function createContactMessage(input: ContactMessageInput): Promise<
 
   if (error) throw error;
   return toContactMessage(data);
+}
+
+export async function createNewsletterSubscriber(input: NewsletterSubscriberInput): Promise<NewsletterSubscriber> {
+  const normalizedEmail = normalizeNewsletterEmail(input.email);
+  const timestamp = new Date().toISOString();
+  const subscriber: NewsletterSubscriber = {
+    id: createNewsletterSubscriberId(normalizedEmail),
+    email: normalizedEmail,
+    status: 'Ativo',
+    source: input.source?.trim() || NEWSLETTER_DEFAULT_SOURCE,
+    couponCode: WELCOME_NEWSLETTER_COUPON_CODE,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  if (!isValidNewsletterEmail(normalizedEmail)) {
+    throw new Error('Informe um e-mail valido para receber o cupom.');
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    const current = getLocalNewsletterSubscribers();
+    const existingIndex = current.findIndex((item) => normalizeNewsletterEmail(item.email) === normalizedEmail);
+
+    if (existingIndex >= 0) {
+      const existing = current[existingIndex];
+      current[existingIndex] = {
+        ...existing,
+        status: 'Ativo',
+        source: subscriber.source,
+        couponCode: WELCOME_NEWSLETTER_COUPON_CODE,
+        updatedAt: timestamp,
+      };
+      saveLocalNewsletterSubscribers(current);
+      return current[existingIndex];
+    }
+
+    saveLocalNewsletterSubscribers([subscriber, ...current]);
+    return subscriber;
+  }
+
+  const { error } = await supabase
+    .from('newsletter_subscribers')
+    .upsert(
+      {
+        id: subscriber.id,
+        email: subscriber.email,
+        status: subscriber.status,
+        source: subscriber.source,
+        coupon_code: subscriber.couponCode,
+        updated_at: subscriber.updatedAt,
+      },
+      {
+        onConflict: 'email',
+        ignoreDuplicates: false,
+      },
+    );
+
+  if (error) throw error;
+  return subscriber;
+}
+
+export async function getNewsletterSubscribers(): Promise<NewsletterSubscriber[]> {
+  if (!isSupabaseConfigured || !supabase) {
+    return getLocalNewsletterSubscribers().sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+  }
+
+  const { data, error } = await supabase
+    .from('newsletter_subscribers')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(toNewsletterSubscriber);
 }
 
 export async function updateContactMessage(id: string, input: ContactMessageUpdateInput): Promise<ContactMessage> {

@@ -126,6 +126,7 @@ export function Register() {
   const { settings } = useSettings();
   const { registerCustomer } = useCustomerSession();
   const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const addressLabels = useMemo(() => getAddressLabels(formData.country, locale), [formData.country, locale]);
   const birthDatePlaceholder = useMemo(() => getBirthDatePlaceholder(locale), [locale]);
@@ -289,7 +290,7 @@ export function Register() {
 
   const isAddressDisabled = !isAddressUnlocked || isSearchingPostalCode;
   const postalStatusMessage = getPostalStatusMessage(postalStatusTone, formData.country, t);
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
     if (hasInvalidBirthDate) {
@@ -307,38 +308,46 @@ export function Register() {
       return;
     }
 
-    const result = registerCustomer({
-      email: formData.email,
-      password: formData.password,
-      fullName: formData.fullName,
-      phone: formData.cellPhone,
-      phoneCountry: REGISTER_COUNTRY,
-      birthDate: formData.birthDate,
-      gender: formData.gender,
-      registrationType,
-      taxId: registrationType === 'F' ? formData.cpf : formData.cnpj,
-      corporateName: formData.corporateName,
-      stateRegistration: formData.stateRegistration,
-      address: {
-        label: t('homeAddress'),
-        country: REGISTER_COUNTRY,
-        postalCode: formData.postalCode,
-        street: formData.street,
-        number: formData.number,
-        complement: formData.complement,
-        neighborhood: formData.neighborhood,
-        city: formData.city,
-        region: formData.region,
-      },
-    });
-
-    if (!result.ok) {
-      setSubmitError(result.error === 'EMAIL_EXISTS' ? t('accountAlreadyExists') : t('accountCreationError'));
-      return;
-    }
-
     setSubmitError('');
-    navigate('/account');
+    setIsSubmitting(true);
+
+    try {
+      const result = await registerCustomer({
+        email: formData.email,
+        password: formData.password,
+        fullName: formData.fullName,
+        phone: formData.cellPhone,
+        phoneCountry: REGISTER_COUNTRY,
+        birthDate: formData.birthDate,
+        gender: formData.gender,
+        registrationType,
+        taxId: registrationType === 'F' ? formData.cpf : formData.cnpj,
+        corporateName: formData.corporateName,
+        stateRegistration: formData.stateRegistration,
+        address: {
+          label: t('homeAddress'),
+          country: REGISTER_COUNTRY,
+          postalCode: formData.postalCode,
+          street: formData.street,
+          number: formData.number,
+          complement: formData.complement,
+          neighborhood: formData.neighborhood,
+          city: formData.city,
+          region: formData.region,
+        },
+      });
+
+      if (!result.ok) {
+        setSubmitError(result.error === 'EMAIL_EXISTS' ? t('accountAlreadyExists') : t('accountCreationError'));
+        return;
+      }
+
+      navigate('/account');
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : t('accountCreationError'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -691,10 +700,10 @@ export function Register() {
             </button>
             <button
               type="submit"
-              disabled={isSearchingPostalCode || !isAddressUnlocked}
+              disabled={isSearchingPostalCode || !isAddressUnlocked || isSubmitting}
               className="bg-[#c29656] text-white px-6 py-2.5 font-bold text-sm hover:bg-[#a67c42] transition-colors rounded-sm disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {t('createAccount')}
+              {isSubmitting ? t('createAccountSubmitting') : t('createAccount')}
             </button>
           </div>
           {submitError ? <p className="pt-2 text-right text-sm font-medium text-red-500">{submitError}</p> : null}

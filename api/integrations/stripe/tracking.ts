@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { StripeMode } from '../../../src/types/settings.js';
+import type { StripeMode } from '../../../src/types/settings.ts';
 
 type AddressCountryCode = string;
 

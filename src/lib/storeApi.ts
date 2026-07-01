@@ -13,6 +13,8 @@ import type {
   HomeSectionInput,
   HomeSectionSource,
   InstagramPost,
+  NewsletterSubscriber,
+  NewsletterSubscriberInput,
   ProductInput,
   Raffle,
   RaffleInput,
@@ -32,6 +34,8 @@ export type {
   HomeSectionInput,
   HomeSectionSource,
   InstagramPost,
+  NewsletterSubscriber,
+  NewsletterSubscriberInput,
   ProductInput,
   Raffle,
   RaffleInput,
@@ -42,6 +46,7 @@ type StoreApiModule = {
   createBanner: (input: Pick<Banner, 'title' | 'desktop' | 'mobile' | 'link'>) => Promise<Banner>;
   createCategory: (input: CategoryInput) => Promise<StoreCategory>;
   createContactMessage: (input: ContactMessageInput) => Promise<ContactMessage>;
+  createNewsletterSubscriber: (input: NewsletterSubscriberInput) => Promise<NewsletterSubscriber>;
   createHomeCard: (input: HomeCardInput) => Promise<HomeCard>;
   createProduct: (input: ProductInput) => Promise<Product>;
   createRaffle: (input: RaffleInput) => Promise<Raffle>;
@@ -56,6 +61,7 @@ type StoreApiModule = {
   getHomeCards: (options?: { onlyActive?: boolean }) => Promise<HomeCard[]>;
   getHomeSections: (options?: { onlyActive?: boolean }) => Promise<HomeSection[]>;
   getInstagramFeed: () => Promise<InstagramPost[]>;
+  getNewsletterSubscribers: () => Promise<NewsletterSubscriber[]>;
   getProducts: () => Promise<Product[]>;
   getRaffles: (options?: { onlyActive?: boolean }) => Promise<Raffle[]>;
   getStoreSettings: () => Promise<StoreSettings>;
@@ -207,8 +213,16 @@ export async function getContactMessages() {
   return (await getStoreApiModule()).getContactMessages();
 }
 
+export async function getNewsletterSubscribers() {
+  return (await getStoreApiModule()).getNewsletterSubscribers();
+}
+
 export async function createContactMessage(input: ContactMessageInput) {
   return (await getStoreApiModule()).createContactMessage(input);
+}
+
+export async function createNewsletterSubscriber(input: NewsletterSubscriberInput) {
+  return (await getStoreApiModule()).createNewsletterSubscriber(input);
 }
 
 export async function updateContactMessage(id: string, input: ContactMessageUpdateInput) {
