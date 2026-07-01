@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 
 // Chave para o localStorage
-const LOYALTY_POINTS_KEY = 'dani_brand_loyalty_points';
-const RAFFLE_TICKETS_KEY = 'dani_brand_raffle_tickets';
+const LOYALTY_POINTS_KEY = 'zenv_loyalty_points';
+const RAFFLE_TICKETS_KEY = 'zenv_raffle_tickets';
 
 export function useLoyalty() {
   const [points, setPoints] = useState<number>(() => {

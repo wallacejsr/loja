@@ -125,7 +125,7 @@ export function Settings() {
                </div>
                <div className="sm:col-span-2">
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">Título do Site</label>
-                  <input type="text" name="siteTitle" value={localSettings.siteTitle} onChange={handleChange} placeholder="Ex: Spaçodani | Moda Feminina" className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
+                  <input type="text" name="siteTitle" value={localSettings.siteTitle} onChange={handleChange} placeholder="Ex: ZENV Apparel | Premium Essentials" className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] text-neutral-900" />
                   <p className="text-[11px] text-neutral-400 mt-2">Aparece na aba do navegador e pode ser usado por buscadores.</p>
                </div>
                <div>

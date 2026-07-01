@@ -166,7 +166,7 @@ create table if not exists public.store_settings (
   id integer primary key default 1 check (id = 1),
   store_name text not null,
   site_title text default '',
-  admin_panel_name text default 'DANI Studio',
+  admin_panel_name text default 'Admin Panel',
   site_language text not null default 'pt-BR',
   allow_business_registration boolean not null default false,
   store_currency text not null default 'USD',
@@ -212,7 +212,7 @@ create table if not exists public.store_settings (
 
 alter table public.store_settings add column if not exists support_sales_phone text default '';
 alter table public.store_settings add column if not exists site_title text default '';
-alter table public.store_settings add column if not exists admin_panel_name text default 'DANI Studio';
+alter table public.store_settings add column if not exists admin_panel_name text default 'Admin Panel';
 alter table public.store_settings add column if not exists site_language text not null default 'pt-BR';
 alter table public.store_settings add column if not exists allow_business_registration boolean not null default false;
 alter table public.store_settings add column if not exists store_currency text not null default 'USD';

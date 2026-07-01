@@ -125,7 +125,7 @@ const InstagramFeedContext = createContext<InstagramPost[] | null>(null);
 const StoreStatusContext = createContext<StoreStatusContextValue | null>(null);
 const StoreActionsContext = createContext<StoreActionsContextValue | null>(null);
 
-const STORE_DATA_CACHE_KEY = 'dani_brand_store_snapshot_v1';
+const STORE_DATA_CACHE_KEY = 'zenv_store_snapshot_v1';
 const STORE_DATA_CACHE_TTL_MS = 5 * 60 * 1000;
 const STORE_DATA_REVALIDATE_INTERVAL_MS = 60 * 1000;
 const STORE_DATA_REVALIDATE_THROTTLE_MS = 15 * 1000;

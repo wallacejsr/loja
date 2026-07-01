@@ -199,8 +199,8 @@ export interface ProductInput {
 }
 
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-const CONTACT_MESSAGES_STORAGE_KEY = 'dani_brand_contact_messages';
-const NEWSLETTER_SUBSCRIBERS_STORAGE_KEY = 'dani_brand_newsletter_subscribers';
+const CONTACT_MESSAGES_STORAGE_KEY = 'zenv_contact_messages';
+const NEWSLETTER_SUBSCRIBERS_STORAGE_KEY = 'zenv_newsletter_subscribers';
 
 const getLocalContactMessages = (): ContactMessage[] => {
   if (typeof window === 'undefined') return [];
@@ -253,10 +253,10 @@ const saveLocalNewsletterSubscribers = (subscribers: NewsletterSubscriber[]) => 
 const fallbackBanners: Banner[] = [
   {
     id: '1',
-    title: 'Coleção Principal',
-    desktop: 'https://cdn.awsli.com.br/1920x1920/2751/2751677/banner/18-0grlts3ju4.png',
-    mobile: 'https://cdn.awsli.com.br/1920x1920/2751/2751677/banner/2-iwz6y4331u.png',
-    image: 'https://cdn.awsli.com.br/1920x1920/2751/2751677/banner/18-0grlts3ju4.png',
+    title: 'ZENV Essentials',
+    desktop: mockProducts[0]?.imagens[0] || mockCategories[0]?.imagem || '',
+    mobile: mockProducts[0]?.imagens[0] || mockCategories[0]?.imagem || '',
+    image: mockProducts[0]?.imagens[0] || mockCategories[0]?.imagem || '',
     link: '/catalog',
     status: 'Ativo',
     position: 1,

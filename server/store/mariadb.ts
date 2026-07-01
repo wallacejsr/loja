@@ -8,7 +8,7 @@ import {
   normalizeNewsletterEmail,
   WELCOME_NEWSLETTER_COUPON_CODE,
 } from '../../src/lib/newsletter.ts';
-import { normalizeStoreSettings, type StoreSettings, type StripeMode } from '../../src/types/settings.ts';
+import { defaultSettings, normalizeStoreSettings, type StoreSettings, type StripeMode } from '../../src/types/settings.ts';
 import type {
   Banner,
   CategoryInput,
@@ -515,8 +515,8 @@ export class MariaDbStoreRepository implements StoreRepository {
     return normalizeStoreSettings({
       storeName: row.store_name,
       siteTitle: row.site_title || row.store_name,
-      adminPanelName: row.admin_panel_name || 'DANI Studio',
-      siteLanguage: row.site_language === 'en-US' ? 'en-US' : 'pt-BR',
+      adminPanelName: row.admin_panel_name || defaultSettings.adminPanelName,
+      siteLanguage: row.site_language === 'en-US' ? 'en-US' : defaultSettings.siteLanguage,
       allowBusinessRegistration: toBoolean(row.allow_business_registration),
       storeCurrency: row.store_currency || 'USD',
       logoUrl: row.logo_url || '',

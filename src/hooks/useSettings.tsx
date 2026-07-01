@@ -2,7 +2,7 @@ import React, { createContext, ReactNode, useCallback, useContext, useEffect, us
 import { getStoreSettings, saveStoreSettings } from '../lib/storeApi';
 import { defaultSettings, normalizeStoreSettings, StoreSettings } from '../types/settings';
 
-const SETTINGS_KEY = 'dani_brand_store_settings';
+const SETTINGS_KEY = 'zenv_store_settings';
 
 export type { StoreSettings };
 

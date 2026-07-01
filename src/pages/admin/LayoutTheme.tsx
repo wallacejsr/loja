@@ -52,7 +52,7 @@ export function LayoutTheme() {
             <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
                <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-2">Nome exibido no menu lateral</label>
-                  <p className="text-xs text-neutral-400 mb-4">Esse texto substitui o nome atualmente exibido como DANI Studio no painel administrativo.</p>
+                  <p className="text-xs text-neutral-400 mb-4">Esse texto substitui o nome exibido no painel administrativo.</p>
 
                   <input
                     type="text"
@@ -154,7 +154,7 @@ export function LayoutTheme() {
 
 function formatAdminPanelName(value: string) {
   const trimmed = value.trim();
-  if (!trimmed) return 'DANI Studio';
+  if (!trimmed) return 'Admin Panel';
 
   const parts = trimmed.split(/\s+/);
   const primary = parts[0];

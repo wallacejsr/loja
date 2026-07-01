@@ -343,7 +343,10 @@ function createMigrationTableConfigs(): MigrationTableConfig[] {
           id: 1,
           store_name: toStringValue(row.store_name, ''),
           site_title: toStringValue(row.site_title, toStringValue(row.store_name, '')),
-          admin_panel_name: toStringValue(row.admin_panel_name, 'DANI Studio'),
+          admin_panel_name: toStringValue(
+            row.admin_panel_name,
+            `${toStringValue(row.store_name, 'Store').trim() || 'Store'} Admin`,
+          ),
           site_language: toStringValue(row.site_language, 'pt-BR'),
           allow_business_registration: toBooleanNumber(row.allow_business_registration),
           store_currency: toStringValue(row.store_currency, 'USD'),

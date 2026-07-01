@@ -3,11 +3,16 @@ import { ShoppingCart, DollarSign, Users, TrendingUp, Package, ArrowRight } from
 import { useNavigate } from 'react-router-dom';
 import { PromotionModal } from '../../components/admin/PromotionModal';
 import { useAdminCurrency } from '../../hooks/useAdminCurrency';
+import { useSettings } from '../../hooks/useSettings';
 
 export function Dashboard() {
   const navigate = useNavigate();
   const [isPromotionModalOpen, setIsPromotionModalOpen] = useState(false);
   const { formatCurrency } = useAdminCurrency();
+  const { settings } = useSettings();
+  const supportHref = settings.supportEmail || settings.email
+    ? `mailto:${settings.supportEmail || settings.email}`
+    : '#';
 
   const stats = [
     { name: 'Receita Total', value: 45231.89, change: '+20.1%', icon: DollarSign, isCurrency: true },
@@ -18,7 +23,7 @@ export function Dashboard() {
 
   const recentOrders = [
     { id: '#1234', customer: 'Maria Silva', date: 'Hoje, 10:23', total: 359.9, status: 'Pago' },
-    { id: '#1233', customer: 'João Souza', date: 'Hoje, 09:12', total: 1250, status: 'Aguardando Pagamento' },
+    { id: '#1233', customer: 'Joao Souza', date: 'Hoje, 09:12', total: 1250, status: 'Aguardando Pagamento' },
     { id: '#1232', customer: 'Ana Paula', date: 'Ontem, 16:45', total: 89.9, status: 'Enviado' },
     { id: '#1231', customer: 'Carlos Eduardo', date: 'Ontem, 14:20', total: 450.5, status: 'Entregue' },
   ];
@@ -26,8 +31,8 @@ export function Dashboard() {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col gap-1.5">
-        <h2 className="text-3xl font-serif text-neutral-900 tracking-tight">Visão Geral</h2>
-        <p className="text-neutral-500 text-[13px]">Acompanhe as métricas e o desempenho da sua loja.</p>
+        <h2 className="text-3xl font-serif text-neutral-900 tracking-tight">Visao Geral</h2>
+        <p className="text-neutral-500 text-[13px]">Acompanhe as metricas e o desempenho da sua loja.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
@@ -113,7 +118,7 @@ export function Dashboard() {
         <div className="bg-white rounded-2xl border border-neutral-200/40 shadow-[0_2px_10px_rgba(0,0,0,0.03)] p-6 flex flex-col justify-between">
           <div>
             <h3 className="text-[13px] font-semibold uppercase tracking-widest text-neutral-900 mb-6 flex items-center gap-2">
-              Ações Rápidas
+              Acoes Rapidas
             </h3>
             <div className="space-y-3">
               <button
@@ -128,7 +133,7 @@ export function Dashboard() {
                 className="w-full bg-white border border-neutral-200 text-neutral-700 px-5 py-3.5 font-semibold tracking-wide text-[13px] rounded-xl hover:bg-neutral-50 hover:border-neutral-300 transition-all flex items-center justify-center gap-3"
               >
                 <TrendingUp className="w-4 h-4 text-neutral-400" />
-                Criar Promoção
+                Criar Promocao
               </button>
 
               <PromotionModal isOpen={isPromotionModalOpen} onClose={() => setIsPromotionModalOpen(false)} />
@@ -145,9 +150,9 @@ export function Dashboard() {
           <div className="mt-8 pt-6 border-t border-neutral-100/60">
             <div className="bg-[#F5F5F7] rounded-xl p-5 border border-neutral-200/50 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-neutral-200/50 to-transparent rounded-bl-[100px] -mr-4 -mt-4"></div>
-              <h4 className="text-[11px] font-semibold uppercase tracking-widest text-neutral-900 mb-1.5 relative z-10">Suporte DANI</h4>
+              <h4 className="text-[11px] font-semibold uppercase tracking-widest text-neutral-900 mb-1.5 relative z-10">Suporte da Loja</h4>
               <p className="text-[13px] text-neutral-500 mb-4 leading-relaxed relative z-10 pr-4">Precisa de ajuda com o painel ou com a loja?</p>
-              <a href="#" className="text-[11px] font-semibold text-blue-600 uppercase tracking-widest hover:text-blue-700 hover:underline relative z-10">Falar com Suporte →</a>
+              <a href={supportHref} className="text-[11px] font-semibold text-blue-600 uppercase tracking-widest hover:text-blue-700 hover:underline relative z-10">Falar com Suporte -&gt;</a>
             </div>
           </div>
         </div>

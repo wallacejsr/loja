@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS store_settings (
   id INT NOT NULL PRIMARY KEY,
   store_name VARCHAR(255) NOT NULL,
   site_title VARCHAR(255) NOT NULL,
-  admin_panel_name VARCHAR(255) NOT NULL DEFAULT 'DANI Studio',
+  admin_panel_name VARCHAR(255) NOT NULL DEFAULT 'Admin Panel',
   site_language VARCHAR(10) NOT NULL DEFAULT 'pt-BR',
   allow_business_registration TINYINT(1) NOT NULL DEFAULT 0,
   store_currency VARCHAR(10) NOT NULL DEFAULT 'USD',

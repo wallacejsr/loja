@@ -56,6 +56,8 @@ export function AdminLayout() {
     { name: 'Configurações', href: '/admin/settings', icon: Settings },
   ];
   const brandParts = getAdminBrandParts(settings.adminPanelName);
+  const adminContactEmail = settings.supportEmail || settings.email || 'support@zenvapparel.com';
+  const adminBadgeLabel = getAdminBadgeLabel(settings.adminPanelName);
 
   return (
     <div className="min-h-screen bg-[#F5F5F7] flex font-sans text-neutral-900 relative">
@@ -149,10 +151,10 @@ export function AdminLayout() {
             <div className="flex items-center gap-4 ml-auto">
               <div className="text-right hidden sm:block">
                 <div className="text-[13px] font-semibold text-neutral-900">Administrador</div>
-                <div className="text-[11px] text-neutral-500 font-medium">admin@danibrand.com.br</div>
+                <div className="text-[11px] text-neutral-500 font-medium">{adminContactEmail}</div>
               </div>
               <div className="w-9 h-9 rounded-full bg-white border border-neutral-200/60 text-neutral-700 flex items-center justify-center font-bold text-sm shadow-sm">
-                DA
+                {adminBadgeLabel}
               </div>
             </div>
           </div>
@@ -169,7 +171,7 @@ export function AdminLayout() {
 function getAdminBrandParts(value: string) {
   const trimmed = value.trim();
   if (!trimmed) {
-    return { primary: 'DANI', secondary: 'Studio' };
+    return { primary: 'ADMIN', secondary: 'PANEL' };
   }
 
   const parts = trimmed.split(/\s+/);
@@ -177,4 +179,18 @@ function getAdminBrandParts(value: string) {
     primary: parts[0],
     secondary: parts.slice(1).join(' '),
   };
+}
+
+function getAdminBadgeLabel(value: string) {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return 'AP';
+  }
+
+  return parts.map((part) => part[0]?.toUpperCase() || '').join('');
 }
