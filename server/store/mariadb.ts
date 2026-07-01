@@ -1,6 +1,19 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { getPhoneE164 } from '../../src/lib/customerForm.ts';
 import type { Product } from '../../src/data/mockData.ts';
+import type {
+  CustomerAddressInput,
+  CustomerProfileUpdateInput,
+  CustomerSessionPayload,
+  StoreCustomerAddress,
+  StoreCustomerProfile,
+} from '../../src/lib/storeCustomerApi.ts';
+import {
+  createWelcomeBenefitFromSubscriber,
+  getAvailableWelcomeBenefit,
+  type StoreCustomerWelcomeBenefit,
+} from '../../src/lib/welcomeBenefit.ts';
 import {
   createNewsletterSubscriberId,
   isValidNewsletterEmail,
@@ -35,6 +48,13 @@ import {
 } from '../integrations/stripeCredentials';
 import { createDefaultStoreSnapshot, createId } from './defaultData';
 import type {
+  CreateCustomerSessionInput,
+  CustomerAddressMutationResult,
+  CustomerAuthLookup,
+  CustomerBenefitMutationResult,
+  CustomerProfileUpdateResult,
+  CustomerRegistrationInput,
+  CustomerSessionLookup,
   ListOptions,
   StoreRepository,
   StoredStripeCredentialSet,
@@ -117,6 +137,29 @@ function toIsoDateTime(value: unknown, fallback = new Date().toISOString()) {
   }
 
   return parsed.toISOString();
+}
+
+function toSqlDate(value: string | Date | null | undefined) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const normalizedValue = value instanceof Date ? value.toISOString().slice(0, 10) : String(value).trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  const parsed = new Date(normalizedValue);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString().slice(0, 10);
+}
+
+function getTaxDocumentType(registrationType: StoreCustomerProfile['registrationType']) {
+  return registrationType === 'J' ? 'business_tax_id' : 'tax_id';
 }
 
 async function loadMariaDbModule() {
@@ -376,6 +419,11 @@ export class MariaDbStoreRepository implements StoreRepository {
     return rows as T[];
   }
 
+  private async queryRowsWithExecutor<T = any>(executor: MariaDbPool | MariaDbConnection, sql: string, params: unknown[] = []) {
+    const [rows] = await executor.query(sql, params);
+    return rows as T[];
+  }
+
   private mapProduct(row: any): Product {
     return {
       id: String(row.id),
@@ -509,6 +557,183 @@ export class MariaDbStoreRepository implements StoreRepository {
       createdAt: toIsoDateTime(row.created_at),
       updatedAt: toIsoDateTime(row.updated_at || row.created_at),
     };
+  }
+
+  private mapCustomerAddress(row: any): StoreCustomerAddress {
+    return {
+      id: String(row.id),
+      label: row.label || '',
+      country: row.country || 'US',
+      postalCode: row.postal_code || '',
+      street: row.street || '',
+      number: row.number || '',
+      complement: row.complement || '',
+      neighborhood: row.neighborhood || '',
+      city: row.city || '',
+      region: row.region || '',
+      isPrimary: toBoolean(row.is_primary),
+    };
+  }
+
+  private mapCustomerBenefit(row: any): StoreCustomerWelcomeBenefit {
+    return {
+      id: String(row.id),
+      type: 'newsletter-welcome',
+      email: row.linked_email || '',
+      source: row.source || NEWSLETTER_DEFAULT_SOURCE,
+      couponCode: row.coupon_code || WELCOME_NEWSLETTER_COUPON_CODE,
+      discountType: 'percentage',
+      discountValue: toNumber(row.discount_value, 10),
+      status: row.status === 'used' || row.status === 'expired' ? row.status : 'available',
+      linkedNewsletterSubscriberId: row.linked_newsletter_subscriber_id || undefined,
+      createdAt: toIsoDateTime(row.created_at),
+      linkedAt: toIsoDateTime(row.available_at || row.created_at),
+      usedAt: row.used_at ? toIsoDateTime(row.used_at) : undefined,
+      usedOrderNumber: row.used_order_id || undefined,
+    };
+  }
+
+  private async loadCustomerAddresses(customerId: string, executor: MariaDbPool | MariaDbConnection = this.pool) {
+    const rows = await this.queryRowsWithExecutor(
+      executor,
+      'SELECT * FROM customer_addresses WHERE customer_id = ? ORDER BY is_primary DESC, created_at ASC',
+      [customerId],
+    );
+
+    return rows.map((row) => this.mapCustomerAddress(row));
+  }
+
+  private async loadCustomerBenefits(customerId: string, executor: MariaDbPool | MariaDbConnection = this.pool) {
+    const rows = await this.queryRowsWithExecutor(
+      executor,
+      "SELECT * FROM customer_benefits WHERE customer_id = ? AND benefit_type = 'newsletter-welcome' ORDER BY created_at DESC",
+      [customerId],
+    );
+
+    return rows.map((row) => this.mapCustomerBenefit(row));
+  }
+
+  private async loadCustomerProfile(customerId: string, executor: MariaDbPool | MariaDbConnection = this.pool): Promise<StoreCustomerProfile | null> {
+    const [row] = await this.queryRowsWithExecutor(executor, 'SELECT * FROM customers WHERE id = ? LIMIT 1', [customerId]);
+
+    if (!row) {
+      return null;
+    }
+
+    const [addresses, welcomeBenefits] = await Promise.all([
+      this.loadCustomerAddresses(customerId, executor),
+      this.loadCustomerBenefits(customerId, executor),
+    ]);
+
+    return {
+      id: String(row.id),
+      email: row.email || '',
+      fullName: row.full_name || '',
+      phone: row.phone_national || row.phone_e164 || '',
+      phoneCountry: row.phone_country || 'US',
+      birthDate: row.birth_date ? String(row.birth_date).slice(0, 10) : '',
+      gender: row.gender || '',
+      registrationType: row.registration_type === 'J' ? 'J' : 'F',
+      taxId: row.tax_document || '',
+      taxDocumentType: row.tax_document_type || 'tax_id',
+      corporateName: row.corporate_name || '',
+      stateRegistration: row.state_registration || '',
+      allowMarketing: toBoolean(row.allow_marketing),
+      blockPurchases: toBoolean(row.block_purchases),
+      newsletterSubscribed: toBoolean(row.newsletter_subscribed),
+      status: row.status === 'inactive' ? 'inactive' : 'active',
+      createdAt: toIsoDateTime(row.created_at),
+      updatedAt: toIsoDateTime(row.updated_at || row.created_at),
+      addresses,
+      welcomeBenefits,
+    };
+  }
+
+  private buildCustomerSessionPayload(profile: StoreCustomerProfile | null): CustomerSessionPayload {
+    if (!profile) {
+      return {
+        authenticated: false,
+        availableWelcomeBenefit: null,
+        customer: null,
+        primaryAddress: null,
+      };
+    }
+
+    return {
+      authenticated: true,
+      availableWelcomeBenefit: getAvailableWelcomeBenefit(profile.welcomeBenefits),
+      customer: profile,
+      primaryAddress: profile.addresses.find((address) => address.isPrimary) || profile.addresses[0] || null,
+    };
+  }
+
+  private async ensureNewsletterBenefitForCustomer(customerId: string, executor: MariaDbPool | MariaDbConnection = this.pool) {
+    const [customerRow] = await this.queryRowsWithExecutor(
+      executor,
+      'SELECT id, email FROM customers WHERE id = ? LIMIT 1',
+      [customerId],
+    );
+
+    if (!customerRow) {
+      return null;
+    }
+
+    const normalizedEmail = normalizeNewsletterEmail(customerRow.email || '');
+    const [existingBenefitRow] = await this.queryRowsWithExecutor(
+      executor,
+      "SELECT * FROM customer_benefits WHERE customer_id = ? AND benefit_type = 'newsletter-welcome' LIMIT 1",
+      [customerId],
+    );
+
+    if (existingBenefitRow) {
+      await executor.query(
+        'UPDATE customers SET newsletter_subscribed = 1, updated_at = NOW() WHERE id = ?',
+        [customerId],
+      );
+      return this.mapCustomerBenefit(existingBenefitRow);
+    }
+
+    const [subscriberRow] = await this.queryRowsWithExecutor(
+      executor,
+      "SELECT * FROM newsletter_subscribers WHERE email = ? AND status = 'Ativo' LIMIT 1",
+      [normalizedEmail],
+    );
+
+    if (!subscriberRow) {
+      return null;
+    }
+
+    const subscriber = this.mapNewsletterSubscriber(subscriberRow);
+    const benefit = createWelcomeBenefitFromSubscriber(normalizedEmail, subscriber);
+
+    await executor.query(
+      `
+        INSERT INTO customer_benefits (
+          id, customer_id, benefit_type, source, status, coupon_code, discount_type,
+          discount_value, linked_email, linked_newsletter_subscriber_id, metadata,
+          available_at, used_at, used_order_id, created_at, updated_at
+        ) VALUES (?, ?, 'newsletter-welcome', ?, 'available', ?, 'percentage', ?, ?, ?, NULL, ?, NULL, NULL, ?, ?)
+      `,
+      [
+        benefit.id,
+        customerId,
+        benefit.source,
+        benefit.couponCode,
+        benefit.discountValue,
+        benefit.email,
+        benefit.linkedNewsletterSubscriberId || null,
+        toSqlDateTime(benefit.linkedAt),
+        toSqlDateTime(benefit.createdAt),
+        toSqlDateTime(benefit.createdAt),
+      ],
+    );
+
+    await executor.query(
+      'UPDATE customers SET newsletter_subscribed = 1, updated_at = NOW() WHERE id = ?',
+      [customerId],
+    );
+
+    return benefit;
   }
 
   private mapSettings(row: any): StoreSettings {
@@ -1132,6 +1357,400 @@ export class MariaDbStoreRepository implements StoreRepository {
     );
 
     return normalized;
+  }
+
+  async findCustomerAuthByEmail(email: string): Promise<CustomerAuthLookup | null> {
+    const [row] = await this.queryRows(
+      'SELECT id, email, password_hash, status FROM customers WHERE email = ? LIMIT 1',
+      [normalizeNewsletterEmail(email)],
+    );
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      email: row.email || '',
+      id: String(row.id),
+      passwordHash: row.password_hash || '',
+      status: row.status === 'inactive' ? 'inactive' : 'active',
+    };
+  }
+
+  async createCustomerAccount(input: CustomerRegistrationInput): Promise<CustomerSessionPayload> {
+    const connection = await this.pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const existingEmailRows = await this.queryRowsWithExecutor(
+        connection,
+        'SELECT id FROM customers WHERE email = ? LIMIT 1',
+        [normalizeNewsletterEmail(input.email)],
+      );
+
+      if (existingEmailRows.length > 0) {
+        throw new Error('An account with this email already exists.');
+      }
+
+      const customerId = createId('customer');
+      const birthDate = toSqlDate(input.birthDate);
+      const normalizedPhoneCountry = input.phoneCountry || 'US';
+      const normalizedPhone = input.phone.trim();
+
+      await connection.query(
+        `
+          INSERT INTO customers (
+            id, email, password_hash, full_name, tax_document, tax_document_type, birth_date,
+            gender, phone_e164, phone_country, phone_national, registration_type,
+            corporate_name, state_registration, allow_marketing, block_purchases,
+            newsletter_subscribed, status, email_verified_at, last_login_at, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'active', NULL, NULL, NOW(), NOW())
+        `,
+        [
+          customerId,
+          normalizeNewsletterEmail(input.email),
+          input.passwordHash,
+          input.fullName.trim(),
+          input.taxId.trim(),
+          getTaxDocumentType(input.registrationType),
+          birthDate,
+          input.gender.trim(),
+          getPhoneE164(normalizedPhone, normalizedPhoneCountry),
+          normalizedPhoneCountry,
+          normalizedPhone,
+          input.registrationType,
+          input.corporateName.trim(),
+          input.stateRegistration.trim(),
+          input.allowMarketing !== false ? 1 : 0,
+        ],
+      );
+
+      if (input.address) {
+        await connection.query(
+          `
+            INSERT INTO customer_addresses (
+              id, customer_id, label, country, postal_code, street, number,
+              complement, neighborhood, city, region, is_primary, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          `,
+          [
+            createId('address'),
+            customerId,
+            input.address.label.trim(),
+            input.address.country,
+            input.address.postalCode.trim(),
+            input.address.street.trim(),
+            input.address.number.trim(),
+            input.address.complement.trim(),
+            input.address.neighborhood.trim(),
+            input.address.city.trim(),
+            input.address.region.trim(),
+            input.address.isPrimary !== false ? 1 : 0,
+          ],
+        );
+      }
+
+      await this.ensureNewsletterBenefitForCustomer(customerId, connection);
+      await connection.commit();
+
+      const profile = await this.loadCustomerProfile(customerId);
+      return this.buildCustomerSessionPayload(profile);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async createCustomerSession(input: CreateCustomerSessionInput): Promise<CustomerSessionLookup> {
+    const id = createId('customer-session');
+
+    await this.pool.query(
+      `
+        INSERT INTO customer_sessions (
+          id, customer_id, session_token_hash, ip_address, user_agent,
+          last_seen_at, expires_at, revoked_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, NOW(), ?, NULL, NOW(), NOW())
+      `,
+      [
+        id,
+        input.customerId,
+        input.sessionTokenHash,
+        input.ipAddress,
+        input.userAgent,
+        toSqlDateTime(input.expiresAt),
+      ],
+    );
+
+    await this.pool.query(
+      'UPDATE customers SET last_login_at = NOW(), updated_at = NOW() WHERE id = ?',
+      [input.customerId],
+    );
+
+    return {
+      customerId: input.customerId,
+      expiresAt: input.expiresAt,
+      id,
+      revokedAt: null,
+    };
+  }
+
+  async getCustomerSessionByTokenHash(tokenHash: string): Promise<CustomerSessionLookup | null> {
+    const [row] = await this.queryRows(
+      'SELECT id, customer_id, expires_at, revoked_at FROM customer_sessions WHERE session_token_hash = ? LIMIT 1',
+      [tokenHash],
+    );
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      customerId: String(row.customer_id),
+      expiresAt: toIsoDateTime(row.expires_at),
+      id: String(row.id),
+      revokedAt: row.revoked_at ? toIsoDateTime(row.revoked_at) : null,
+    };
+  }
+
+  async touchCustomerSession(sessionId: string, ipAddress: string, userAgent: string): Promise<void> {
+    await this.pool.query(
+      `
+        UPDATE customer_sessions
+        SET ip_address = ?,
+            user_agent = ?,
+            last_seen_at = NOW(),
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [ipAddress, userAgent, sessionId],
+    );
+  }
+
+  async revokeCustomerSession(sessionId: string): Promise<void> {
+    await this.pool.query(
+      `
+        UPDATE customer_sessions
+        SET revoked_at = COALESCE(revoked_at, NOW()),
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [sessionId],
+    );
+  }
+
+  async getCustomerSessionPayload(customerId: string): Promise<CustomerSessionPayload | null> {
+    await this.ensureNewsletterBenefitForCustomer(customerId);
+    const profile = await this.loadCustomerProfile(customerId);
+    return profile ? this.buildCustomerSessionPayload(profile) : null;
+  }
+
+  async updateCustomerProfile(customerId: string, input: CustomerProfileUpdateInput): Promise<CustomerProfileUpdateResult> {
+    const currentProfile = await this.loadCustomerProfile(customerId);
+    if (!currentProfile) {
+      throw new Error('Customer account not found.');
+    }
+
+    const nextPhoneCountry = input.phoneCountry || currentProfile.phoneCountry;
+    const nextPhone = input.phone?.trim() || currentProfile.phone;
+    const nextBirthDate = input.birthDate?.trim() || currentProfile.birthDate;
+    const nextTaxId = input.taxId?.trim() || currentProfile.taxId;
+    const nextCorporateName = input.corporateName?.trim() || currentProfile.corporateName;
+    const nextStateRegistration = input.stateRegistration?.trim() || currentProfile.stateRegistration;
+    const nextAllowMarketing = input.allowMarketing ?? currentProfile.allowMarketing;
+
+    await this.pool.query(
+      `
+        UPDATE customers
+        SET full_name = ?,
+            tax_document = ?,
+            tax_document_type = ?,
+            birth_date = ?,
+            gender = ?,
+            phone_e164 = ?,
+            phone_country = ?,
+            phone_national = ?,
+            corporate_name = ?,
+            state_registration = ?,
+            allow_marketing = ?,
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [
+        input.fullName?.trim() || currentProfile.fullName,
+        nextTaxId,
+        getTaxDocumentType(currentProfile.registrationType),
+        toSqlDate(nextBirthDate),
+        input.gender?.trim() || currentProfile.gender,
+        getPhoneE164(nextPhone, nextPhoneCountry),
+        nextPhoneCountry,
+        nextPhone,
+        nextCorporateName,
+        nextStateRegistration,
+        nextAllowMarketing ? 1 : 0,
+        customerId,
+      ],
+    );
+
+    const profile = await this.loadCustomerProfile(customerId);
+    return this.buildCustomerSessionPayload(profile);
+  }
+
+  async saveCustomerAddress(customerId: string, input: CustomerAddressInput): Promise<CustomerAddressMutationResult> {
+    const connection = await this.pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const addressId = input.id?.trim() || createId('address');
+      const [existingAddress] = await this.queryRowsWithExecutor(
+        connection,
+        'SELECT id FROM customer_addresses WHERE id = ? AND customer_id = ? LIMIT 1',
+        [addressId, customerId],
+      );
+
+      if (input.isPrimary !== false) {
+        await connection.query(
+          'UPDATE customer_addresses SET is_primary = 0, updated_at = NOW() WHERE customer_id = ?',
+          [customerId],
+        );
+      }
+
+      if (existingAddress) {
+        await connection.query(
+          `
+            UPDATE customer_addresses
+            SET label = ?,
+                country = ?,
+                postal_code = ?,
+                street = ?,
+                number = ?,
+                complement = ?,
+                neighborhood = ?,
+                city = ?,
+                region = ?,
+                is_primary = ?,
+                updated_at = NOW()
+            WHERE id = ? AND customer_id = ?
+          `,
+          [
+            input.label.trim(),
+            input.country,
+            input.postalCode.trim(),
+            input.street.trim(),
+            input.number.trim(),
+            input.complement.trim(),
+            input.neighborhood.trim(),
+            input.city.trim(),
+            input.region.trim(),
+            input.isPrimary !== false ? 1 : 0,
+            addressId,
+            customerId,
+          ],
+        );
+      } else {
+        const [existingPrimary] = await this.queryRowsWithExecutor(
+          connection,
+          'SELECT id FROM customer_addresses WHERE customer_id = ? AND is_primary = 1 LIMIT 1',
+          [customerId],
+        );
+
+        await connection.query(
+          `
+            INSERT INTO customer_addresses (
+              id, customer_id, label, country, postal_code, street, number,
+              complement, neighborhood, city, region, is_primary, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          `,
+          [
+            addressId,
+            customerId,
+            input.label.trim(),
+            input.country,
+            input.postalCode.trim(),
+            input.street.trim(),
+            input.number.trim(),
+            input.complement.trim(),
+            input.neighborhood.trim(),
+            input.city.trim(),
+            input.region.trim(),
+            input.isPrimary !== false || !existingPrimary ? 1 : 0,
+          ],
+        );
+      }
+
+      await connection.query('UPDATE customers SET updated_at = NOW() WHERE id = ?', [customerId]);
+      await connection.commit();
+
+      const profile = await this.loadCustomerProfile(customerId);
+      return this.buildCustomerSessionPayload(profile);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async deleteCustomerAddress(customerId: string, addressId: string): Promise<CustomerAddressMutationResult> {
+    const connection = await this.pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+      await connection.query('DELETE FROM customer_addresses WHERE id = ? AND customer_id = ?', [addressId, customerId]);
+
+      const remainingAddresses = await this.queryRowsWithExecutor(
+        connection,
+        'SELECT id, is_primary FROM customer_addresses WHERE customer_id = ? ORDER BY created_at ASC',
+        [customerId],
+      );
+
+      const hasPrimary = remainingAddresses.some((row) => toBoolean(row.is_primary));
+      if (remainingAddresses.length > 0 && !hasPrimary) {
+        await connection.query(
+          'UPDATE customer_addresses SET is_primary = 1, updated_at = NOW() WHERE id = ?',
+          [String(remainingAddresses[0].id)],
+        );
+      }
+
+      await connection.query('UPDATE customers SET updated_at = NOW() WHERE id = ?', [customerId]);
+      await connection.commit();
+
+      const profile = await this.loadCustomerProfile(customerId);
+      return this.buildCustomerSessionPayload(profile);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async activateNewsletterBenefitForCustomer(customerId: string): Promise<CustomerBenefitMutationResult> {
+    await this.ensureNewsletterBenefitForCustomer(customerId);
+    const profile = await this.loadCustomerProfile(customerId);
+    return this.buildCustomerSessionPayload(profile);
+  }
+
+  async consumeCustomerBenefit(customerId: string, benefitId: string, orderNumber: string): Promise<CustomerBenefitMutationResult> {
+    await this.pool.query(
+      `
+        UPDATE customer_benefits
+        SET status = 'used',
+            used_at = NOW(),
+            used_order_id = ?,
+            updated_at = NOW()
+        WHERE id = ? AND customer_id = ? AND status = 'available'
+      `,
+      [orderNumber, benefitId, customerId],
+    );
+
+    await this.pool.query('UPDATE customers SET updated_at = NOW() WHERE id = ?', [customerId]);
+
+    const profile = await this.loadCustomerProfile(customerId);
+    return this.buildCustomerSessionPayload(profile);
   }
 
   async getContactMessages() {

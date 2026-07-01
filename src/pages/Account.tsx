@@ -21,6 +21,7 @@ import {
   isAddressLookupComplete,
   isManualAddressCountry,
   lookupAddressByCountry,
+  toBirthDateIso,
 } from '../lib/customerForm';
 
 type AddressFormData = {
@@ -82,6 +83,7 @@ export function Account() {
     currentCustomer,
     primaryAddress,
     isLoggedIn,
+    isSessionLoading,
     login,
     logout,
     updateProfile,
@@ -235,10 +237,10 @@ export function Account() {
     }
   };
 
-  const handleAddressSubmit = (e: React.FormEvent) => {
+  const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    saveAddress({
+    await saveAddress({
       id: editingAddressId || '',
       label: addressData.nome,
       country: ACCOUNT_COUNTRY,
@@ -267,6 +269,17 @@ export function Account() {
     error: addressCountry === 'BR' ? t('zipcodeLookupError') : t('postalLookupError'),
   }[zipcodeStatusTone];
 
+  if (isSessionLoading) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-20">
+        <div className="bg-neutral-50 p-8 border border-neutral-200 text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-sm text-secondary/70">Loading your account...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isLoggedIn) {
     return (
       <div className="max-w-md mx-auto px-4 py-20">
@@ -275,9 +288,9 @@ export function Account() {
         <div className="bg-neutral-50 p-8 border border-neutral-200">
            <h2 className="text-lg font-bold text-secondary mb-6 uppercase tracking-wider">{t('alreadyCustomer')}</h2>
            <form
-             onSubmit={(e) => {
+             onSubmit={async (e) => {
                e.preventDefault();
-               const result = login(loginEmail, loginPassword);
+               const result = await login(loginEmail, loginPassword);
 
                if (!result.ok) {
                  setLoginError(t('invalidLoginCredentials'));
@@ -361,7 +374,9 @@ export function Account() {
                 <User className="w-4 h-4 mr-3" /> {t('myData')}
               </button>
               <button 
-                onClick={logout}
+                onClick={() => {
+                  void logout();
+                }}
                 className="w-full flex items-center px-4 py-3 text-sm font-bold uppercase tracking-wider text-red-500 hover:bg-red-50 transition-colors rounded-sm mt-4 border border-transparent hover:border-red-100"
               >
                 <LogOut className="w-4 h-4 mr-3" /> {t('logout')}
@@ -420,7 +435,7 @@ export function Account() {
                         <p className="text-sm text-secondary/70 mb-4">{addressLabels.postalCodeLabel}: {address.postalCode}</p>
                         <div className="flex gap-4">
                            <button type="button" onClick={() => handleOpenAddressModal(address)} className="text-xs font-bold uppercase text-primary hover:text-primary-dark">{t('edit')}</button>
-                           <button type="button" onClick={() => removeAddress(address.id)} className="text-xs font-bold uppercase text-red-500 hover:text-red-700">{t('remove')}</button>
+                           <button type="button" onClick={() => { void removeAddress(address.id); }} className="text-xs font-bold uppercase text-red-500 hover:text-red-700">{t('remove')}</button>
                         </div>
                      </div>
                    )) : (
@@ -681,7 +696,7 @@ export function Account() {
             </h3>
             
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
 
                 if (hasInvalidBirthDate) {
@@ -689,11 +704,11 @@ export function Account() {
                   return;
                 }
 
-                updateProfile({
+                await updateProfile({
                   fullName: profileForm.fullName,
                   phone: profileForm.cellphone,
                   phoneCountry: ACCOUNT_COUNTRY,
-                  birthDate: profileForm.birthDate,
+                  birthDate: toBirthDateIso(profileForm.birthDate, locale),
                   gender: profileForm.gender,
                 });
 

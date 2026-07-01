@@ -19,6 +19,7 @@ import {
   isAddressLookupComplete,
   isManualAddressCountry,
   lookupAddressByCountry,
+  toBirthDateIso,
   type TaxIdFieldKind,
 } from '../lib/customerForm';
 
@@ -318,7 +319,7 @@ export function Register() {
         fullName: formData.fullName,
         phone: formData.cellPhone,
         phoneCountry: REGISTER_COUNTRY,
-        birthDate: formData.birthDate,
+        birthDate: toBirthDateIso(formData.birthDate, locale),
         gender: formData.gender,
         registrationType,
         taxId: registrationType === 'F' ? formData.cpf : formData.cnpj,

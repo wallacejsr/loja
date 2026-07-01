@@ -361,6 +361,25 @@ export function getBirthDatePlaceholder(locale: StorefrontLanguage) {
   return locale === 'en-US' ? 'MM/DD/YYYY' : 'DD/MM/AAAA';
 }
 
+export function toBirthDateIso(value: string, locale: StorefrontLanguage = 'pt-BR') {
+  const formattedValue = formatBirthDate(value, locale);
+
+  if (!isBirthDateComplete(formattedValue)) {
+    return '';
+  }
+
+  const parts = formattedValue.split('/');
+  if (parts.length !== 3) {
+    return '';
+  }
+
+  const [first, second, year] = parts;
+  const month = locale === 'en-US' ? first : second;
+  const day = locale === 'en-US' ? second : first;
+
+  return `${year}-${month}-${day}`;
+}
+
 export function isBirthDateComplete(value: string) {
   return onlyDigits(value).length === 8;
 }

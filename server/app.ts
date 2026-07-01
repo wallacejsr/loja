@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import express from 'express';
 import { getStoreApiConfig } from './config';
+import { registerCustomerAuthRoutes } from './auth/registerCustomerAuthRoutes';
 import { registerStripeRoutes } from './integrations/registerStripeRoutes';
 import { attachRequestContext } from './http/middleware/attachRequestContext';
 import { createRateLimitMiddleware } from './http/middleware/createRateLimitMiddleware';
@@ -44,6 +45,7 @@ export async function createStoreApiApp() {
   app.use('/uploads', express.static(config.uploadsRoot));
 
   app.use('/api', registerCoreRoutes(config, dataDriver));
+  app.use('/api/account', registerCustomerAuthRoutes(repository, config));
   app.use('/api/integrations', registerStripeRoutes());
   app.use('/api/store', registerStoreRoutes(repository, config.uploadsRoot));
   app.use('/api/shipping', registerShippingRoute());

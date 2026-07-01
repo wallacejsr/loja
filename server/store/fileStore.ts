@@ -1,6 +1,18 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Product } from '../../src/data/mockData.ts';
+import type {
+  CustomerAddressInput,
+  CustomerProfileUpdateInput,
+  CustomerSessionPayload,
+  StoreCustomerAddress,
+  StoreCustomerProfile,
+} from '../../src/lib/storeCustomerApi.ts';
+import {
+  createWelcomeBenefitFromSubscriber,
+  getAvailableWelcomeBenefit,
+  type StoreCustomerWelcomeBenefit,
+} from '../../src/lib/welcomeBenefit.ts';
 import {
   createNewsletterSubscriberId,
   isValidNewsletterEmail,
@@ -35,9 +47,18 @@ import {
 } from '../integrations/stripeCredentials';
 import { cloneStoreSnapshot, createDefaultStoreSnapshot, createId } from './defaultData';
 import type {
+  CreateCustomerSessionInput,
+  CustomerAddressMutationResult,
+  CustomerAuthLookup,
+  CustomerBenefitMutationResult,
+  CustomerProfileUpdateResult,
+  CustomerRegistrationInput,
+  CustomerSessionLookup,
   ListOptions,
   StoreRepository,
   StoreSnapshot,
+  StoredCustomerProfile,
+  StoredCustomerSession,
   StoredProduct,
   StripeCredentialInput,
   StoredStripeCredentialSet,
@@ -104,6 +125,102 @@ function ensureStripeCredentials(snapshot: StoreSnapshot) {
   return snapshot.stripeCredentials as Record<StripeMode, StoredStripeCredentialSet>;
 }
 
+function ensureSinglePrimaryAddress(addresses: StoreCustomerAddress[]) {
+  if (!addresses.length) {
+    return [];
+  }
+
+  const primaryAddress = addresses.find((address) => address.isPrimary) || addresses[0];
+
+  return addresses.map((address) => ({
+    ...address,
+    isPrimary: address.id === primaryAddress.id,
+  }));
+}
+
+function ensureCustomerCollections(snapshot: StoreSnapshot) {
+  snapshot.customers ||= [];
+  snapshot.customerSessions ||= [];
+}
+
+function mapStoredCustomerToPublic(customer: StoredCustomerProfile): StoreCustomerProfile {
+  const { passwordHash: _passwordHash, ...publicCustomer } = customer;
+  return {
+    ...publicCustomer,
+    addresses: ensureSinglePrimaryAddress(publicCustomer.addresses || []),
+    welcomeBenefits: Array.isArray(publicCustomer.welcomeBenefits) ? publicCustomer.welcomeBenefits : [],
+  };
+}
+
+function buildCustomerSessionPayload(customer: StoredCustomerProfile | null): CustomerSessionPayload {
+  if (!customer) {
+    return {
+      authenticated: false,
+      availableWelcomeBenefit: null,
+      customer: null,
+      primaryAddress: null,
+    };
+  }
+
+  const publicCustomer = mapStoredCustomerToPublic(customer);
+
+  return {
+    authenticated: true,
+    availableWelcomeBenefit: getAvailableWelcomeBenefit(publicCustomer.welcomeBenefits),
+    customer: publicCustomer,
+    primaryAddress: publicCustomer.addresses.find((address) => address.isPrimary) || publicCustomer.addresses[0] || null,
+  };
+}
+
+function getTaxDocumentType(customer: Pick<StoredCustomerProfile, 'registrationType'>) {
+  return customer.registrationType === 'J' ? 'business_tax_id' : 'tax_id';
+}
+
+function createStoredCustomer(input: CustomerRegistrationInput, linkedBenefit: StoreCustomerWelcomeBenefit | null): StoredCustomerProfile {
+  const timestamp = new Date().toISOString();
+  const address = input.address
+    ? ensureSinglePrimaryAddress([
+        {
+          id: createId('address'),
+          label: input.address.label.trim(),
+          country: input.address.country,
+          postalCode: input.address.postalCode.trim(),
+          street: input.address.street.trim(),
+          number: input.address.number.trim(),
+          complement: input.address.complement.trim(),
+          neighborhood: input.address.neighborhood.trim(),
+          city: input.address.city.trim(),
+          region: input.address.region.trim(),
+          isPrimary: input.address.isPrimary !== false,
+        },
+      ])
+    : [];
+
+  return {
+    id: createId('customer'),
+    email: normalizeNewsletterEmail(input.email),
+    passwordHash: input.passwordHash,
+    fullName: input.fullName.trim(),
+    phone: input.phone.trim(),
+    phoneCountry: input.phoneCountry || 'US',
+    birthDate: input.birthDate || '',
+    gender: input.gender.trim(),
+    registrationType: input.registrationType,
+    taxId: input.taxId.trim(),
+    taxDocumentType: input.registrationType === 'J' ? 'business_tax_id' : 'tax_id',
+    corporateName: input.corporateName.trim(),
+    stateRegistration: input.stateRegistration.trim(),
+    allowMarketing: input.allowMarketing !== false,
+    blockPurchases: false,
+    newsletterSubscribed: Boolean(linkedBenefit),
+    status: 'active',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    addresses: address,
+    welcomeBenefits: linkedBenefit ? [linkedBenefit] : [],
+  };
+}
+
 export class FileStoreRepository implements StoreRepository {
   constructor(private readonly filePath: string) {}
 
@@ -118,6 +235,7 @@ export class FileStoreRepository implements StoreRepository {
       const fileContents = await readFile(this.filePath, 'utf8');
       const parsed = JSON.parse(fileContents) as StoreSnapshot;
       parsed.newsletterSubscribers ||= [];
+      ensureCustomerCollections(parsed);
       ensureStripeCredentials(parsed);
       return deepClone(parsed);
     } catch (error) {
@@ -516,6 +634,290 @@ export class FileStoreRepository implements StoreRepository {
       const credentials = ensureStripeCredentials(snapshot);
       credentials[input.mode] = applyStripeCredentialInput(credentials[input.mode], input);
       return buildStripeCredentialSummary(input.mode, credentials[input.mode]);
+    });
+  }
+
+  private ensureNewsletterBenefitForCustomer(snapshot: StoreSnapshot, customerId: string) {
+    ensureCustomerCollections(snapshot);
+
+    const customer = snapshot.customers?.find((item) => item.id === customerId) || null;
+    if (!customer) {
+      return null;
+    }
+
+    const existingBenefit = customer.welcomeBenefits.find((benefit) => benefit.type === 'newsletter-welcome') || null;
+    if (existingBenefit) {
+      customer.newsletterSubscribed = true;
+      return existingBenefit;
+    }
+
+    const subscriber = snapshot.newsletterSubscribers.find(
+      (item) => normalizeNewsletterEmail(item.email) === normalizeNewsletterEmail(customer.email) && item.status === 'Ativo',
+    ) || null;
+
+    if (!subscriber) {
+      return null;
+    }
+
+    const benefit = createWelcomeBenefitFromSubscriber(customer.email, subscriber);
+    customer.newsletterSubscribed = true;
+    customer.updatedAt = new Date().toISOString();
+    customer.welcomeBenefits = [benefit, ...customer.welcomeBenefits];
+    return benefit;
+  }
+
+  async findCustomerAuthByEmail(email: string): Promise<CustomerAuthLookup | null> {
+    const snapshot = await this.readSnapshot();
+    ensureCustomerCollections(snapshot);
+
+    const customer = snapshot.customers?.find(
+      (item) => normalizeNewsletterEmail(item.email) === normalizeNewsletterEmail(email),
+    ) || null;
+
+    if (!customer) {
+      return null;
+    }
+
+    return {
+      email: customer.email,
+      id: customer.id,
+      passwordHash: customer.passwordHash,
+      status: customer.status,
+    };
+  }
+
+  async createCustomerAccount(input: CustomerRegistrationInput): Promise<CustomerSessionPayload> {
+    return this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+
+      const normalizedEmail = normalizeNewsletterEmail(input.email);
+      const emailAlreadyExists = snapshot.customers?.some((customer) => normalizeNewsletterEmail(customer.email) === normalizedEmail);
+
+      if (emailAlreadyExists) {
+        throw new Error('An account with this email already exists.');
+      }
+
+      const subscriber = snapshot.newsletterSubscribers.find(
+        (item) => normalizeNewsletterEmail(item.email) === normalizedEmail && item.status === 'Ativo',
+      ) || null;
+      const linkedBenefit = subscriber ? createWelcomeBenefitFromSubscriber(normalizedEmail, subscriber) : null;
+      const createdCustomer = createStoredCustomer({ ...input, email: normalizedEmail }, linkedBenefit);
+
+      snapshot.customers?.unshift(createdCustomer);
+      return buildCustomerSessionPayload(createdCustomer);
+    });
+  }
+
+  async createCustomerSession(input: CreateCustomerSessionInput): Promise<CustomerSessionLookup> {
+    return this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      const timestamp = new Date().toISOString();
+
+      const created: StoredCustomerSession = {
+        id: createId('customer-session'),
+        customerId: input.customerId,
+        createdAt: timestamp,
+        expiresAt: input.expiresAt,
+        ipAddress: input.ipAddress,
+        lastSeenAt: timestamp,
+        revokedAt: null,
+        sessionTokenHash: input.sessionTokenHash,
+        updatedAt: timestamp,
+        userAgent: input.userAgent,
+      };
+
+      snapshot.customerSessions?.unshift(created);
+
+      const customer = snapshot.customers?.find((item) => item.id === input.customerId);
+      if (customer) {
+        customer.updatedAt = timestamp;
+      }
+
+      return {
+        customerId: created.customerId,
+        expiresAt: created.expiresAt,
+        id: created.id,
+        revokedAt: created.revokedAt,
+      };
+    });
+  }
+
+  async getCustomerSessionByTokenHash(tokenHash: string): Promise<CustomerSessionLookup | null> {
+    const snapshot = await this.readSnapshot();
+    ensureCustomerCollections(snapshot);
+
+    const session = snapshot.customerSessions?.find((item) => item.sessionTokenHash === tokenHash) || null;
+    if (!session) {
+      return null;
+    }
+
+    return {
+      customerId: session.customerId,
+      expiresAt: session.expiresAt,
+      id: session.id,
+      revokedAt: session.revokedAt,
+    };
+  }
+
+  async touchCustomerSession(sessionId: string, ipAddress: string, userAgent: string): Promise<void> {
+    await this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      const session = snapshot.customerSessions?.find((item) => item.id === sessionId);
+      if (!session) {
+        return;
+      }
+
+      const timestamp = new Date().toISOString();
+      session.ipAddress = ipAddress;
+      session.lastSeenAt = timestamp;
+      session.updatedAt = timestamp;
+      session.userAgent = userAgent;
+    });
+  }
+
+  async revokeCustomerSession(sessionId: string): Promise<void> {
+    await this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      const session = snapshot.customerSessions?.find((item) => item.id === sessionId);
+      if (!session || session.revokedAt) {
+        return;
+      }
+
+      const timestamp = new Date().toISOString();
+      session.revokedAt = timestamp;
+      session.updatedAt = timestamp;
+    });
+  }
+
+  async getCustomerSessionPayload(customerId: string): Promise<CustomerSessionPayload | null> {
+    return this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      this.ensureNewsletterBenefitForCustomer(snapshot, customerId);
+      const customer = snapshot.customers?.find((item) => item.id === customerId) || null;
+      return customer ? buildCustomerSessionPayload(customer) : null;
+    });
+  }
+
+  async updateCustomerProfile(customerId: string, input: CustomerProfileUpdateInput): Promise<CustomerProfileUpdateResult> {
+    return this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      const customer = snapshot.customers?.find((item) => item.id === customerId) || null;
+
+      if (!customer) {
+        throw new Error('Customer account not found.');
+      }
+
+      customer.fullName = input.fullName?.trim() || customer.fullName;
+      customer.phone = input.phone?.trim() || customer.phone;
+      customer.phoneCountry = input.phoneCountry || customer.phoneCountry;
+      customer.birthDate = input.birthDate?.trim() || customer.birthDate;
+      customer.gender = input.gender?.trim() || customer.gender;
+      customer.taxId = input.taxId?.trim() || customer.taxId;
+      customer.corporateName = input.corporateName?.trim() || customer.corporateName;
+      customer.stateRegistration = input.stateRegistration?.trim() || customer.stateRegistration;
+      customer.allowMarketing = input.allowMarketing ?? customer.allowMarketing;
+      customer.taxDocumentType = getTaxDocumentType(customer);
+      customer.updatedAt = new Date().toISOString();
+
+      return buildCustomerSessionPayload(customer);
+    });
+  }
+
+  async saveCustomerAddress(customerId: string, input: CustomerAddressInput): Promise<CustomerAddressMutationResult> {
+    return this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      const customer = snapshot.customers?.find((item) => item.id === customerId) || null;
+
+      if (!customer) {
+        throw new Error('Customer account not found.');
+      }
+
+      const nextAddress: StoreCustomerAddress = {
+        id: input.id || createId('address'),
+        label: input.label.trim(),
+        country: input.country,
+        postalCode: input.postalCode.trim(),
+        street: input.street.trim(),
+        number: input.number.trim(),
+        complement: input.complement.trim(),
+        neighborhood: input.neighborhood.trim(),
+        city: input.city.trim(),
+        region: input.region.trim(),
+        isPrimary: input.isPrimary ?? customer.addresses.length === 0,
+      };
+
+      const existingIndex = customer.addresses.findIndex((address) => address.id === nextAddress.id);
+
+      if (existingIndex >= 0) {
+        customer.addresses[existingIndex] = nextAddress;
+      } else {
+        customer.addresses.push(nextAddress);
+      }
+
+      customer.addresses = ensureSinglePrimaryAddress(
+        nextAddress.isPrimary
+          ? customer.addresses.map((address) => ({ ...address, isPrimary: address.id === nextAddress.id }))
+          : customer.addresses,
+      );
+      customer.updatedAt = new Date().toISOString();
+
+      return buildCustomerSessionPayload(customer);
+    });
+  }
+
+  async deleteCustomerAddress(customerId: string, addressId: string): Promise<CustomerAddressMutationResult> {
+    return this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      const customer = snapshot.customers?.find((item) => item.id === customerId) || null;
+
+      if (!customer) {
+        throw new Error('Customer account not found.');
+      }
+
+      customer.addresses = ensureSinglePrimaryAddress(customer.addresses.filter((address) => address.id !== addressId));
+      customer.updatedAt = new Date().toISOString();
+
+      return buildCustomerSessionPayload(customer);
+    });
+  }
+
+  async activateNewsletterBenefitForCustomer(customerId: string): Promise<CustomerBenefitMutationResult> {
+    return this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      const customer = snapshot.customers?.find((item) => item.id === customerId) || null;
+
+      if (!customer) {
+        throw new Error('Customer account not found.');
+      }
+
+      this.ensureNewsletterBenefitForCustomer(snapshot, customerId);
+      return buildCustomerSessionPayload(customer);
+    });
+  }
+
+  async consumeCustomerBenefit(customerId: string, benefitId: string, orderNumber: string): Promise<CustomerBenefitMutationResult> {
+    return this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      const customer = snapshot.customers?.find((item) => item.id === customerId) || null;
+
+      if (!customer) {
+        throw new Error('Customer account not found.');
+      }
+
+      const timestamp = new Date().toISOString();
+      customer.welcomeBenefits = customer.welcomeBenefits.map((benefit) =>
+        benefit.id === benefitId && benefit.status === 'available'
+          ? {
+              ...benefit,
+              status: 'used',
+              usedAt: timestamp,
+              usedOrderNumber: orderNumber,
+            }
+          : benefit,
+      );
+      customer.updatedAt = timestamp;
+
+      return buildCustomerSessionPayload(customer);
     });
   }
 

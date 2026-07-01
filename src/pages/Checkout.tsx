@@ -635,14 +635,14 @@ export function Checkout() {
         if (payload.paid && !hasProcessedStripeSession(stripeSessionIdFromUrl)) {
           if (pendingRecord) {
             if (isLoggedIn) {
-              updateProfile({
+              await updateProfile({
                 fullName: pendingRecord.bridgePayload.customer.name,
                 phone: pendingRecord.bridgePayload.customer.phone,
                 phoneCountry: pendingRecord.bridgePayload.customer.phoneCountry || CHECKOUT_COUNTRY,
                 taxId: pendingRecord.bridgePayload.customer.cpf || currentCustomer?.taxId || '',
               });
 
-              saveAddress({
+              await saveAddress({
                 id: primaryAddress?.id || '',
                 label: primaryAddress?.label || t('homeAddress'),
                 country: pendingRecord.bridgePayload.shippingAddress.country,
@@ -675,7 +675,7 @@ export function Checkout() {
 
             if (pendingRecord.promotionDraft) {
               if (currentCustomer?.id === pendingRecord.promotionDraft.customerId) {
-                consumeWelcomeBenefit(pendingRecord.promotionDraft.benefitId, resolvedOrderNumber);
+                await consumeWelcomeBenefit(pendingRecord.promotionDraft.benefitId, resolvedOrderNumber);
               } else {
                 clearCartPromotionDraft();
               }

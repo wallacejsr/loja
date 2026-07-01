@@ -49,6 +49,7 @@ async function requestStoreApi<T>(path: string, options: RequestOptions = {}, pa
           ...(options.headers || {}),
         },
     body: options.body,
+    credentials: 'include',
   });
 
   if (!response.ok) {

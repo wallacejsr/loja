@@ -22,3 +22,8 @@ export function getStoreApiBaseUrl() {
   const baseUrl = configuredBaseUrl || fallbackBaseUrl;
   return baseUrl.replace(/\/$/, '');
 }
+
+export function getStoreApiRootUrl() {
+  const storeApiBaseUrl = getStoreApiBaseUrl();
+  return storeApiBaseUrl.replace(/\/store$/, '');
+}

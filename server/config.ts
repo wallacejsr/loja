@@ -4,6 +4,10 @@ export type RuntimeEnvironment = 'development' | 'production' | 'test';
 export type CookieSameSitePolicy = 'lax' | 'strict' | 'none';
 
 export type StoreApiConfig = {
+  auth: {
+    minPasswordLength: number;
+    passwordPepper: string;
+  };
   appBaseUrl: string;
   bodyLimit: string;
   corsOrigins: string[];
@@ -85,6 +89,10 @@ export function getStoreApiConfig(): StoreApiConfig {
   const secureByDefault = env === 'production';
 
   cachedConfig = {
+    auth: {
+      minPasswordLength: readNumberEnv('AUTH_MIN_PASSWORD_LENGTH', 8),
+      passwordPepper: readEnv('AUTH_PASSWORD_PEPPER', readEnv('SESSION_TOKEN_PEPPER', '')),
+    },
     env,
     host: readEnv('STORE_API_HOST', '0.0.0.0'),
     port: readNumberEnv('STORE_API_PORT', 4000),
@@ -110,4 +118,3 @@ export function getStoreApiConfig(): StoreApiConfig {
 
   return cachedConfig;
 }
-

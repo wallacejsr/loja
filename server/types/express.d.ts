@@ -3,11 +3,12 @@ export {};
 declare global {
   namespace Express {
     interface Request {
-      clientIp?: string;
-      cookies?: Record<string, string>;
-      rawBody?: Buffer;
-      requestId?: string;
-    }
+    clientIp?: string;
+    cookies?: Record<string, string>;
+    currentCustomerId?: string;
+    currentSessionId?: string;
+    rawBody?: Buffer;
+    requestId?: string;
   }
 }
-
+}
