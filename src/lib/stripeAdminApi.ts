@@ -1,4 +1,5 @@
 import type { StripeMode } from '../types/settings';
+import { getIntegrationsApiBaseUrl } from './storeBackend';
 
 export type StripeModeCredentialState = {
   effective: {
@@ -149,7 +150,7 @@ export type SaveStripeCredentialsInput = {
 };
 
 async function requestStripeAdminApi<T>(path: string, init?: RequestInit) {
-  const response = await fetch(path, {
+  const response = await fetch(buildStripeAdminApiUrl(path), {
     cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
@@ -175,30 +176,34 @@ async function requestStripeAdminApi<T>(path: string, init?: RequestInit) {
   return (payload || {}) as T;
 }
 
+function buildStripeAdminApiUrl(path: string) {
+  return new URL(`${getIntegrationsApiBaseUrl()}${path}`, window.location.origin).toString();
+}
+
 export async function getStripeStatus() {
-  return requestStripeAdminApi<StripeStatusResponse>('/api/integrations/stripe/status');
+  return requestStripeAdminApi<StripeStatusResponse>('/stripe/status');
 }
 
 export async function saveStripeCredentials(input: SaveStripeCredentialsInput) {
-  return requestStripeAdminApi<StripeCredentialSaveResponse>('/api/integrations/stripe/credentials', {
+  return requestStripeAdminApi<StripeCredentialSaveResponse>('/stripe/credentials', {
     method: 'PUT',
     body: JSON.stringify(input),
   });
 }
 
 export async function testStripeConnection(mode: StripeMode) {
-  return requestStripeAdminApi<StripeConnectionTestResponse>('/api/integrations/stripe/test-connection', {
+  return requestStripeAdminApi<StripeConnectionTestResponse>('/stripe/test-connection', {
     method: 'POST',
     body: JSON.stringify({ mode }),
   });
 }
 
 export async function getStripeTrackedOrders() {
-  return requestStripeAdminApi<StripeTrackedOrdersResponse>('/api/integrations/stripe/admin/orders');
+  return requestStripeAdminApi<StripeTrackedOrdersResponse>('/stripe/admin/orders');
 }
 
 export async function updateStripeTrackedOrderStatus(orderNumber: string, status: StripeTrackedOrderStatus, user = 'Admin Loja') {
-  return requestStripeAdminApi<StripeTrackedOrderStatusUpdateResponse>('/api/integrations/stripe/admin/order-status', {
+  return requestStripeAdminApi<StripeTrackedOrderStatusUpdateResponse>('/stripe/admin/order-status', {
     method: 'PATCH',
     body: JSON.stringify({
       orderNumber,

@@ -21,6 +21,7 @@ import { syncCheckoutOrderToAdmin, type CheckoutBridgePayload } from '../lib/adm
 import { StoreCountrySelect } from '../components/StoreCountrySelect';
 import { StorePhoneField } from '../components/StorePhoneField';
 import { StoreImage } from '../components/StoreImage';
+import { getIntegrationsApiBaseUrl } from '../lib/storeBackend';
 import {
   clearCartPromotionDraft,
   readCartPromotionDraft,
@@ -184,6 +185,10 @@ function createOrderNumber() {
   const datePart = Date.now().toString().slice(-8);
   const randomPart = Math.floor(10 + Math.random() * 90);
   return `#SD${datePart}${randomPart}`;
+}
+
+function buildIntegrationsApiUrl(path: string) {
+  return new URL(`${getIntegrationsApiBaseUrl()}${path}`, window.location.origin).toString();
 }
 
 function getPostalStatusMessage(
@@ -567,7 +572,7 @@ export function Checkout() {
     const bridgePayload = buildCheckoutBridgePayload();
 
     try {
-      const response = await fetch('/api/integrations/stripe/checkout-session', {
+      const response = await fetch(buildIntegrationsApiUrl('/stripe/checkout-session'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -620,7 +625,7 @@ export function Checkout() {
       setStripeErrorMessage('');
 
       try {
-        const response = await fetch(`/api/integrations/stripe/session-status?session_id=${encodeURIComponent(stripeSessionIdFromUrl)}`, {
+        const response = await fetch(`${buildIntegrationsApiUrl('/stripe/session-status')}?session_id=${encodeURIComponent(stripeSessionIdFromUrl)}`, {
           cache: 'no-store',
         });
         const payload = await response.json() as StripeSessionStatusResponse | { message?: string; success?: false };

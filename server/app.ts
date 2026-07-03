@@ -6,6 +6,7 @@ import { registerAdminAuthRoutes } from './auth/registerAdminAuthRoutes';
 import { registerCustomerAuthRoutes } from './auth/registerCustomerAuthRoutes';
 import { registerStripeRoutes } from './integrations/registerStripeRoutes';
 import { attachRequestContext } from './http/middleware/attachRequestContext';
+import { applyNoStoreHeaders } from './http/middleware/applyNoStoreHeaders';
 import { createRateLimitMiddleware } from './http/middleware/createRateLimitMiddleware';
 import { enforceHttps } from './http/middleware/enforceHttps';
 import { parseRequestCookies } from './http/middleware/parseRequestCookies';
@@ -48,7 +49,36 @@ export async function createStoreApiApp() {
   app.use(createCorsMiddleware(config));
   app.use(applySecurityHeaders());
   app.use(parseRequestCookies());
-  app.use(createRateLimitMiddleware(config.rateLimit));
+  app.use(createRateLimitMiddleware(config.rateLimit, [
+    {
+      id: 'admin-login',
+      paths: ['/api/admin/login'],
+      methods: ['POST'],
+      maxRequests: 10,
+      windowMs: 10 * 60_000,
+    },
+    {
+      id: 'admin-password-recovery',
+      paths: ['/api/admin/password/forgot', '/api/admin/password/reset'],
+      methods: ['POST'],
+      maxRequests: 5,
+      windowMs: 15 * 60_000,
+    },
+    {
+      id: 'admin-mfa',
+      paths: ['/api/admin/mfa/setup', '/api/admin/mfa/enable', '/api/admin/mfa/disable', '/api/admin/password/change'],
+      methods: ['POST'],
+      maxRequests: 10,
+      windowMs: 10 * 60_000,
+    },
+    {
+      id: 'customer-auth',
+      paths: ['/api/account/register', '/api/account/login'],
+      methods: ['POST'],
+      maxRequests: 20,
+      windowMs: 10 * 60_000,
+    },
+  ]));
   app.use(express.json({
     limit: config.bodyLimit,
     verify: (request, _response, buffer) => {
@@ -62,8 +92,11 @@ export async function createStoreApiApp() {
   app.use('/uploads', express.static(config.uploadsRoot));
 
   app.use('/api', registerCoreRoutes(config, dataDriver));
+  app.use('/api/admin', applyNoStoreHeaders());
   app.use('/api/admin', registerAdminAuthRoutes(repository, config));
+  app.use('/api/account', applyNoStoreHeaders());
   app.use('/api/account', registerCustomerAuthRoutes(repository, config));
+  app.use('/api/integrations', applyNoStoreHeaders());
   app.use('/api/integrations', registerStripeRoutes(repository, config));
   app.use('/api/store', registerStoreRoutes(repository, config, config.uploadsRoot));
   app.use('/api/shipping', registerShippingRoute());

@@ -1,3 +1,5 @@
+import { getAdminApiBaseUrl } from './storeBackend';
+
 export type AdminRole = 'administrator' | 'financial' | 'support';
 
 export type AdminPermission =
@@ -78,7 +80,7 @@ export class AdminApiError extends Error {
 }
 
 async function requestAdminApi<T>(path: string, init?: RequestInit) {
-  const response = await fetch(path, {
+  const response = await fetch(buildAdminApiUrl(path), {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
@@ -99,64 +101,68 @@ async function requestAdminApi<T>(path: string, init?: RequestInit) {
   return response.json() as Promise<T>;
 }
 
+function buildAdminApiUrl(path: string) {
+  return new URL(`${getAdminApiBaseUrl()}${path}`, window.location.origin).toString();
+}
+
 export async function getCurrentAdminSession() {
-  return requestAdminApi<AdminSessionPayload>('/api/admin/session');
+  return requestAdminApi<AdminSessionPayload>('/session');
 }
 
 export async function loginAdmin(email: string, password: string, otp?: string) {
-  return requestAdminApi<AdminSessionPayload>('/api/admin/login', {
+  return requestAdminApi<AdminSessionPayload>('/login', {
     method: 'POST',
     body: JSON.stringify({ email, password, otp }),
   });
 }
 
 export async function logoutAdmin() {
-  return requestAdminApi<{ success: true }>('/api/admin/logout', {
+  return requestAdminApi<{ success: true }>('/logout', {
     method: 'POST',
   });
 }
 
 export async function requestAdminPasswordReset(email: string) {
-  return requestAdminApi<{ success: true; message: string; resetToken?: string; resetUrl?: string }>('/api/admin/password/forgot', {
+  return requestAdminApi<{ success: true; message: string; resetToken?: string; resetUrl?: string }>('/password/forgot', {
     method: 'POST',
     body: JSON.stringify({ email }),
   });
 }
 
 export async function resetAdminPassword(token: string, password: string) {
-  return requestAdminApi<{ success: true }>('/api/admin/password/reset', {
+  return requestAdminApi<{ success: true }>('/password/reset', {
     method: 'POST',
     body: JSON.stringify({ token, password }),
   });
 }
 
 export async function changeAdminPassword(currentPassword: string, newPassword: string) {
-  return requestAdminApi<{ payload: AdminSessionPayload; success: true }>('/api/admin/password/change', {
+  return requestAdminApi<{ payload: AdminSessionPayload; success: true }>('/password/change', {
     method: 'POST',
     body: JSON.stringify({ currentPassword, newPassword }),
   });
 }
 
 export async function setupAdminMfa() {
-  return requestAdminApi<AdminMfaSetupPayload>('/api/admin/mfa/setup', {
+  return requestAdminApi<AdminMfaSetupPayload>('/mfa/setup', {
     method: 'POST',
   });
 }
 
 export async function enableAdminMfa(otp: string) {
-  return requestAdminApi<{ success: true; user: AdminUser }>('/api/admin/mfa/enable', {
+  return requestAdminApi<{ success: true; user: AdminUser }>('/mfa/enable', {
     method: 'POST',
     body: JSON.stringify({ otp }),
   });
 }
 
 export async function disableAdminMfa(password: string, otp: string) {
-  return requestAdminApi<{ success: true; user: AdminUser }>('/api/admin/mfa/disable', {
+  return requestAdminApi<{ success: true; user: AdminUser }>('/mfa/disable', {
     method: 'POST',
     body: JSON.stringify({ password, otp }),
   });
 }
 
 export async function getAdminAuditLogs(limit = 100) {
-  return requestAdminApi<{ items: AdminAuditLogRecord[]; success: true }>(`/api/admin/audit-logs?limit=${encodeURIComponent(String(limit))}`);
+  return requestAdminApi<{ items: AdminAuditLogRecord[]; success: true }>(`/audit-logs?limit=${encodeURIComponent(String(limit))}`);
 }

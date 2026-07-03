@@ -1,6 +1,6 @@
 import type { AddressCountryCode } from './customerForm';
+import { getAccountApiBaseUrl } from './storeBackend';
 import type { StoreCustomerWelcomeBenefit } from './welcomeBenefit';
-import { getStoreApiRootUrl } from './storeBackend';
 
 export type CustomerRegistrationType = 'F' | 'J';
 export type CustomerAccountStatus = 'active' | 'inactive';
@@ -107,7 +107,7 @@ export class AccountApiError extends Error {
 }
 
 function buildAccountApiUrl(path: string) {
-  const url = new URL(`${getStoreApiRootUrl()}${path}`, window.location.origin);
+  const url = new URL(`${getAccountApiBaseUrl()}${path}`, window.location.origin);
   return url.toString();
 }
 
@@ -141,31 +141,31 @@ async function requestAccountApi<T>(path: string, options: AccountRequestOptions
 }
 
 export async function getCurrentCustomerSession() {
-  return requestAccountApi<CustomerSessionPayload>('/account/session');
+  return requestAccountApi<CustomerSessionPayload>('/session');
 }
 
 export async function registerCustomerAccount(input: CustomerRegisterInput) {
-  return requestAccountApi<CustomerSessionPayload>('/account/register', {
+  return requestAccountApi<CustomerSessionPayload>('/register', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 
 export async function loginCustomerAccount(email: string, password: string) {
-  return requestAccountApi<CustomerSessionPayload>('/account/login', {
+  return requestAccountApi<CustomerSessionPayload>('/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
 }
 
 export async function logoutCustomerAccount() {
-  return requestAccountApi<{ success: true }>('/account/logout', {
+  return requestAccountApi<{ success: true }>('/logout', {
     method: 'POST',
   });
 }
 
 export async function updateCurrentCustomerProfile(input: CustomerProfileUpdateInput) {
-  return requestAccountApi<CustomerSessionPayload>('/account/profile', {
+  return requestAccountApi<CustomerSessionPayload>('/profile', {
     method: 'PUT',
     body: JSON.stringify(input),
   });
@@ -173,32 +173,32 @@ export async function updateCurrentCustomerProfile(input: CustomerProfileUpdateI
 
 export async function saveCurrentCustomerAddress(input: CustomerAddressInput) {
   if (input.id) {
-    return requestAccountApi<CustomerSessionPayload>(`/account/addresses/${encodeURIComponent(input.id)}`, {
+    return requestAccountApi<CustomerSessionPayload>(`/addresses/${encodeURIComponent(input.id)}`, {
       method: 'PUT',
       body: JSON.stringify(input),
     });
   }
 
-  return requestAccountApi<CustomerSessionPayload>('/account/addresses', {
+  return requestAccountApi<CustomerSessionPayload>('/addresses', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 
 export async function deleteCurrentCustomerAddress(addressId: string) {
-  return requestAccountApi<CustomerSessionPayload>(`/account/addresses/${encodeURIComponent(addressId)}`, {
+  return requestAccountApi<CustomerSessionPayload>(`/addresses/${encodeURIComponent(addressId)}`, {
     method: 'DELETE',
   });
 }
 
 export async function activateCurrentCustomerNewsletterBenefit() {
-  return requestAccountApi<CustomerSessionPayload>('/account/benefits/newsletter/activate', {
+  return requestAccountApi<CustomerSessionPayload>('/benefits/newsletter/activate', {
     method: 'POST',
   });
 }
 
 export async function consumeCurrentCustomerBenefit(benefitId: string, orderNumber: string) {
-  return requestAccountApi<CustomerSessionPayload>(`/account/benefits/${encodeURIComponent(benefitId)}/consume`, {
+  return requestAccountApi<CustomerSessionPayload>(`/benefits/${encodeURIComponent(benefitId)}/consume`, {
     method: 'POST',
     body: JSON.stringify({ orderNumber }),
   });

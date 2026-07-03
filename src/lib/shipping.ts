@@ -1,6 +1,7 @@
 import type { Product } from '../data/mockData';
 import type { StoreSettings } from '../types/settings';
 import type { AddressCountryCode } from './customerForm';
+import { getShippingApiBaseUrl } from './storeBackend';
 
 export type ShippingQuoteSource = 'estimated' | 'live';
 export type ShippingServiceLevel = 'economy' | 'standard' | 'express';
@@ -200,7 +201,7 @@ export async function requestShippingQuotes(request: ShippingQuoteRequest): Prom
 
   if (liveShippingEnabled) {
     try {
-      const response = await fetch('/api/shipping/quote', {
+      const response = await fetch(buildShippingApiUrl('/quote'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -223,4 +224,8 @@ export async function requestShippingQuotes(request: ShippingQuoteRequest): Prom
     mode: 'estimated',
     quotes: buildEstimatedShippingQuotes(request),
   };
+}
+
+function buildShippingApiUrl(path: string) {
+  return new URL(`${getShippingApiBaseUrl()}${path}`, window.location.origin).toString();
 }

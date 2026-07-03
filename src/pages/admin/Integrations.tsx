@@ -26,6 +26,7 @@ import {
   type StripeModeCredentialState,
   type StripeStatusResponse,
 } from '../../lib/stripeAdminApi';
+import { getIntegrationsApiBaseUrl } from '../../lib/storeBackend';
 import { useSettings, type StoreSettings } from '../../hooks/useSettings';
 import type { StoreCurrencyCode, StripeMode } from '../../types/settings';
 
@@ -111,6 +112,10 @@ function createEmptyCredentialDraft(): StripeCredentialDraft {
     secretKey: '',
     webhookSecret: '',
   };
+}
+
+function buildIntegrationsApiUrl(path: string) {
+  return new URL(`${getIntegrationsApiBaseUrl()}${path}`, window.location.origin).toString();
 }
 
 function formatCredentialTimestamp(value: string | null) {
@@ -246,11 +251,7 @@ export function Integrations() {
 
 function WebhooksTab({ settings }: { settings: StoreSettings }) {
   const webhookUrl = useMemo(() => {
-    if (typeof window === 'undefined') {
-      return '/api/integrations/stripe/webhook';
-    }
-
-    return `${window.location.origin}/api/integrations/stripe/webhook`;
+    return buildIntegrationsApiUrl('/stripe/webhook');
   }, []);
 
   const stripeEvents = [

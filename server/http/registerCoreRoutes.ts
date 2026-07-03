@@ -21,8 +21,12 @@ export function registerCoreRoutes(config: StoreApiConfig, dataDriver: StoreData
     response.json({
       ok: true,
       service: 'store-api',
-      appBaseUrl: config.appBaseUrl,
-      uploadsRoot: config.uploadsRoot,
+      ...(config.env === 'production'
+        ? null
+        : {
+            appBaseUrl: config.appBaseUrl,
+            uploadsRoot: config.uploadsRoot,
+          }),
       timestamp: new Date().toISOString(),
       requestId: request.requestId || '',
     });
@@ -30,4 +34,3 @@ export function registerCoreRoutes(config: StoreApiConfig, dataDriver: StoreData
 
   return router;
 }
-
