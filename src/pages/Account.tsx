@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { User, Package, MapPin, LogOut, X, Loader2, Star, Trophy, CheckCircle2 } from 'lucide-react';
+import { User, Package, MapPin, LogOut, X, Loader2, Star, Trophy } from 'lucide-react';
 import {
   type StoreCustomerAddress,
   useCustomerSession,
 } from '../context/CustomerSessionContext';
+import { useStorefrontToast } from '../context/StorefrontToastContext';
 import { useLoyalty } from '../hooks/useLoyalty';
 import { useStorefront } from '../hooks/useStorefront';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { StoreCountrySelect } from '../components/StoreCountrySelect';
 import { StorePhoneField } from '../components/StorePhoneField';
 import {
@@ -77,11 +78,9 @@ const zipcodeStatusToneClasses: Record<Exclude<ZipcodeStatusTone, 'idle'>, strin
 
 export function Account() {
   const [activeTab, setActiveTab] = useState<'orders' | 'addresses' | 'data'>('orders');
-  const [flashMessage, setFlashMessage] = useState('');
   const { points } = useLoyalty();
   const { locale, t } = useStorefront();
-  const location = useLocation();
-  const navigate = useNavigate();
+  const { showToast } = useStorefrontToast();
   const {
     currentCustomer,
     primaryAddress,
@@ -141,26 +140,6 @@ export function Account() {
       phoneCountry: currentCustomer.phoneCountry || ACCOUNT_COUNTRY,
     });
   }, [currentCustomer]);
-
-  useEffect(() => {
-    const flash = (location.state as { flash?: { message?: string; tone?: string } } | null)?.flash;
-
-    if (!flash?.message) {
-      return;
-    }
-
-    setFlashMessage(flash.message);
-
-    const timeoutId = window.setTimeout(() => {
-      setFlashMessage('');
-    }, 4000);
-
-    navigate(location.pathname, { replace: true, state: null });
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [location.pathname, location.state, navigate]);
 
   const resetAddressForm = () => {
     setEditingAddressId(null);
@@ -279,6 +258,13 @@ export function Account() {
         : !currentCustomer?.addresses.length,
     });
 
+    showToast({
+      tone: 'success',
+      title: locale === 'en-US' ? 'Address saved' : 'Endereco salvo',
+      message: locale === 'en-US'
+        ? 'Your delivery address has been updated successfully.'
+        : 'Seu endereco foi atualizado com sucesso.',
+    });
     closeAddressModal();
   };
 
@@ -321,6 +307,13 @@ export function Account() {
                }
 
                setLoginError('');
+               showToast({
+                 tone: 'success',
+                 title: locale === 'en-US' ? 'Signed in' : 'Login realizado',
+                 message: locale === 'en-US'
+                   ? 'Welcome back to your account.'
+                   : 'Bem-vindo de volta a sua conta.',
+               });
              }}
              className="space-y-4"
            >
@@ -369,30 +362,6 @@ export function Account() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-16">
-      {flashMessage ? (
-        <div className="fixed right-4 top-24 z-50 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-emerald-200 bg-white/95 p-4 shadow-[0_18px_50px_rgba(16,24,40,0.14)] backdrop-blur-sm sm:right-6 sm:top-28">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-secondary">
-                {locale === 'en-US' ? 'Welcome to your account' : 'Bem-vindo a sua conta'}
-              </p>
-              <p className="mt-1 text-sm leading-6 text-secondary/75">{flashMessage}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setFlashMessage('')}
-              className="rounded-full p-1 text-secondary/40 transition-colors hover:bg-neutral-100 hover:text-secondary"
-              aria-label={locale === 'en-US' ? 'Close notification' : 'Fechar notificacao'}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      ) : null}
-
       <div className="flex flex-col md:flex-row items-start gap-8">
         
         {/* Sidebar */}
@@ -482,7 +451,23 @@ export function Account() {
                         <p className="text-sm text-secondary/70 mb-4">{addressLabels.postalCodeLabel}: {address.postalCode}</p>
                         <div className="flex gap-4">
                            <button type="button" onClick={() => handleOpenAddressModal(address)} className="text-xs font-bold uppercase text-primary hover:text-primary-dark">{t('edit')}</button>
-                           <button type="button" onClick={() => { void removeAddress(address.id); }} className="text-xs font-bold uppercase text-red-500 hover:text-red-700">{t('remove')}</button>
+                           <button
+                             type="button"
+                             onClick={() => {
+                               void removeAddress(address.id).then(() => {
+                                 showToast({
+                                   tone: 'info',
+                                   title: locale === 'en-US' ? 'Address removed' : 'Endereco removido',
+                                   message: locale === 'en-US'
+                                     ? 'The address was removed from your account.'
+                                     : 'O endereco foi removido da sua conta.',
+                                 });
+                               });
+                             }}
+                             className="text-xs font-bold uppercase text-red-500 hover:text-red-700"
+                           >
+                             {t('remove')}
+                           </button>
                         </div>
                      </div>
                    )) : (
@@ -759,6 +744,13 @@ export function Account() {
                   gender: profileForm.gender,
                 });
 
+                showToast({
+                  tone: 'success',
+                  title: locale === 'en-US' ? 'Profile updated' : 'Perfil atualizado',
+                  message: locale === 'en-US'
+                    ? 'Your personal data has been saved successfully.'
+                    : 'Seus dados foram salvos com sucesso.',
+                });
                 setIsEditDataModalOpen(false);
               }}
               className="space-y-6"

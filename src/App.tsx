@@ -8,6 +8,7 @@ import { lazy, Suspense, useEffect, type ReactElement } from 'react';
 import { Layout } from './components/Layout';
 import { CartProvider } from './context/CartContext';
 import { CustomerSessionProvider } from './context/CustomerSessionContext';
+import { StorefrontToastProvider } from './context/StorefrontToastContext';
 import { SettingsProvider } from './hooks/useSettings';
 import { useStorefront } from './hooks/useStorefront';
 import { StoreDataProvider } from './hooks/useStoreData';
@@ -79,46 +80,48 @@ export default function App() {
       <SettingsProvider>
         <StoreDataProvider>
           <CustomerSessionProvider>
-            <CartProvider>
-              <Routes>
-                <Route path="/admin" element={lazyRoute(<AdminLayout />)}>
-                  <Route index element={lazyRoute(<Dashboard />)} />
-                  <Route path="products" element={lazyRoute(<Products />)} />
-                  <Route path="orders" element={lazyRoute(<Orders />)} />
-                  <Route path="categories" element={lazyRoute(<Categories />)} />
-                  <Route path="customers" element={lazyRoute(<Customers />)} />
-                  <Route path="messages" element={lazyRoute(<Messages />)} />
-                  <Route path="newsletter" element={lazyRoute(<Newsletter />)} />
-                  <Route path="banners" element={lazyRoute(<Banners />)} />
-                  <Route path="home" element={lazyRoute(<HomeSections />)} />
-                  <Route path="settings" element={lazyRoute(<Settings />)} />
-                  <Route path="promotions" element={lazyRoute(<Promotions />)} />
-                  <Route path="raffles" element={lazyRoute(<AdminRaffles />)} />
-                  <Route path="layout" element={lazyRoute(<LayoutTheme />)} />
-                  <Route path="integrations" element={lazyRoute(<Integrations />)} />
-                </Route>
+            <StorefrontToastProvider>
+              <CartProvider>
+                <Routes>
+                  <Route path="/admin" element={lazyRoute(<AdminLayout />)}>
+                    <Route index element={lazyRoute(<Dashboard />)} />
+                    <Route path="products" element={lazyRoute(<Products />)} />
+                    <Route path="orders" element={lazyRoute(<Orders />)} />
+                    <Route path="categories" element={lazyRoute(<Categories />)} />
+                    <Route path="customers" element={lazyRoute(<Customers />)} />
+                    <Route path="messages" element={lazyRoute(<Messages />)} />
+                    <Route path="newsletter" element={lazyRoute(<Newsletter />)} />
+                    <Route path="banners" element={lazyRoute(<Banners />)} />
+                    <Route path="home" element={lazyRoute(<HomeSections />)} />
+                    <Route path="settings" element={lazyRoute(<Settings />)} />
+                    <Route path="promotions" element={lazyRoute(<Promotions />)} />
+                    <Route path="raffles" element={lazyRoute(<AdminRaffles />)} />
+                    <Route path="layout" element={lazyRoute(<LayoutTheme />)} />
+                    <Route path="integrations" element={lazyRoute(<Integrations />)} />
+                  </Route>
 
-                <Route path="/" element={<Layout />}>
-                  <Route index element={lazyRoute(<Home />)} />
-                  <Route path="catalog" element={lazyRoute(<Catalog />)} />
-                  <Route path="product/:id" element={lazyRoute(<ProductDetails />)} />
-                  <Route path="cart" element={lazyRoute(<Cart />)} />
-                  <Route path="checkout" element={lazyRoute(<Checkout />)} />
-                  <Route path="checkout/success" element={lazyRoute(<Checkout />)} />
-                  <Route path="account" element={lazyRoute(<Account />)} />
-                  <Route path="sorteios" element={lazyRoute(<Raffles />)} />
-                  <Route path="register" element={lazyRoute(<Register />)} />
-                  <Route path="wishlist" element={lazyRoute(<Wishlist />)} />
-                  <Route path="about" element={<Institutional titleKey="institutionalAbout" />} />
-                  <Route path="contact" element={<Institutional titleKey="institutionalContact" />} />
-                  <Route path="terms" element={<Institutional titleKey="institutionalTerms" />} />
-                  <Route path="privacy" element={<Institutional titleKey="institutionalPrivacy" />} />
-                  <Route path="exchanges" element={<Institutional titleKey="institutionalExchanges" />} />
-                  <Route path="faq" element={<Institutional titleKey="institutionalFaq" />} />
-                  <Route path="shipping" element={<Institutional titleKey="institutionalShipping" />} />
-                </Route>
-              </Routes>
-            </CartProvider>
+                  <Route path="/" element={<Layout />}>
+                    <Route index element={lazyRoute(<Home />)} />
+                    <Route path="catalog" element={lazyRoute(<Catalog />)} />
+                    <Route path="product/:id" element={lazyRoute(<ProductDetails />)} />
+                    <Route path="cart" element={lazyRoute(<Cart />)} />
+                    <Route path="checkout" element={lazyRoute(<Checkout />)} />
+                    <Route path="checkout/success" element={lazyRoute(<Checkout />)} />
+                    <Route path="account" element={lazyRoute(<Account />)} />
+                    <Route path="sorteios" element={lazyRoute(<Raffles />)} />
+                    <Route path="register" element={lazyRoute(<Register />)} />
+                    <Route path="wishlist" element={lazyRoute(<Wishlist />)} />
+                    <Route path="about" element={<Institutional titleKey="institutionalAbout" />} />
+                    <Route path="contact" element={<Institutional titleKey="institutionalContact" />} />
+                    <Route path="terms" element={<Institutional titleKey="institutionalTerms" />} />
+                    <Route path="privacy" element={<Institutional titleKey="institutionalPrivacy" />} />
+                    <Route path="exchanges" element={<Institutional titleKey="institutionalExchanges" />} />
+                    <Route path="faq" element={<Institutional titleKey="institutionalFaq" />} />
+                    <Route path="shipping" element={<Institutional titleKey="institutionalShipping" />} />
+                  </Route>
+                </Routes>
+              </CartProvider>
+            </StorefrontToastProvider>
           </CustomerSessionProvider>
         </StoreDataProvider>
       </SettingsProvider>

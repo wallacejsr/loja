@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { StoreCountrySelect } from '../components/StoreCountrySelect';
 import { StorePhoneField } from '../components/StorePhoneField';
 import { useCustomerSession } from '../context/CustomerSessionContext';
+import { useStorefrontToast } from '../context/StorefrontToastContext';
 import { useSettings } from '../hooks/useSettings';
 import { useStorefront } from '../hooks/useStorefront';
 import {
@@ -126,6 +127,7 @@ export function Register() {
   const { locale, t } = useStorefront();
   const { settings } = useSettings();
   const { registerCustomer } = useCustomerSession();
+  const { showToast } = useStorefrontToast();
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -356,16 +358,14 @@ export function Register() {
         return;
       }
 
-      navigate('/account', {
-        state: {
-          flash: {
-            message: locale === 'en-US'
-              ? 'Account created successfully. You are now signed in.'
-              : 'Conta criada com sucesso. Voce ja esta conectado.',
-            tone: 'success',
-          },
-        },
+      showToast({
+        tone: 'success',
+        title: locale === 'en-US' ? 'Welcome to your account' : 'Bem-vindo a sua conta',
+        message: locale === 'en-US'
+          ? 'Account created successfully. You are now signed in.'
+          : 'Conta criada com sucesso. Voce ja esta conectado.',
       });
+      navigate('/account');
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : t('accountCreationError'));
     } finally {

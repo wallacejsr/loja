@@ -8,6 +8,7 @@ import { useStorefront } from '../hooks/useStorefront';
 import { useStoreCategories } from '../hooks/useStoreData';
 import { createContactMessage, createNewsletterSubscriber } from '../lib/storeApi';
 import { useCustomerSession } from '../context/CustomerSessionContext';
+import { useStorefrontToast } from '../context/StorefrontToastContext';
 import { getWhatsAppUrl } from '../lib/customerForm';
 import { WELCOME_NEWSLETTER_COUPON_CODE } from '../lib/newsletter';
 import { StoreImage } from './StoreImage';
@@ -17,6 +18,7 @@ export function Layout() {
   const { settings, loading: settingsLoading } = useSettings();
   const categories = useStoreCategories();
   const { activateNewsletterBenefitForCurrentCustomer } = useCustomerSession();
+  const { showToast } = useStorefrontToast();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
@@ -24,8 +26,6 @@ export function Layout() {
   const [contactError, setContactError] = useState('');
   const [isSubmittingContact, setIsSubmittingContact] = useState(false);
   const [newsletterEmail, setNewsletterEmail] = useState('');
-  const [newsletterFeedback, setNewsletterFeedback] = useState('');
-  const [newsletterError, setNewsletterError] = useState('');
   const [isSubmittingNewsletter, setIsSubmittingNewsletter] = useState(false);
   const [contactForm, setContactForm] = useState({
     name: '',
@@ -111,8 +111,6 @@ export function Layout() {
       return;
     }
 
-    setNewsletterError('');
-    setNewsletterFeedback('');
     setIsSubmittingNewsletter(true);
 
     try {
@@ -121,14 +119,20 @@ export function Layout() {
         source: 'footer-newsletter',
       });
       await activateNewsletterBenefitForCurrentCustomer(subscriber);
-      setNewsletterFeedback(
-        t('newsletterSuccess', {
+      showToast({
+        tone: 'success',
+        title: t('newsletterTitle'),
+        message: t('newsletterSuccess', {
           coupon: subscriber.couponCode || WELCOME_NEWSLETTER_COUPON_CODE,
         }),
-      );
+      });
       setNewsletterEmail('');
     } catch (error) {
-      setNewsletterError(error instanceof Error ? error.message : t('newsletterError'));
+      showToast({
+        tone: 'error',
+        title: t('newsletterTitle'),
+        message: error instanceof Error ? error.message : t('newsletterError'),
+      });
     } finally {
       setIsSubmittingNewsletter(false);
     }
@@ -599,16 +603,6 @@ export function Layout() {
                  {isSubmittingNewsletter ? t('newsletterSubmitting') : t('subscribe')}
                </button>
              </form>
-             {newsletterFeedback && (
-               <p className="mt-4 text-sm font-semibold text-emerald-700">
-                 {newsletterFeedback}
-               </p>
-             )}
-             {newsletterError && (
-               <p className="mt-4 text-sm font-semibold text-red-600">
-                 {newsletterError}
-               </p>
-             )}
           </div>
         </div>
 

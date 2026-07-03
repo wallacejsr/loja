@@ -10,6 +10,7 @@ import { cn } from '../lib/utils';
 import { useStorefront } from '../hooks/useStorefront';
 import { useSettings } from '../hooks/useSettings';
 import { useShippingQuotes } from '../hooks/useShippingQuotes';
+import { useStorefrontToast } from '../context/StorefrontToastContext';
 import {
   formatPostalCode,
   getAddressLabels,
@@ -46,6 +47,7 @@ export function Cart() {
   const navigate = useNavigate();
   const { settings } = useSettings();
   const { locale, t, formatCurrency } = useStorefront();
+  const { showToast } = useStorefrontToast();
   const {
     currentCustomer,
     primaryAddress,
@@ -56,8 +58,6 @@ export function Cart() {
     clearGuestShippingDraft,
   } = useCustomerSession();
   const [coupon, setCoupon] = useState('');
-  const [couponFeedback, setCouponFeedback] = useState('');
-  const [couponFeedbackTone, setCouponFeedbackTone] = useState<'error' | 'info' | 'success'>('info');
   const [promotionDraft, setPromotionDraft] = useState(() => readCartPromotionDraft());
   const [guestShippingAddress, setGuestShippingAddress] = useState<GuestShippingDraft>(
     () => guestShippingDraft || EMPTY_GUEST_SHIPPING_ADDRESS,
@@ -211,25 +211,33 @@ export function Cart() {
     const normalizedCoupon = normalizeCouponCode(rawCoupon);
 
     if (!normalizedCoupon) {
-      setCouponFeedback('');
       return;
     }
 
     if (!isLoggedIn || !currentCustomer) {
-      setCouponFeedback(t('newsletterBenefitLoginRequired'));
-      setCouponFeedbackTone('error');
+      showToast({
+        tone: 'error',
+        title: t('discountCoupon'),
+        message: t('newsletterBenefitLoginRequired'),
+      });
       return;
     }
 
     if (!availableWelcomeBenefit) {
-      setCouponFeedback(t('newsletterBenefitUnavailable'));
-      setCouponFeedbackTone('error');
+      showToast({
+        tone: 'error',
+        title: t('discountCoupon'),
+        message: t('newsletterBenefitUnavailable'),
+      });
       return;
     }
 
     if (normalizedCoupon !== normalizeCouponCode(availableWelcomeBenefit.couponCode)) {
-      setCouponFeedback(t('invalidCoupon'));
-      setCouponFeedbackTone('error');
+      showToast({
+        tone: 'error',
+        title: t('discountCoupon'),
+        message: t('invalidCoupon'),
+      });
       return;
     }
 
@@ -237,16 +245,22 @@ export function Cart() {
     saveCartPromotionDraft(nextDraft);
     setPromotionDraft(nextDraft);
     setCoupon(availableWelcomeBenefit.couponCode);
-    setCouponFeedback(t('newsletterBenefitApplied'));
-    setCouponFeedbackTone('success');
+    showToast({
+      tone: 'success',
+      title: t('discountCoupon'),
+      message: t('newsletterBenefitApplied'),
+    });
   };
 
   const removeCoupon = () => {
     clearCartPromotionDraft();
     setPromotionDraft(null);
     setCoupon('');
-    setCouponFeedback(t('welcomeDiscountRemoved'));
-    setCouponFeedbackTone('info');
+    showToast({
+      tone: 'info',
+      title: t('discountCoupon'),
+      message: t('welcomeDiscountRemoved'),
+    });
   };
 
   const handleGuestShippingFieldChange = <K extends keyof GuestShippingDraft>(
@@ -613,20 +627,6 @@ export function Cart() {
                   {t('apply')}
                 </button>
               </div>
-              {couponFeedback && (
-                <p
-                  className={cn(
-                    'mt-2 text-xs font-semibold',
-                    couponFeedbackTone === 'success'
-                      ? 'text-emerald-600'
-                      : couponFeedbackTone === 'info'
-                        ? 'text-neutral-500'
-                        : 'text-red-600',
-                  )}
-                >
-                  {couponFeedback}
-                </p>
-              )}
               {activePromotion ? (
                 <button
                   type="button"
