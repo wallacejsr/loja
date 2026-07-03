@@ -12,6 +12,7 @@ import {
   Palette,
   PlugZap,
   Settings,
+  Shield,
   ShoppingBag,
   ShoppingCart,
   Tag,
@@ -66,6 +67,7 @@ export function AdminLayout() {
     { name: 'Banners', href: '/admin/banners', icon: ImageIcon, permission: 'banners:read' },
     { name: 'Home', href: '/admin/home', icon: HomeIcon, permission: 'home:read' },
     { name: 'Integracoes', href: '/admin/integrations', icon: PlugZap, permission: 'integrations:read' },
+    { name: 'Seguranca', href: '/admin/security', icon: Shield, permission: 'security:read' },
     { name: 'Layout', href: '/admin/layout', icon: Palette, permission: 'layout:read' },
     { name: 'Configuracoes', href: '/admin/settings', icon: Settings, permission: 'settings:read' },
   ]), []);
@@ -213,4 +215,3 @@ function getAdminBadgeLabel(value: string) {
 
   return parts.map((part) => part[0]?.toUpperCase() || '').join('');
 }
-

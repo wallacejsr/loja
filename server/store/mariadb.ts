@@ -50,6 +50,7 @@ import { getAdminRolePermissions, type AdminRole } from '../auth/adminPermission
 import { createDefaultStoreSnapshot, createId } from './defaultData';
 import type {
   AdminAuthLookup,
+  AuditLogRecord,
   AdminPasswordResetTokenRecord,
   AdminSessionLookup,
   AdminSessionPayload,
@@ -1763,6 +1764,44 @@ export class MariaDbStoreRepository implements StoreRepository {
         input.diffJson ? JSON.stringify(input.diffJson) : null,
       ],
     );
+  }
+
+  async getAdminAuditLogs(limit = 100): Promise<AuditLogRecord[]> {
+    const normalizedLimit = Math.max(1, Math.min(Number(limit) || 100, 200));
+    const rows = await this.queryRows(
+      `
+        SELECT
+          id,
+          actor_type,
+          actor_id,
+          actor_email,
+          entity_type,
+          entity_id,
+          action,
+          ip_address,
+          user_agent,
+          diff_json,
+          created_at
+        FROM audit_logs
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+      `,
+      [normalizedLimit],
+    );
+
+    return rows.map((row) => ({
+      id: String(row.id),
+      actorType: row.actor_type === 'admin' || row.actor_type === 'customer' ? row.actor_type : 'system',
+      actorId: row.actor_id || '',
+      actorEmail: row.actor_email || '',
+      entityType: row.entity_type || '',
+      entityId: row.entity_id || '',
+      action: row.action || '',
+      ipAddress: row.ip_address || '',
+      userAgent: row.user_agent || '',
+      diffJson: parseJsonValue<Record<string, unknown> | null>(row.diff_json, null),
+      createdAt: toIsoDateTime(row.created_at),
+    }));
   }
 
   async findCustomerAuthByEmail(email: string): Promise<CustomerAuthLookup | null> {

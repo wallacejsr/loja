@@ -48,6 +48,26 @@ export type AdminSessionPayload = {
   user: AdminUser | null;
 };
 
+export type AdminAuditLogRecord = {
+  action: string;
+  actorEmail: string;
+  actorId: string;
+  actorType: 'admin' | 'customer' | 'system';
+  createdAt: string;
+  diffJson: Record<string, unknown> | null;
+  entityId: string;
+  entityType: string;
+  id: string;
+  ipAddress: string;
+  userAgent: string;
+};
+
+export type AdminMfaSetupPayload = {
+  provisioningUri: string;
+  secret: string;
+  success: true;
+};
+
 export class AdminApiError extends Error {
   code: string;
 
@@ -110,3 +130,33 @@ export async function resetAdminPassword(token: string, password: string) {
   });
 }
 
+export async function changeAdminPassword(currentPassword: string, newPassword: string) {
+  return requestAdminApi<{ payload: AdminSessionPayload; success: true }>('/api/admin/password/change', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export async function setupAdminMfa() {
+  return requestAdminApi<AdminMfaSetupPayload>('/api/admin/mfa/setup', {
+    method: 'POST',
+  });
+}
+
+export async function enableAdminMfa(otp: string) {
+  return requestAdminApi<{ success: true; user: AdminUser }>('/api/admin/mfa/enable', {
+    method: 'POST',
+    body: JSON.stringify({ otp }),
+  });
+}
+
+export async function disableAdminMfa(password: string, otp: string) {
+  return requestAdminApi<{ success: true; user: AdminUser }>('/api/admin/mfa/disable', {
+    method: 'POST',
+    body: JSON.stringify({ password, otp }),
+  });
+}
+
+export async function getAdminAuditLogs(limit = 100) {
+  return requestAdminApi<{ items: AdminAuditLogRecord[]; success: true }>(`/api/admin/audit-logs?limit=${encodeURIComponent(String(limit))}`);
+}

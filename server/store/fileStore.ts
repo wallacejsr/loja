@@ -50,6 +50,7 @@ import { getAdminRolePermissions, type AdminRole } from '../auth/adminPermission
 import { cloneStoreSnapshot, createDefaultStoreSnapshot, createId } from './defaultData';
 import type {
   AdminAuthLookup,
+  AuditLogRecord,
   AdminPasswordResetTokenRecord,
   AdminSessionLookup,
   AdminSessionPayload,
@@ -159,6 +160,7 @@ function ensureAdminCollections(snapshot: StoreSnapshot) {
   snapshot.adminUsers ||= [];
   snapshot.adminSessions ||= [];
   snapshot.adminPasswordResets ||= [];
+  snapshot.auditLogs ||= [];
 }
 
 function mapStoredCustomerToPublic(customer: StoredCustomerProfile): StoreCustomerProfile {
@@ -916,9 +918,8 @@ export class FileStoreRepository implements StoreRepository {
 
   async createAuditLog(input: AuditLogInput): Promise<void> {
     await this.mutate(async (snapshot) => {
-      const target = snapshot as StoreSnapshot & { auditLogs?: Array<Record<string, unknown>> };
-      target.auditLogs ||= [];
-      target.auditLogs.unshift({
+      ensureAdminCollections(snapshot);
+      snapshot.auditLogs?.unshift({
         id: createId('audit'),
         actorType: input.actorType || 'system',
         actorId: input.actorId || '',
@@ -932,6 +933,15 @@ export class FileStoreRepository implements StoreRepository {
         createdAt: new Date().toISOString(),
       });
     });
+  }
+
+  async getAdminAuditLogs(limit = 100): Promise<AuditLogRecord[]> {
+    const snapshot = await this.readSnapshot();
+    ensureAdminCollections(snapshot);
+
+    return [...(snapshot.auditLogs || [])]
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+      .slice(0, Math.max(1, Math.min(limit, 200)));
   }
 
   async getStripeCredentialSummary(mode: StripeMode) {

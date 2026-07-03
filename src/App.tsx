@@ -39,6 +39,7 @@ const AdminRaffles = lazy(() => import('./pages/admin/Raffles').then((module) =>
 const LayoutTheme = lazy(() => import('./pages/admin/LayoutTheme').then((module) => ({ default: module.LayoutTheme })));
 const HomeSections = lazy(() => import('./pages/admin/HomeSections').then((module) => ({ default: module.HomeSections })));
 const Integrations = lazy(() => import('./pages/admin/Integrations').then((module) => ({ default: module.Integrations })));
+const Security = lazy(() => import('./pages/admin/Security').then((module) => ({ default: module.Security })));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -117,6 +118,7 @@ export default function App() {
                     <Route path="raffles" element={lazyRoute(<AdminRaffles />)} />
                     <Route path="layout" element={lazyRoute(<LayoutTheme />)} />
                     <Route path="integrations" element={lazyRoute(<Integrations />)} />
+                    <Route path="security" element={lazyRoute(<Security />)} />
                   </Route>
 
                   <Route path="/" element={<Layout />}>

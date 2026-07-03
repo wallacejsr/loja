@@ -124,6 +124,20 @@ export type AuditLogInput = {
   userAgent?: string;
 };
 
+export type AuditLogRecord = {
+  action: string;
+  actorEmail: string;
+  actorId: string;
+  actorType: 'admin' | 'customer' | 'system';
+  createdAt: string;
+  diffJson: Record<string, unknown> | null;
+  entityId: string;
+  entityType: string;
+  id: string;
+  ipAddress: string;
+  userAgent: string;
+};
+
 export type EnsureAdminUserInput = {
   email: string;
   fullName: string;
@@ -181,6 +195,7 @@ export type StoredCustomerSession = {
 };
 
 export interface StoreSnapshot {
+  auditLogs?: AuditLogRecord[];
   adminPasswordResets?: Array<{
     adminUserId: string;
     createdAt: string;
@@ -262,6 +277,7 @@ export interface StoreRepository {
   createAdminPasswordResetToken(input: CreateAdminPasswordResetTokenInput): Promise<AdminPasswordResetTokenRecord>;
   createAdminSession(input: CreateAdminSessionInput): Promise<AdminSessionLookup>;
   createAuditLog(input: AuditLogInput): Promise<void>;
+  getAdminAuditLogs(limit?: number): Promise<AuditLogRecord[]>;
   createCustomerAccount(input: CustomerRegistrationInput): Promise<CustomerSessionPayload>;
   createCustomerSession(input: CreateCustomerSessionInput): Promise<CustomerSessionLookup>;
   createNewsletterSubscriber(input: NewsletterSubscriberInput): Promise<NewsletterSubscriber>;

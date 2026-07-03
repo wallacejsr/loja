@@ -316,11 +316,6 @@ export function registerAdminAuthRoutes(repository: StoreRepository, config: Sto
         return;
       }
 
-      if (!adminHasPermission(resolved.payload.user.role, 'security:write')) {
-        handleAdminError(response, new Error('Permission denied.'), 403, 'ADMIN_FORBIDDEN');
-        return;
-      }
-
       const secret = generateTotpSecret();
       await repository.saveAdminMfaSecret(resolved.payload.user.id, encryptStoredSecret(secret), false);
       await repository.createAuditLog({
@@ -432,6 +427,110 @@ export function registerAdminAuthRoutes(repository: StoreRepository, config: Sto
     }
   });
 
+  router.post('/password/change', async (request, response) => {
+    try {
+      const resolved = await resolveAuthenticatedAdmin(request, response, repository, config);
+      if (!resolved?.payload.user || !resolved.session.id) {
+        handleAdminError(response, new Error('Administrator authentication is required.'), 401, 'ADMIN_UNAUTHORIZED');
+        return;
+      }
+
+      const currentPassword = String(request.body?.currentPassword || '');
+      const nextPassword = String(request.body?.newPassword || '');
+
+      if (!currentPassword || !nextPassword) {
+        handleAdminError(response, new Error('Current password and new password are required.'), 400, 'PASSWORD_CHANGE_INVALID');
+        return;
+      }
+
+      const adminUser = await repository.findAdminAuthByEmail(resolved.payload.user.email);
+      if (!adminUser) {
+        handleAdminError(response, new Error('Administrator account not found.'), 404, 'ADMIN_NOT_FOUND');
+        return;
+      }
+
+      const passwordMatches = await verifyPassword(currentPassword, adminUser.passwordHash, config);
+      if (!passwordMatches) {
+        await repository.createAuditLog({
+          action: 'admin.password_change_failed',
+          actorEmail: adminUser.email,
+          actorId: adminUser.id,
+          actorType: 'admin',
+          entityId: adminUser.id,
+          entityType: 'admin_user',
+          ipAddress: request.clientIp || '',
+          userAgent: getUserAgent(request),
+        });
+        handleAdminError(response, new Error('Current password is invalid.'), 400, 'PASSWORD_CHANGE_INVALID');
+        return;
+      }
+
+      const nextPasswordHash = await hashPassword(nextPassword, config);
+      await repository.updateAdminPassword(adminUser.id, nextPasswordHash);
+      await repository.revokeAdminSessionsByUserId(adminUser.id);
+
+      const sessionToken = generateAdminSessionToken();
+      const expiresAt = new Date(Date.now() + config.auth.adminSessionIdleTtlSeconds * 1000);
+
+      await repository.createAdminSession({
+        adminUserId: adminUser.id,
+        expiresAt: expiresAt.toISOString(),
+        ipAddress: request.clientIp || '',
+        sessionTokenHash: hashAdminSessionToken(sessionToken, config.adminSession),
+        userAgent: getUserAgent(request),
+      });
+
+      const payload = await repository.getAdminSessionPayload(adminUser.id);
+      if (!payload) {
+        handleAdminError(response, new Error('Unable to refresh administrator session.'), 500, 'ADMIN_LOAD_FAILED');
+        return;
+      }
+
+      await repository.createAuditLog({
+        action: 'admin.password_changed',
+        actorEmail: adminUser.email,
+        actorId: adminUser.id,
+        actorType: 'admin',
+        entityId: adminUser.id,
+        entityType: 'admin_user',
+        ipAddress: request.clientIp || '',
+        userAgent: getUserAgent(request),
+      });
+
+      response.setHeader('Set-Cookie', buildAdminSessionCookieHeader(sessionToken, config.adminSession, expiresAt));
+      response.json({
+        success: true,
+        payload,
+      });
+    } catch (error) {
+      handleAdminError(response, error, 500);
+    }
+  });
+
+  router.get('/audit-logs', async (request, response) => {
+    try {
+      const resolved = await resolveAuthenticatedAdmin(request, response, repository, config);
+      if (!resolved?.payload.user) {
+        handleAdminError(response, new Error('Administrator authentication is required.'), 401, 'ADMIN_UNAUTHORIZED');
+        return;
+      }
+
+      if (!adminHasPermission(resolved.payload.user.role, 'security:read')) {
+        handleAdminError(response, new Error('Permission denied.'), 403, 'ADMIN_FORBIDDEN');
+        return;
+      }
+
+      const limit = Number(request.query.limit || 100);
+      const logs = await repository.getAdminAuditLogs(limit);
+
+      response.json({
+        items: logs,
+        success: true,
+      });
+    } catch (error) {
+      handleAdminError(response, error, 500);
+    }
+  });
+
   return router;
 }
-

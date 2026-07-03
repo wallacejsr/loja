@@ -3,12 +3,14 @@ import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react
 import { AlertCircle, KeyRound, LockKeyhole, Mail } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAdminSession, isAdminApiErrorWithCode } from '../../context/AdminSessionContext';
+import { useSettings } from '../../hooks/useSettings';
 import { resetAdminPassword } from '../../lib/adminAuthApi';
 
 type Mode = 'login' | 'reset';
 
 export function AdminLogin() {
   const { authenticated, loading, login } = useAdminSession();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -80,7 +82,7 @@ export function AdminLogin() {
         {mode === 'login' ? (
           <div className="rounded-2xl bg-neutral-100 p-1 text-[12px] font-semibold uppercase tracking-[0.16em]">
             <div className="rounded-xl bg-neutral-900 px-4 py-3 text-center text-white">
-              Login
+              {settings.storeName || 'Admin'}
             </div>
           </div>
         ) : null}
@@ -157,4 +159,3 @@ function Field({
 }
 
 const inputClass = 'w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 text-sm text-neutral-900 outline-none transition focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900';
-
