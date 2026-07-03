@@ -356,7 +356,16 @@ export function Register() {
         return;
       }
 
-      navigate('/account');
+      navigate('/account', {
+        state: {
+          flash: {
+            message: locale === 'en-US'
+              ? 'Account created successfully. You are now signed in.'
+              : 'Conta criada com sucesso. Voce ja esta conectado.',
+            tone: 'success',
+          },
+        },
+      });
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : t('accountCreationError'));
     } finally {
