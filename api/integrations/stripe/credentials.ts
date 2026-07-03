@@ -1,4 +1,5 @@
 import type { StripeMode } from '../../../src/types/settings.ts';
+import { requireStripeAdminPermission } from './adminAuth.js';
 import { getStripeStatusPayload, saveStripeCredentialsToActiveStorage } from './runtime.js';
 
 type StripeCredentialSaveRequestBody = {
@@ -33,6 +34,11 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
   }
 
   res.setHeader?.('Cache-Control', 'no-store');
+
+  const authenticatedAdmin = await requireStripeAdminPermission(req, res, 'integrations:write');
+  if (!authenticatedAdmin) {
+    return;
+  }
 
   try {
     const body = req.body;

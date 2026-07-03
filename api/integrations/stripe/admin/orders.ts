@@ -1,3 +1,4 @@
+import { requireStripeAdminPermission } from '../adminAuth.js';
 import { listTrackedStripeAdminOrders } from '../tracking.js';
 
 type VercelRequestLike = {
@@ -15,6 +16,11 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
       success: false,
       message: 'Method not allowed',
     });
+    return;
+  }
+
+  const authenticatedAdmin = await requireStripeAdminPermission(req, res, 'orders:read');
+  if (!authenticatedAdmin) {
     return;
   }
 

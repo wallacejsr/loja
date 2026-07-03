@@ -7,6 +7,7 @@ import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'r
 import { lazy, Suspense, useEffect, type ReactElement } from 'react';
 import { Layout } from './components/Layout';
 import { AdminSessionProvider, useAdminSession } from './context/AdminSessionContext';
+import type { AdminPermission } from './lib/adminAuthApi';
 import { CartProvider } from './context/CartContext';
 import { CustomerSessionProvider } from './context/CustomerSessionContext';
 import { StorefrontToastProvider } from './context/StorefrontToastContext';
@@ -91,6 +92,24 @@ function RequireAdminAuth({ children }: { children: ReactElement }) {
   return children;
 }
 
+function RequireAdminPermission({ children, permission }: { children: ReactElement; permission: AdminPermission }) {
+  const { authenticated, loading, permissions } = useAdminSession();
+
+  if (loading) {
+    return <RouteFallback />;
+  }
+
+  if (!authenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!permissions.includes(permission)) {
+    return <Navigate to="/admin" replace />;
+  }
+
+  return children;
+}
+
 export default function App() {
   return (
     <Router>
@@ -104,21 +123,21 @@ export default function App() {
                   <Routes>
                   <Route path="/login" element={lazyRoute(<AdminLogin />)} />
                   <Route path="/admin" element={lazyRoute(<RequireAdminAuth><AdminLayout /></RequireAdminAuth>)}>
-                    <Route index element={lazyRoute(<Dashboard />)} />
-                    <Route path="products" element={lazyRoute(<Products />)} />
-                    <Route path="orders" element={lazyRoute(<Orders />)} />
-                    <Route path="categories" element={lazyRoute(<Categories />)} />
-                    <Route path="customers" element={lazyRoute(<Customers />)} />
-                    <Route path="messages" element={lazyRoute(<Messages />)} />
-                    <Route path="newsletter" element={lazyRoute(<Newsletter />)} />
-                    <Route path="banners" element={lazyRoute(<Banners />)} />
-                    <Route path="home" element={lazyRoute(<HomeSections />)} />
-                    <Route path="settings" element={lazyRoute(<Settings />)} />
-                    <Route path="promotions" element={lazyRoute(<Promotions />)} />
-                    <Route path="raffles" element={lazyRoute(<AdminRaffles />)} />
-                    <Route path="layout" element={lazyRoute(<LayoutTheme />)} />
-                    <Route path="integrations" element={lazyRoute(<Integrations />)} />
-                    <Route path="security" element={lazyRoute(<Security />)} />
+                    <Route index element={lazyRoute(<RequireAdminPermission permission="dashboard:read"><Dashboard /></RequireAdminPermission>)} />
+                    <Route path="products" element={lazyRoute(<RequireAdminPermission permission="products:read"><Products /></RequireAdminPermission>)} />
+                    <Route path="orders" element={lazyRoute(<RequireAdminPermission permission="orders:read"><Orders /></RequireAdminPermission>)} />
+                    <Route path="categories" element={lazyRoute(<RequireAdminPermission permission="categories:read"><Categories /></RequireAdminPermission>)} />
+                    <Route path="customers" element={lazyRoute(<RequireAdminPermission permission="customers:read"><Customers /></RequireAdminPermission>)} />
+                    <Route path="messages" element={lazyRoute(<RequireAdminPermission permission="messages:read"><Messages /></RequireAdminPermission>)} />
+                    <Route path="newsletter" element={lazyRoute(<RequireAdminPermission permission="newsletter:read"><Newsletter /></RequireAdminPermission>)} />
+                    <Route path="banners" element={lazyRoute(<RequireAdminPermission permission="banners:read"><Banners /></RequireAdminPermission>)} />
+                    <Route path="home" element={lazyRoute(<RequireAdminPermission permission="home:read"><HomeSections /></RequireAdminPermission>)} />
+                    <Route path="settings" element={lazyRoute(<RequireAdminPermission permission="settings:read"><Settings /></RequireAdminPermission>)} />
+                    <Route path="promotions" element={lazyRoute(<RequireAdminPermission permission="promotions:read"><Promotions /></RequireAdminPermission>)} />
+                    <Route path="raffles" element={lazyRoute(<RequireAdminPermission permission="raffles:read"><AdminRaffles /></RequireAdminPermission>)} />
+                    <Route path="layout" element={lazyRoute(<RequireAdminPermission permission="layout:read"><LayoutTheme /></RequireAdminPermission>)} />
+                    <Route path="integrations" element={lazyRoute(<RequireAdminPermission permission="integrations:read"><Integrations /></RequireAdminPermission>)} />
+                    <Route path="security" element={lazyRoute(<RequireAdminPermission permission="security:read"><Security /></RequireAdminPermission>)} />
                   </Route>
 
                   <Route path="/" element={<Layout />}>

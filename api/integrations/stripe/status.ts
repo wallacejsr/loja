@@ -1,3 +1,4 @@
+import { requireStripeAdminPermission } from './adminAuth.js';
 import { getStripeStatusPayload } from './runtime.js';
 
 type VercelRequestLike = {
@@ -20,6 +21,11 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
   }
 
   res.setHeader?.('Cache-Control', 'no-store');
+
+  const authenticatedAdmin = await requireStripeAdminPermission(req, res, 'integrations:read');
+  if (!authenticatedAdmin) {
+    return;
+  }
 
   try {
     res.status(200).json(await getStripeStatusPayload());

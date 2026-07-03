@@ -1,4 +1,5 @@
 import type { StripeMode } from '../../../src/types/settings.ts';
+import { requireStripeAdminPermission } from './adminAuth.js';
 import { testStripeConnection } from './runtime.js';
 
 type VercelRequestLike = {
@@ -28,6 +29,11 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
   }
 
   res.setHeader?.('Cache-Control', 'no-store');
+
+  const authenticatedAdmin = await requireStripeAdminPermission(req, res, 'integrations:write');
+  if (!authenticatedAdmin) {
+    return;
+  }
 
   try {
     const mode = req.body?.mode;

@@ -1,3 +1,4 @@
+import { requireStripeAdminPermission } from '../adminAuth.js';
 import { updateTrackedStripeOrderStatus, type TrackedOrderStatus } from '../tracking.js';
 
 type VercelRequestLike = {
@@ -63,10 +64,15 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
     return;
   }
 
+  const authenticatedAdmin = await requireStripeAdminPermission(req, res, 'orders:write');
+  if (!authenticatedAdmin) {
+    return;
+  }
+
   try {
     const orderNumber = req.body?.orderNumber?.trim() || '';
     const status = req.body?.status?.trim() || '';
-    const user = req.body?.user?.trim() || 'Admin Loja';
+    const user = authenticatedAdmin.email || req.body?.user?.trim() || 'Admin Loja';
 
     if (!orderNumber) {
       throw new Error('Informe o numero do pedido antes de atualizar o status.');
