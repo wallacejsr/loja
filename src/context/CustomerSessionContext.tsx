@@ -45,7 +45,9 @@ export type GuestShippingDraft = {
   region: string;
 };
 
-type RegisterCustomerResult = { ok: true } | { ok: false; error: 'EMAIL_EXISTS' };
+type RegisterCustomerResult =
+  | { ok: true }
+  | { ok: false; error: 'EMAIL_EXISTS' | 'REGISTER_FAILED'; message?: string };
 type LoginResult = { ok: true } | { ok: false; error: 'ACCOUNT_DISABLED' | 'INVALID_CREDENTIALS' };
 type RegisterCustomerError = 'EMAIL_EXISTS';
 type LoginError = 'ACCOUNT_DISABLED' | 'INVALID_CREDENTIALS';
@@ -160,11 +162,15 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
       setSessionPayload(nextPayload);
       return { ok: true as const };
     } catch (error) {
-      if (resolveAuthErrorCode(error, 'EMAIL_EXISTS') === 'EMAIL_EXISTS') {
+      if (error instanceof AccountApiError && error.code === 'EMAIL_EXISTS') {
         return { ok: false as const, error: 'EMAIL_EXISTS' as const };
       }
 
-      throw error;
+      return {
+        ok: false as const,
+        error: 'REGISTER_FAILED' as const,
+        message: error instanceof Error ? error.message : undefined,
+      };
     }
   }, []);
 

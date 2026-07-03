@@ -140,6 +140,9 @@ export function Register() {
     () => hasCompleteBirthDate && !isBirthDateValid(formData.birthDate, locale),
     [formData.birthDate, hasCompleteBirthDate, locale],
   );
+  const incompleteAddressMessage = locale === 'en-US'
+    ? 'Complete your address before creating the account.'
+    : 'Preencha seu endereco antes de criar a conta.';
 
   useEffect(() => {
     if (isBusinessRegistrationEnabled || registrationType !== 'J') return;
@@ -309,6 +312,11 @@ export function Register() {
       return;
     }
 
+    if (!formData.postalCode.trim() || !formData.street.trim() || !formData.city.trim() || !formData.region.trim()) {
+      setSubmitError(incompleteAddressMessage);
+      return;
+    }
+
     setSubmitError('');
     setIsSubmitting(true);
 
@@ -339,7 +347,12 @@ export function Register() {
       });
 
       if (!result.ok) {
-        setSubmitError(result.error === 'EMAIL_EXISTS' ? t('accountAlreadyExists') : t('accountCreationError'));
+        if (result.error === 'EMAIL_EXISTS') {
+          setSubmitError(t('accountAlreadyExists'));
+          return;
+        }
+
+        setSubmitError(result.message || t('accountCreationError'));
         return;
       }
 
