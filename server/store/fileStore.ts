@@ -43,10 +43,20 @@ import {
   applyStripeCredentialInput,
   buildStripeCredentialSummary,
   createEmptyStoredStripeCredentialSet,
+  decryptStoredSecret,
   decodeStoredStripeCredentials,
 } from '../integrations/stripeCredentials';
+import { getAdminRolePermissions, type AdminRole } from '../auth/adminPermissions';
 import { cloneStoreSnapshot, createDefaultStoreSnapshot, createId } from './defaultData';
 import type {
+  AdminAuthLookup,
+  AdminPasswordResetTokenRecord,
+  AdminSessionLookup,
+  AdminSessionPayload,
+  AdminUserProfile,
+  AuditLogInput,
+  CreateAdminPasswordResetTokenInput,
+  CreateAdminSessionInput,
   CreateCustomerSessionInput,
   CustomerAddressMutationResult,
   CustomerAuthLookup,
@@ -54,9 +64,11 @@ import type {
   CustomerProfileUpdateResult,
   CustomerRegistrationInput,
   CustomerSessionLookup,
+  EnsureAdminUserInput,
   ListOptions,
   StoreRepository,
   StoreSnapshot,
+  StoredAdminUserProfile,
   StoredCustomerProfile,
   StoredCustomerSession,
   StoredProduct,
@@ -143,6 +155,12 @@ function ensureCustomerCollections(snapshot: StoreSnapshot) {
   snapshot.customerSessions ||= [];
 }
 
+function ensureAdminCollections(snapshot: StoreSnapshot) {
+  snapshot.adminUsers ||= [];
+  snapshot.adminSessions ||= [];
+  snapshot.adminPasswordResets ||= [];
+}
+
 function mapStoredCustomerToPublic(customer: StoredCustomerProfile): StoreCustomerProfile {
   const { passwordHash: _passwordHash, ...publicCustomer } = customer;
   return {
@@ -169,6 +187,27 @@ function buildCustomerSessionPayload(customer: StoredCustomerProfile | null): Cu
     availableWelcomeBenefit: getAvailableWelcomeBenefit(publicCustomer.welcomeBenefits),
     customer: publicCustomer,
     primaryAddress: publicCustomer.addresses.find((address) => address.isPrimary) || publicCustomer.addresses[0] || null,
+  };
+}
+
+function toPublicAdminUser(adminUser: StoredAdminUserProfile): AdminUserProfile {
+  const { passwordHash: _passwordHash, mfaSecretEncrypted: _mfaSecretEncrypted, failedLoginAttempts: _failedLoginAttempts, lockedUntil: _lockedUntil, ...publicUser } = adminUser;
+  return publicUser;
+}
+
+function buildAdminSessionPayload(adminUser: StoredAdminUserProfile | null): AdminSessionPayload {
+  if (!adminUser) {
+    return {
+      authenticated: false,
+      permissions: [],
+      user: null,
+    };
+  }
+
+  return {
+    authenticated: true,
+    permissions: getAdminRolePermissions(adminUser.role),
+    user: toPublicAdminUser(adminUser),
   };
 }
 
@@ -236,6 +275,7 @@ export class FileStoreRepository implements StoreRepository {
       const parsed = JSON.parse(fileContents) as StoreSnapshot;
       parsed.newsletterSubscribers ||= [];
       ensureCustomerCollections(parsed);
+      ensureAdminCollections(parsed);
       ensureStripeCredentials(parsed);
       return deepClone(parsed);
     } catch (error) {
@@ -604,6 +644,293 @@ export class FileStoreRepository implements StoreRepository {
       const normalized = normalizeStoreSettings(settings);
       snapshot.settings = normalized;
       return normalized;
+    });
+  }
+
+  async ensureAdminUser(input: EnsureAdminUserInput): Promise<AdminUserProfile> {
+    return this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const normalizedEmail = input.email.trim().toLowerCase();
+      const timestamp = new Date().toISOString();
+      const existing = snapshot.adminUsers?.find((item) => item.email.trim().toLowerCase() === normalizedEmail) || null;
+
+      if (existing) {
+        existing.fullName = input.fullName.trim();
+        existing.role = input.role;
+        existing.status = 'active';
+        existing.updatedAt = timestamp;
+        return toPublicAdminUser(existing);
+      }
+
+      const created: StoredAdminUserProfile = {
+        id: createId('admin-user'),
+        email: normalizedEmail,
+        passwordHash: input.passwordHash,
+        fullName: input.fullName.trim(),
+        role: input.role,
+        status: 'active',
+        mfaEnabled: false,
+        mfaSecretEncrypted: '',
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        lastLoginAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+
+      snapshot.adminUsers?.unshift(created);
+      return toPublicAdminUser(created);
+    });
+  }
+
+  async findAdminAuthByEmail(email: string): Promise<AdminAuthLookup | null> {
+    const snapshot = await this.readSnapshot();
+    ensureAdminCollections(snapshot);
+    const normalizedEmail = email.trim().toLowerCase();
+    const adminUser = snapshot.adminUsers?.find((item) => item.email.trim().toLowerCase() === normalizedEmail) || null;
+
+    if (!adminUser) {
+      return null;
+    }
+
+    return {
+      email: adminUser.email,
+      failedLoginAttempts: adminUser.failedLoginAttempts,
+      id: adminUser.id,
+      lockedUntil: adminUser.lockedUntil,
+      mfaEnabled: adminUser.mfaEnabled,
+      mfaSecretEncrypted: adminUser.mfaSecretEncrypted,
+      passwordHash: adminUser.passwordHash,
+      role: adminUser.role,
+      status: adminUser.status,
+    };
+  }
+
+  async getAdminUserById(adminUserId: string): Promise<AdminUserProfile | null> {
+    const snapshot = await this.readSnapshot();
+    ensureAdminCollections(snapshot);
+    const adminUser = snapshot.adminUsers?.find((item) => item.id === adminUserId) || null;
+    return adminUser ? toPublicAdminUser(adminUser) : null;
+  }
+
+  async createAdminSession(input: CreateAdminSessionInput): Promise<AdminSessionLookup> {
+    return this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const timestamp = new Date().toISOString();
+      const created = {
+        id: createId('admin-session'),
+        adminUserId: input.adminUserId,
+        sessionTokenHash: input.sessionTokenHash,
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+        lastSeenAt: timestamp,
+        expiresAt: input.expiresAt,
+        revokedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+
+      snapshot.adminSessions?.unshift(created);
+      const adminUser = snapshot.adminUsers?.find((item) => item.id === input.adminUserId);
+      if (adminUser) {
+        adminUser.lastLoginAt = timestamp;
+        adminUser.failedLoginAttempts = 0;
+        adminUser.lockedUntil = null;
+        adminUser.updatedAt = timestamp;
+      }
+
+      return {
+        adminUserId: created.adminUserId,
+        expiresAt: created.expiresAt,
+        id: created.id,
+        revokedAt: created.revokedAt,
+      };
+    });
+  }
+
+  async getAdminSessionByTokenHash(tokenHash: string): Promise<AdminSessionLookup | null> {
+    const snapshot = await this.readSnapshot();
+    ensureAdminCollections(snapshot);
+    const session = snapshot.adminSessions?.find((item) => item.sessionTokenHash === tokenHash) || null;
+
+    if (!session) {
+      return null;
+    }
+
+    return {
+      adminUserId: session.adminUserId,
+      expiresAt: session.expiresAt,
+      id: session.id,
+      revokedAt: session.revokedAt,
+    };
+  }
+
+  async touchAdminSession(sessionId: string, ipAddress: string, userAgent: string, expiresAt: string): Promise<void> {
+    await this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const session = snapshot.adminSessions?.find((item) => item.id === sessionId);
+      if (!session) return;
+
+      const timestamp = new Date().toISOString();
+      session.ipAddress = ipAddress;
+      session.userAgent = userAgent;
+      session.lastSeenAt = timestamp;
+      session.expiresAt = expiresAt;
+      session.updatedAt = timestamp;
+    });
+  }
+
+  async revokeAdminSession(sessionId: string): Promise<void> {
+    await this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const session = snapshot.adminSessions?.find((item) => item.id === sessionId);
+      if (!session || session.revokedAt) return;
+
+      const timestamp = new Date().toISOString();
+      session.revokedAt = timestamp;
+      session.updatedAt = timestamp;
+    });
+  }
+
+  async revokeAdminSessionsByUserId(adminUserId: string): Promise<void> {
+    await this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const timestamp = new Date().toISOString();
+      snapshot.adminSessions?.forEach((session) => {
+        if (session.adminUserId === adminUserId && !session.revokedAt) {
+          session.revokedAt = timestamp;
+          session.updatedAt = timestamp;
+        }
+      });
+    });
+  }
+
+  async getAdminSessionPayload(adminUserId: string): Promise<AdminSessionPayload | null> {
+    const snapshot = await this.readSnapshot();
+    ensureAdminCollections(snapshot);
+    const adminUser = snapshot.adminUsers?.find((item) => item.id === adminUserId) || null;
+    return adminUser ? buildAdminSessionPayload(adminUser) : null;
+  }
+
+  async saveAdminMfaSecret(adminUserId: string, secretEncrypted: string, enabled: boolean): Promise<AdminUserProfile> {
+    return this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const adminUser = snapshot.adminUsers?.find((item) => item.id === adminUserId) || null;
+      if (!adminUser) {
+        throw new Error('Administrador nao encontrado.');
+      }
+
+      adminUser.mfaSecretEncrypted = secretEncrypted;
+      adminUser.mfaEnabled = enabled;
+      adminUser.updatedAt = new Date().toISOString();
+      return toPublicAdminUser(adminUser);
+    });
+  }
+
+  async createAdminPasswordResetToken(input: CreateAdminPasswordResetTokenInput): Promise<AdminPasswordResetTokenRecord> {
+    return this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const adminUser = snapshot.adminUsers?.find((item) => item.id === input.adminUserId) || null;
+      if (!adminUser) {
+        throw new Error('Administrador nao encontrado.');
+      }
+
+      const timestamp = new Date().toISOString();
+      const created = {
+        id: createId('admin-reset'),
+        adminUserId: input.adminUserId,
+        tokenHash: input.tokenHash,
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+        expiresAt: input.expiresAt,
+        usedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+
+      snapshot.adminPasswordResets?.unshift(created);
+      return {
+        adminUserId: created.adminUserId,
+        email: adminUser.email,
+        expiresAt: created.expiresAt,
+        id: created.id,
+        usedAt: created.usedAt,
+      };
+    });
+  }
+
+  async getAdminPasswordResetByTokenHash(tokenHash: string): Promise<AdminPasswordResetTokenRecord | null> {
+    const snapshot = await this.readSnapshot();
+    ensureAdminCollections(snapshot);
+    const reset = snapshot.adminPasswordResets?.find((item) => item.tokenHash === tokenHash) || null;
+
+    if (!reset) {
+      return null;
+    }
+
+    const adminUser = snapshot.adminUsers?.find((item) => item.id === reset.adminUserId) || null;
+    return {
+      adminUserId: reset.adminUserId,
+      email: adminUser?.email || '',
+      expiresAt: reset.expiresAt,
+      id: reset.id,
+      usedAt: reset.usedAt,
+    };
+  }
+
+  async markAdminPasswordResetTokenUsed(id: string): Promise<void> {
+    await this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const reset = snapshot.adminPasswordResets?.find((item) => item.id === id);
+      if (!reset) return;
+      reset.usedAt = reset.usedAt || new Date().toISOString();
+      reset.updatedAt = new Date().toISOString();
+    });
+  }
+
+  async recordAdminLoginFailure(adminUserId: string, failedAttempts: number, lockedUntil: string | null): Promise<void> {
+    await this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const adminUser = snapshot.adminUsers?.find((item) => item.id === adminUserId);
+      if (!adminUser) return;
+      adminUser.failedLoginAttempts = failedAttempts;
+      adminUser.lockedUntil = lockedUntil;
+      adminUser.updatedAt = new Date().toISOString();
+    });
+  }
+
+  async updateAdminPassword(adminUserId: string, passwordHash: string): Promise<void> {
+    await this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const adminUser = snapshot.adminUsers?.find((item) => item.id === adminUserId) || null;
+      if (!adminUser) {
+        throw new Error('Administrador nao encontrado.');
+      }
+
+      adminUser.passwordHash = passwordHash;
+      adminUser.failedLoginAttempts = 0;
+      adminUser.lockedUntil = null;
+      adminUser.updatedAt = new Date().toISOString();
+    });
+  }
+
+  async createAuditLog(input: AuditLogInput): Promise<void> {
+    await this.mutate(async (snapshot) => {
+      const target = snapshot as StoreSnapshot & { auditLogs?: Array<Record<string, unknown>> };
+      target.auditLogs ||= [];
+      target.auditLogs.unshift({
+        id: createId('audit'),
+        actorType: input.actorType || 'system',
+        actorId: input.actorId || '',
+        actorEmail: input.actorEmail || '',
+        entityType: input.entityType,
+        entityId: input.entityId,
+        action: input.action,
+        ipAddress: input.ipAddress || '',
+        userAgent: input.userAgent || '',
+        diffJson: input.diffJson || null,
+        createdAt: new Date().toISOString(),
+      });
     });
   }
 

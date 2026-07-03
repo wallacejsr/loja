@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { lazy, Suspense, useEffect, type ReactElement } from 'react';
 import { Layout } from './components/Layout';
+import { AdminSessionProvider, useAdminSession } from './context/AdminSessionContext';
 import { CartProvider } from './context/CartContext';
 import { CustomerSessionProvider } from './context/CustomerSessionContext';
 import { StorefrontToastProvider } from './context/StorefrontToastContext';
@@ -22,6 +23,7 @@ const Wishlist = lazy(() => import('./pages/Wishlist').then((module) => ({ defau
 const Raffles = lazy(() => import('./pages/Raffles').then((module) => ({ default: module.Raffles })));
 const Account = lazy(() => import('./pages/Account').then((module) => ({ default: module.Account })));
 const Register = lazy(() => import('./pages/Register').then((module) => ({ default: module.Register })));
+const AdminLogin = lazy(() => import('./pages/admin/Login').then((module) => ({ default: module.AdminLogin })));
 const AdminLayout = lazy(() => import('./pages/admin/AdminLayout').then((module) => ({ default: module.AdminLayout })));
 const Dashboard = lazy(() => import('./pages/admin/Dashboard').then((module) => ({ default: module.Dashboard })));
 const Products = lazy(() => import('./pages/admin/Products').then((module) => ({ default: module.Products })));
@@ -73,17 +75,34 @@ function lazyRoute(element: ReactElement) {
   return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
 }
 
+function RequireAdminAuth({ children }: { children: ReactElement }) {
+  const { authenticated, loading } = useAdminSession();
+  const location = useLocation();
+
+  if (loading) {
+    return <RouteFallback />;
+  }
+
+  if (!authenticated) {
+    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  }
+
+  return children;
+}
+
 export default function App() {
   return (
     <Router>
       <ScrollToTop />
       <SettingsProvider>
-        <StoreDataProvider>
-          <CustomerSessionProvider>
-            <StorefrontToastProvider>
-              <CartProvider>
-                <Routes>
-                  <Route path="/admin" element={lazyRoute(<AdminLayout />)}>
+        <AdminSessionProvider>
+          <StoreDataProvider>
+            <CustomerSessionProvider>
+              <StorefrontToastProvider>
+                <CartProvider>
+                  <Routes>
+                  <Route path="/login" element={lazyRoute(<AdminLogin />)} />
+                  <Route path="/admin" element={lazyRoute(<RequireAdminAuth><AdminLayout /></RequireAdminAuth>)}>
                     <Route index element={lazyRoute(<Dashboard />)} />
                     <Route path="products" element={lazyRoute(<Products />)} />
                     <Route path="orders" element={lazyRoute(<Orders />)} />
@@ -119,11 +138,12 @@ export default function App() {
                     <Route path="faq" element={<Institutional titleKey="institutionalFaq" />} />
                     <Route path="shipping" element={<Institutional titleKey="institutionalShipping" />} />
                   </Route>
-                </Routes>
-              </CartProvider>
-            </StorefrontToastProvider>
-          </CustomerSessionProvider>
-        </StoreDataProvider>
+                  </Routes>
+                </CartProvider>
+              </StorefrontToastProvider>
+            </CustomerSessionProvider>
+          </StoreDataProvider>
+        </AdminSessionProvider>
       </SettingsProvider>
     </Router>
   );

@@ -306,11 +306,57 @@ CREATE TABLE IF NOT EXISTS admin_users (
   full_name VARCHAR(255) NOT NULL,
   role VARCHAR(40) NOT NULL DEFAULT 'admin',
   status VARCHAR(20) NOT NULL DEFAULT 'active',
+  mfa_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  mfa_secret_encrypted LONGTEXT NOT NULL,
+  failed_login_attempts INT NOT NULL DEFAULT 0,
+  locked_until DATETIME NULL,
   last_login_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY admin_users_email_unique (email),
   KEY admin_users_status_idx (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS mfa_enabled TINYINT(1) NOT NULL DEFAULT 0;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS mfa_secret_encrypted LONGTEXT NOT NULL;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS failed_login_attempts INT NOT NULL DEFAULT 0;
+ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS locked_until DATETIME NULL;
+
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  admin_user_id VARCHAR(191) NOT NULL,
+  session_token_hash CHAR(64) NOT NULL,
+  ip_address VARCHAR(80) NOT NULL DEFAULT '',
+  user_agent VARCHAR(255) NOT NULL DEFAULT '',
+  last_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME NOT NULL,
+  revoked_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY admin_sessions_token_hash_unique (session_token_hash),
+  KEY admin_sessions_admin_user_idx (admin_user_id),
+  KEY admin_sessions_expires_idx (expires_at),
+  CONSTRAINT admin_sessions_admin_user_fk
+    FOREIGN KEY (admin_user_id) REFERENCES admin_users (id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_password_resets (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  admin_user_id VARCHAR(191) NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  ip_address VARCHAR(80) NOT NULL DEFAULT '',
+  user_agent VARCHAR(255) NOT NULL DEFAULT '',
+  expires_at DATETIME NOT NULL,
+  used_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY admin_password_resets_token_hash_unique (token_hash),
+  KEY admin_password_resets_admin_user_idx (admin_user_id),
+  KEY admin_password_resets_expires_idx (expires_at),
+  CONSTRAINT admin_password_resets_admin_user_fk
+    FOREIGN KEY (admin_user_id) REFERENCES admin_users (id)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS customer_sessions (

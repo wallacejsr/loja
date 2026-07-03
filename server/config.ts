@@ -5,6 +5,9 @@ export type CookieSameSitePolicy = 'lax' | 'strict' | 'none';
 
 export type StoreApiConfig = {
   auth: {
+    adminPasswordResetTtlSeconds: number;
+    adminSessionIdleTtlSeconds: number;
+    adminSessionTtlSeconds: number;
     minPasswordLength: number;
     passwordPepper: string;
   };
@@ -13,6 +16,9 @@ export type StoreApiConfig = {
   corsOrigins: string[];
   env: RuntimeEnvironment;
   host: string;
+  https: {
+    enforce: boolean;
+  };
   port: number;
   rateLimit: {
     maxRequests: number;
@@ -20,6 +26,14 @@ export type StoreApiConfig = {
     windowMs: number;
   };
   session: {
+    cookieDomain: string;
+    cookieName: string;
+    pepper: string;
+    sameSite: CookieSameSitePolicy;
+    secure: boolean;
+    ttlSeconds: number;
+  };
+  adminSession: {
     cookieDomain: string;
     cookieName: string;
     pepper: string;
@@ -90,6 +104,9 @@ export function getStoreApiConfig(): StoreApiConfig {
 
   cachedConfig = {
     auth: {
+      adminSessionTtlSeconds: readNumberEnv('ADMIN_SESSION_TTL_SECONDS', 60 * 60 * 12),
+      adminSessionIdleTtlSeconds: readNumberEnv('ADMIN_SESSION_IDLE_TTL_SECONDS', 60 * 30),
+      adminPasswordResetTtlSeconds: readNumberEnv('ADMIN_PASSWORD_RESET_TTL_SECONDS', 60 * 30),
       minPasswordLength: readNumberEnv('AUTH_MIN_PASSWORD_LENGTH', 8),
       passwordPepper: readEnv('AUTH_PASSWORD_PEPPER', readEnv('SESSION_TOKEN_PEPPER', '')),
     },
@@ -99,6 +116,9 @@ export function getStoreApiConfig(): StoreApiConfig {
     trustProxy: readBooleanEnv('STORE_API_TRUST_PROXY', env === 'production'),
     appBaseUrl: readEnv('APP_BASE_URL', env === 'production' ? 'https://example.com' : 'http://127.0.0.1:4000'),
     bodyLimit: readEnv('STORE_API_BODY_LIMIT', '5mb'),
+    https: {
+      enforce: readBooleanEnv('STORE_API_ENFORCE_HTTPS', env === 'production'),
+    },
     corsOrigins: readListEnv('STORE_API_CORS_ORIGIN', ['http://127.0.0.1:3000', 'http://localhost:3000']),
     uploadsRoot: path.resolve(process.cwd(), readEnv('STORE_UPLOADS_ROOT', path.join('storage', 'uploads'))),
     rateLimit: {
@@ -113,6 +133,14 @@ export function getStoreApiConfig(): StoreApiConfig {
       sameSite: readSameSiteEnv('SESSION_COOKIE_SAMESITE', 'lax'),
       secure: readBooleanEnv('SESSION_COOKIE_SECURE', secureByDefault),
       pepper: readEnv('SESSION_TOKEN_PEPPER', ''),
+    },
+    adminSession: {
+      cookieName: readEnv('ADMIN_SESSION_COOKIE_NAME', 'loja_admin_session'),
+      cookieDomain: readEnv('ADMIN_SESSION_COOKIE_DOMAIN', readEnv('SESSION_COOKIE_DOMAIN', '')),
+      ttlSeconds: readNumberEnv('ADMIN_SESSION_COOKIE_TTL_SECONDS', 60 * 60 * 12),
+      sameSite: readSameSiteEnv('ADMIN_SESSION_COOKIE_SAMESITE', 'strict'),
+      secure: readBooleanEnv('ADMIN_SESSION_COOKIE_SECURE', secureByDefault),
+      pepper: readEnv('ADMIN_SESSION_TOKEN_PEPPER', readEnv('SESSION_TOKEN_PEPPER', '')),
     },
   };
 

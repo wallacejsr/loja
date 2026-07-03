@@ -46,8 +46,17 @@ import {
   createEmptyStoredStripeCredentialSet,
   decodeStoredStripeCredentials,
 } from '../integrations/stripeCredentials';
+import { getAdminRolePermissions, type AdminRole } from '../auth/adminPermissions';
 import { createDefaultStoreSnapshot, createId } from './defaultData';
 import type {
+  AdminAuthLookup,
+  AdminPasswordResetTokenRecord,
+  AdminSessionLookup,
+  AdminSessionPayload,
+  AdminUserProfile,
+  AuditLogInput,
+  CreateAdminPasswordResetTokenInput,
+  CreateAdminSessionInput,
   CreateCustomerSessionInput,
   CustomerAddressMutationResult,
   CustomerAuthLookup,
@@ -55,6 +64,7 @@ import type {
   CustomerProfileUpdateResult,
   CustomerRegistrationInput,
   CustomerSessionLookup,
+  EnsureAdminUserInput,
   ListOptions,
   StoreRepository,
   StoredStripeCredentialSet,
@@ -156,6 +166,50 @@ function toSqlDate(value: string | Date | null | undefined) {
   }
 
   return parsed.toISOString().slice(0, 10);
+}
+
+function normalizeAdminRole(value: unknown): AdminRole {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'administrator' || normalized === 'financial' || normalized === 'support') {
+    return normalized;
+  }
+
+  if (normalized === 'admin') {
+    return 'administrator';
+  }
+
+  if (normalized === 'financeiro') {
+    return 'financial';
+  }
+
+  if (normalized === 'suporte') {
+    return 'support';
+  }
+
+  return 'support';
+}
+
+function toPublicAdminUser(row: any): AdminUserProfile {
+  return {
+    id: String(row.id),
+    email: row.email || '',
+    fullName: row.full_name || '',
+    role: normalizeAdminRole(row.role),
+    status: row.status === 'inactive' ? 'inactive' : 'active',
+    mfaEnabled: toBoolean(row.mfa_enabled),
+    lastLoginAt: row.last_login_at ? toIsoDateTime(row.last_login_at, new Date(0).toISOString()) : null,
+    createdAt: toIsoDateTime(row.created_at),
+    updatedAt: toIsoDateTime(row.updated_at),
+  };
+}
+
+function buildAdminSessionPayloadFromRow(row: any): AdminSessionPayload {
+  const user = toPublicAdminUser(row);
+  return {
+    authenticated: true,
+    permissions: getAdminRolePermissions(user.role),
+    user,
+  };
 }
 
 function getTaxDocumentType(registrationType: StoreCustomerProfile['registrationType']) {
@@ -1357,6 +1411,358 @@ export class MariaDbStoreRepository implements StoreRepository {
     );
 
     return normalized;
+  }
+
+  async ensureAdminUser(input: EnsureAdminUserInput): Promise<AdminUserProfile> {
+    const normalizedEmail = input.email.trim().toLowerCase();
+
+    await this.pool.query(
+      `
+        INSERT INTO admin_users (
+          id, email, password_hash, full_name, role, status,
+          mfa_enabled, mfa_secret_encrypted, failed_login_attempts, locked_until,
+          last_login_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'active', 0, '', 0, NULL, NULL, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+          full_name = VALUES(full_name),
+          role = VALUES(role),
+          status = 'active',
+          updated_at = NOW()
+      `,
+      [
+        createId('admin-user'),
+        normalizedEmail,
+        input.passwordHash,
+        input.fullName.trim(),
+        input.role,
+      ],
+    );
+
+    const [row] = await this.queryRows(
+      `
+        SELECT id, email, full_name, role, status, mfa_enabled, last_login_at, created_at, updated_at
+        FROM admin_users
+        WHERE email = ?
+        LIMIT 1
+      `,
+      [normalizedEmail],
+    );
+
+    if (!row) {
+      throw new Error('Nao foi possivel preparar o administrador inicial.');
+    }
+
+    return toPublicAdminUser(row);
+  }
+
+  async findAdminAuthByEmail(email: string): Promise<AdminAuthLookup | null> {
+    const [row] = await this.queryRows(
+      `
+        SELECT id, email, password_hash, role, status, mfa_enabled, mfa_secret_encrypted, failed_login_attempts, locked_until
+        FROM admin_users
+        WHERE email = ?
+        LIMIT 1
+      `,
+      [email.trim().toLowerCase()],
+    );
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      email: row.email || '',
+      failedLoginAttempts: toNumber(row.failed_login_attempts, 0),
+      id: String(row.id),
+      lockedUntil: row.locked_until ? toIsoDateTime(row.locked_until, new Date(0).toISOString()) : null,
+      mfaEnabled: toBoolean(row.mfa_enabled),
+      mfaSecretEncrypted: row.mfa_secret_encrypted || '',
+      passwordHash: row.password_hash || '',
+      role: normalizeAdminRole(row.role),
+      status: row.status === 'inactive' ? 'inactive' : 'active',
+    };
+  }
+
+  async getAdminUserById(adminUserId: string): Promise<AdminUserProfile | null> {
+    const [row] = await this.queryRows(
+      `
+        SELECT id, email, full_name, role, status, mfa_enabled, last_login_at, created_at, updated_at
+        FROM admin_users
+        WHERE id = ?
+        LIMIT 1
+      `,
+      [adminUserId],
+    );
+
+    return row ? toPublicAdminUser(row) : null;
+  }
+
+  async createAdminSession(input: CreateAdminSessionInput): Promise<AdminSessionLookup> {
+    const id = createId('admin-session');
+
+    await this.pool.query(
+      `
+        INSERT INTO admin_sessions (
+          id, admin_user_id, session_token_hash, ip_address, user_agent,
+          last_seen_at, expires_at, revoked_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, NOW(), ?, NULL, NOW(), NOW())
+      `,
+      [
+        id,
+        input.adminUserId,
+        input.sessionTokenHash,
+        input.ipAddress,
+        input.userAgent,
+        toSqlDateTime(input.expiresAt),
+      ],
+    );
+
+    await this.pool.query(
+      `
+        UPDATE admin_users
+        SET last_login_at = NOW(),
+            failed_login_attempts = 0,
+            locked_until = NULL,
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [input.adminUserId],
+    );
+
+    return {
+      adminUserId: input.adminUserId,
+      expiresAt: input.expiresAt,
+      id,
+      revokedAt: null,
+    };
+  }
+
+  async getAdminSessionByTokenHash(tokenHash: string): Promise<AdminSessionLookup | null> {
+    const [row] = await this.queryRows(
+      'SELECT id, admin_user_id, expires_at, revoked_at FROM admin_sessions WHERE session_token_hash = ? LIMIT 1',
+      [tokenHash],
+    );
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      adminUserId: String(row.admin_user_id),
+      expiresAt: toIsoDateTime(row.expires_at),
+      id: String(row.id),
+      revokedAt: row.revoked_at ? toIsoDateTime(row.revoked_at) : null,
+    };
+  }
+
+  async touchAdminSession(sessionId: string, ipAddress: string, userAgent: string, expiresAt: string): Promise<void> {
+    await this.pool.query(
+      `
+        UPDATE admin_sessions
+        SET ip_address = ?,
+            user_agent = ?,
+            last_seen_at = NOW(),
+            expires_at = ?,
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [ipAddress, userAgent, toSqlDateTime(expiresAt), sessionId],
+    );
+  }
+
+  async revokeAdminSession(sessionId: string): Promise<void> {
+    await this.pool.query(
+      `
+        UPDATE admin_sessions
+        SET revoked_at = COALESCE(revoked_at, NOW()),
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [sessionId],
+    );
+  }
+
+  async revokeAdminSessionsByUserId(adminUserId: string): Promise<void> {
+    await this.pool.query(
+      `
+        UPDATE admin_sessions
+        SET revoked_at = COALESCE(revoked_at, NOW()),
+            updated_at = NOW()
+        WHERE admin_user_id = ?
+      `,
+      [adminUserId],
+    );
+  }
+
+  async getAdminSessionPayload(adminUserId: string): Promise<AdminSessionPayload | null> {
+    const [row] = await this.queryRows(
+      `
+        SELECT id, email, full_name, role, status, mfa_enabled, last_login_at, created_at, updated_at
+        FROM admin_users
+        WHERE id = ?
+        LIMIT 1
+      `,
+      [adminUserId],
+    );
+
+    return row ? buildAdminSessionPayloadFromRow(row) : null;
+  }
+
+  async saveAdminMfaSecret(adminUserId: string, secretEncrypted: string, enabled: boolean): Promise<AdminUserProfile> {
+    await this.pool.query(
+      `
+        UPDATE admin_users
+        SET mfa_secret_encrypted = ?,
+            mfa_enabled = ?,
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [secretEncrypted, enabled ? 1 : 0, adminUserId],
+    );
+
+    const [row] = await this.queryRows(
+      `
+        SELECT id, email, full_name, role, status, mfa_enabled, last_login_at, created_at, updated_at
+        FROM admin_users
+        WHERE id = ?
+        LIMIT 1
+      `,
+      [adminUserId],
+    );
+
+    if (!row) {
+      throw new Error('Administrador nao encontrado.');
+    }
+
+    return toPublicAdminUser(row);
+  }
+
+  async createAdminPasswordResetToken(input: CreateAdminPasswordResetTokenInput): Promise<AdminPasswordResetTokenRecord> {
+    const id = createId('admin-reset');
+    await this.pool.query(
+      `
+        INSERT INTO admin_password_resets (
+          id, admin_user_id, token_hash, ip_address, user_agent, expires_at, used_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, NULL, NOW(), NOW())
+      `,
+      [
+        id,
+        input.adminUserId,
+        input.tokenHash,
+        input.ipAddress,
+        input.userAgent,
+        toSqlDateTime(input.expiresAt),
+      ],
+    );
+
+    const [row] = await this.queryRows(
+      `
+        SELECT r.id, r.admin_user_id, r.expires_at, r.used_at, u.email
+        FROM admin_password_resets r
+        INNER JOIN admin_users u ON u.id = r.admin_user_id
+        WHERE r.id = ?
+        LIMIT 1
+      `,
+      [id],
+    );
+
+    if (!row) {
+      throw new Error('Nao foi possivel criar o token de recuperacao.');
+    }
+
+    return {
+      adminUserId: String(row.admin_user_id),
+      email: row.email || '',
+      expiresAt: toIsoDateTime(row.expires_at),
+      id: String(row.id),
+      usedAt: row.used_at ? toIsoDateTime(row.used_at) : null,
+    };
+  }
+
+  async getAdminPasswordResetByTokenHash(tokenHash: string): Promise<AdminPasswordResetTokenRecord | null> {
+    const [row] = await this.queryRows(
+      `
+        SELECT r.id, r.admin_user_id, r.expires_at, r.used_at, u.email
+        FROM admin_password_resets r
+        INNER JOIN admin_users u ON u.id = r.admin_user_id
+        WHERE r.token_hash = ?
+        LIMIT 1
+      `,
+      [tokenHash],
+    );
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      adminUserId: String(row.admin_user_id),
+      email: row.email || '',
+      expiresAt: toIsoDateTime(row.expires_at),
+      id: String(row.id),
+      usedAt: row.used_at ? toIsoDateTime(row.used_at) : null,
+    };
+  }
+
+  async markAdminPasswordResetTokenUsed(id: string): Promise<void> {
+    await this.pool.query(
+      `
+        UPDATE admin_password_resets
+        SET used_at = COALESCE(used_at, NOW()),
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [id],
+    );
+  }
+
+  async recordAdminLoginFailure(adminUserId: string, failedAttempts: number, lockedUntil: string | null): Promise<void> {
+    await this.pool.query(
+      `
+        UPDATE admin_users
+        SET failed_login_attempts = ?,
+            locked_until = ?,
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [failedAttempts, toSqlDateTime(lockedUntil), adminUserId],
+    );
+  }
+
+  async updateAdminPassword(adminUserId: string, passwordHash: string): Promise<void> {
+    await this.pool.query(
+      `
+        UPDATE admin_users
+        SET password_hash = ?,
+            failed_login_attempts = 0,
+            locked_until = NULL,
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [passwordHash, adminUserId],
+    );
+  }
+
+  async createAuditLog(input: AuditLogInput): Promise<void> {
+    await this.pool.query(
+      `
+        INSERT INTO audit_logs (
+          actor_type, actor_id, actor_email, entity_type, entity_id,
+          action, ip_address, user_agent, diff_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+      `,
+      [
+        input.actorType || 'system',
+        input.actorId || '',
+        input.actorEmail || '',
+        input.entityType,
+        input.entityId,
+        input.action,
+        input.ipAddress || '',
+        input.userAgent || '',
+        input.diffJson ? JSON.stringify(input.diffJson) : null,
+      ],
+    );
   }
 
   async findCustomerAuthByEmail(email: string): Promise<CustomerAuthLookup | null> {

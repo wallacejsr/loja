@@ -1,10 +1,13 @@
 import { mkdir } from 'node:fs/promises';
 import express from 'express';
 import { getStoreApiConfig } from './config';
+import { hashPassword } from './auth/password';
+import { registerAdminAuthRoutes } from './auth/registerAdminAuthRoutes';
 import { registerCustomerAuthRoutes } from './auth/registerCustomerAuthRoutes';
 import { registerStripeRoutes } from './integrations/registerStripeRoutes';
 import { attachRequestContext } from './http/middleware/attachRequestContext';
 import { createRateLimitMiddleware } from './http/middleware/createRateLimitMiddleware';
+import { enforceHttps } from './http/middleware/enforceHttps';
 import { parseRequestCookies } from './http/middleware/parseRequestCookies';
 import { applySecurityHeaders } from './http/middleware/applySecurityHeaders';
 import { createCorsMiddleware } from './http/createCorsMiddleware';
@@ -17,6 +20,9 @@ export async function createStoreApiApp() {
   const config = getStoreApiConfig();
   const dataDriver = getConfiguredStoreDriver();
   const repository = await createStoreRepository();
+  const bootstrapAdminEmail = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase();
+  const bootstrapAdminPassword = process.env.ADMIN_BOOTSTRAP_PASSWORD || '';
+  const bootstrapAdminName = process.env.ADMIN_BOOTSTRAP_NAME?.trim() || 'Administrator';
   const app = express();
 
   app.disable('x-powered-by');
@@ -27,7 +33,18 @@ export async function createStoreApiApp() {
 
   await mkdir(config.uploadsRoot, { recursive: true });
 
+  if (bootstrapAdminEmail && bootstrapAdminPassword) {
+    const passwordHash = await hashPassword(bootstrapAdminPassword, config);
+    await repository.ensureAdminUser({
+      email: bootstrapAdminEmail,
+      fullName: bootstrapAdminName,
+      passwordHash,
+      role: 'administrator',
+    });
+  }
+
   app.use(attachRequestContext());
+  app.use(enforceHttps(config));
   app.use(createCorsMiddleware(config));
   app.use(applySecurityHeaders());
   app.use(parseRequestCookies());
@@ -45,9 +62,10 @@ export async function createStoreApiApp() {
   app.use('/uploads', express.static(config.uploadsRoot));
 
   app.use('/api', registerCoreRoutes(config, dataDriver));
+  app.use('/api/admin', registerAdminAuthRoutes(repository, config));
   app.use('/api/account', registerCustomerAuthRoutes(repository, config));
-  app.use('/api/integrations', registerStripeRoutes());
-  app.use('/api/store', registerStoreRoutes(repository, config.uploadsRoot));
+  app.use('/api/integrations', registerStripeRoutes(repository, config));
+  app.use('/api/store', registerStoreRoutes(repository, config, config.uploadsRoot));
   app.use('/api/shipping', registerShippingRoute());
 
   app.use('/api', (request, response) => {
