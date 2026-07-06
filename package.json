@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "security:smoke": "tsx scripts/security-smoke-test.ts",
     "migrate:supabase:mariadb": "tsx scripts/migrate-supabase-to-mariadb.ts --execute --replace-target",
     "migrate:supabase:mariadb:dry": "tsx scripts/migrate-supabase-to-mariadb.ts"
   },
