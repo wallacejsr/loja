@@ -78,6 +78,27 @@ export async function createStoreApiApp() {
       maxRequests: 20,
       windowMs: 10 * 60_000,
     },
+    {
+      id: 'stripe-public-checkout',
+      paths: ['/api/integrations/stripe/checkout-session'],
+      methods: ['POST'],
+      maxRequests: 15,
+      windowMs: 10 * 60_000,
+    },
+    {
+      id: 'stripe-public-session-status',
+      paths: ['/api/integrations/stripe/session-status'],
+      methods: ['GET'],
+      maxRequests: 30,
+      windowMs: 10 * 60_000,
+    },
+    {
+      id: 'stripe-webhook',
+      paths: ['/api/integrations/stripe/webhook'],
+      methods: ['POST'],
+      maxRequests: 120,
+      windowMs: 60_000,
+    },
   ]));
   app.use(express.json({
     limit: config.bodyLimit,

@@ -204,6 +204,32 @@ function toStripeAmount(value: number) {
   return Math.round(value * 100);
 }
 
+function toMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function isValidOrderNumber(orderNumber: string) {
+  return /^#[A-Z0-9_-]{6,40}$/i.test(orderNumber.trim());
+}
+
+function isSupportedCountryCode(country: string) {
+  return /^[A-Z]{2}$/.test(country.trim().toUpperCase());
+}
+
+function ensureSafeText(value: string, field: string, maxLength: number) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    throw new Error(`${field} is required.`);
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new Error(`${field} exceeds the maximum allowed length.`);
+  }
+
+  return trimmed;
+}
+
 function buildVariantDescription(item: CheckoutItemPayload) {
   const parts = [
     item.size ? `Size: ${item.size}` : '',
@@ -307,12 +333,41 @@ function validateRequestBody(body: CheckoutSessionRequestBody | undefined) {
     throw new Error('Customer name and email are required.');
   }
 
+  if (!isValidOrderNumber(body.orderNumber || '')) {
+    throw new Error('Invalid order number for Stripe checkout.');
+  }
+
   if (!Array.isArray(body.items) || body.items.length === 0) {
     throw new Error('Your cart is empty.');
   }
 
+  if (body.items.length > 100) {
+    throw new Error('Your cart exceeds the maximum number of items allowed for checkout.');
+  }
+
   if (body.shippingAddress.country !== 'US') {
     throw new Error('Stripe checkout is currently limited to shipping addresses in the United States.');
+  }
+
+  ensureSafeText(body.customer.name || '', 'Customer name', 120);
+  ensureSafeText(body.customer.email || '', 'Customer email', 160);
+  ensureSafeText(body.customer.phone || '', 'Customer phone', 40);
+  ensureSafeText(body.shippingAddress.street || '', 'Shipping street', 160);
+  ensureSafeText(body.shippingAddress.number || '', 'Shipping number', 40);
+  ensureSafeText(body.shippingAddress.city || '', 'Shipping city', 100);
+  ensureSafeText(body.shippingAddress.region || '', 'Shipping state', 100);
+  ensureSafeText(body.shippingAddress.postalCode || '', 'Shipping postal code', 32);
+
+  if (!isSupportedCountryCode(body.shippingAddress.country || '')) {
+    throw new Error('Invalid shipping country.');
+  }
+
+  if (!Number.isFinite(body.subtotal) || body.subtotal < 0) {
+    throw new Error('Invalid subtotal amount sent to Stripe checkout.');
+  }
+
+  if (!Number.isFinite(body.shipping) || body.shipping < 0) {
+    throw new Error('Invalid shipping amount sent to Stripe checkout.');
   }
 
   if (!Number.isFinite(body.discount) || body.discount < 0) {
@@ -330,6 +385,31 @@ function validateRequestBody(body: CheckoutSessionRequestBody | undefined) {
 
   if (!hasSupportedMethod) {
     throw new Error('Enable at least one Stripe payment method before starting checkout.');
+  }
+}
+
+function validateItemsPayload(items: CheckoutItemPayload[]) {
+  for (const item of items) {
+    const id = String(item.id || '').trim();
+    const name = String(item.name || '').trim();
+    const quantity = Number(item.quantity || 0);
+    const unitPrice = Number(item.unitPrice || 0);
+
+    if (!id || id.length > 120) {
+      throw new Error('Invalid product identifier sent to Stripe checkout.');
+    }
+
+    if (!name || name.length > 160) {
+      throw new Error('Invalid product name sent to Stripe checkout.');
+    }
+
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 100) {
+      throw new Error('Invalid product quantity sent to Stripe checkout.');
+    }
+
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      throw new Error('Invalid product amount sent to Stripe checkout.');
+    }
   }
 }
 
@@ -379,6 +459,52 @@ function buildLineItems(
   }
 
   return productLineItems;
+}
+
+function calculateExpectedSubtotal(
+  body: CheckoutSessionRequestBody,
+  resolvedProducts: StoreProductRecord[],
+) {
+  if (resolvedProducts.length === 0) {
+    return null;
+  }
+
+  const productMap = new Map(resolvedProducts.map((product) => [product.id, product]));
+
+  const subtotal = body.items.reduce((sum, item) => {
+    const product = productMap.get(item.id);
+    if (!product) {
+      throw new Error('One or more products are no longer available for checkout.');
+    }
+
+    return sum + product.unitPrice * Math.max(1, Math.floor(item.quantity));
+  }, 0);
+
+  return toMoney(subtotal);
+}
+
+function validateServerCalculatedTotals(
+  body: CheckoutSessionRequestBody,
+  resolvedProducts: StoreProductRecord[],
+) {
+  const expectedSubtotal = calculateExpectedSubtotal(body, resolvedProducts);
+
+  if (expectedSubtotal === null) {
+    return;
+  }
+
+  const sentSubtotal = toMoney(Number(body.subtotal || 0));
+  const sentShipping = toMoney(Number(body.shipping || 0));
+  const sentDiscount = toMoney(Number(body.discount || 0));
+  const maxDelta = 0.01;
+
+  if (Math.abs(expectedSubtotal - sentSubtotal) > maxDelta) {
+    throw new Error('Checkout subtotal no longer matches the current catalog pricing.');
+  }
+
+  if (sentShipping < 0 || sentDiscount < 0) {
+    throw new Error('Invalid checkout totals.');
+  }
 }
 
 function buildStripeCheckoutParams(
@@ -506,6 +632,7 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
   try {
     const body = req.body;
     validateRequestBody(body);
+    validateItemsPayload(body.items);
 
     const stripeMode = body.settings.stripeMode === 'live' ? 'live' : 'test';
     const { secretKey } = await resolveStoredStripeSecretKey(stripeMode);
@@ -514,6 +641,7 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
     }
 
     const { products } = await resolveServerProducts(req, body.items);
+    validateServerCalculatedTotals(body, products);
     const lineItems = buildLineItems(req, body, products);
     const stripeCoupon = body.discount > 0
       ? await createStripeCoupon(secretKey, body.settings.stripeCurrency, body.discount, body.orderNumber)

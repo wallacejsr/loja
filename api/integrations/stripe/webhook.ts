@@ -298,24 +298,22 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
       console.error('Stripe webhook persistence warning:', error);
     }
 
+    if (persistenceError) {
+      console.error('Stripe webhook persistence warning:', {
+        eventId: String(event.id || ''),
+        eventType,
+        persistenceError,
+      });
+    }
+
     res.status(200).json({
       success: true,
       acknowledged: true,
-      eventId: String(event.id || ''),
-      eventType,
-      livemode: Boolean(event.livemode),
-      webhookMode: Boolean(event.livemode) ? 'live' : 'test',
-      webhookSource: verifiedSecret.source,
-      handled: isHandledCheckoutEvent(eventType),
-      orderNumber: sessionSnapshot?.orderNumber || '',
-      sessionId: sessionSnapshot?.sessionId || '',
-      persistenceError: persistenceError || null,
-      processedAt,
     });
   } catch (error) {
     res.status(400).json({
       success: false,
-      message: error instanceof Error ? error.message : 'Nao foi possivel processar o webhook Stripe.',
+      message: 'Nao foi possivel processar o webhook Stripe.',
     });
   }
 }

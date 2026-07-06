@@ -625,7 +625,7 @@ export function Checkout() {
       setStripeErrorMessage('');
 
       try {
-        const response = await fetch(`${buildIntegrationsApiUrl('/stripe/session-status')}?session_id=${encodeURIComponent(stripeSessionIdFromUrl)}`, {
+        const response = await fetch(`${buildIntegrationsApiUrl('/stripe/session-status')}?session_id=${encodeURIComponent(stripeSessionIdFromUrl)}&order_number=${encodeURIComponent(stripeOrderNumberFromUrl)}`, {
           cache: 'no-store',
         });
         const payload = await response.json() as StripeSessionStatusResponse | { message?: string; success?: false };

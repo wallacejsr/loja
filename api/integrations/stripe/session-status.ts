@@ -24,6 +24,13 @@ type StripeSessionStatusResponse = {
   success: true;
 };
 
+type TrackedStripeAdminOrder = {
+  orderNumber: string;
+  paymentStatus: string;
+  sessionStatus: string;
+  total: number;
+};
+
 function getQueryValue(query: VercelRequestLike['query'], key: string) {
   const value = query?.[key];
 
@@ -32,6 +39,14 @@ function getQueryValue(query: VercelRequestLike['query'], key: string) {
   }
 
   return value || '';
+}
+
+function isValidSessionId(value: string) {
+  return /^cs_(test_|live_)?[A-Za-z0-9_]+$/.test(value.trim());
+}
+
+function isValidOrderNumber(value: string) {
+  return /^#[A-Z0-9_-]{6,40}$/i.test(value.trim());
 }
 
 async function fetchStripeSession(sessionId: string, secretKey: string) {
@@ -69,6 +84,12 @@ function buildResponsePayload(session: any): StripeSessionStatusResponse {
   };
 }
 
+async function findTrackedOrder(orderNumber: string) {
+  const tracking = await import('./tracking.js');
+  const payload = await tracking.listTrackedStripeAdminOrders() as { orders: TrackedStripeAdminOrder[] };
+  return payload.orders.find((order) => order.orderNumber === orderNumber) || null;
+}
+
 export default async function handler(req: VercelRequestLike, res: VercelResponseLike) {
   if (req.method !== 'GET') {
     res.status(405).json({
@@ -81,11 +102,20 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
   res.setHeader?.('Cache-Control', 'no-store');
 
   const sessionId = getQueryValue(req.query, 'session_id').trim();
+  const orderNumber = getQueryValue(req.query, 'order_number').trim();
 
-  if (!sessionId) {
+  if (!sessionId || !orderNumber) {
     res.status(400).json({
       success: false,
-      message: 'session_id is required.',
+      message: 'session_id and order_number are required.',
+    });
+    return;
+  }
+
+  if (!isValidSessionId(sessionId) || !isValidOrderNumber(orderNumber)) {
+    res.status(400).json({
+      success: false,
+      message: 'Invalid Stripe session lookup parameters.',
     });
     return;
   }
@@ -105,6 +135,17 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
   for (const secretKey of secretKeys) {
     try {
       const session = await fetchStripeSession(sessionId, secretKey);
+      const resolvedOrderNumber = String(session?.metadata?.order_number || session?.client_reference_id || '').trim();
+
+      if (resolvedOrderNumber !== orderNumber) {
+        throw new Error('Stripe session does not match the informed order number.');
+      }
+
+      const trackedOrder = await findTrackedOrder(orderNumber);
+      if (!trackedOrder) {
+        throw new Error('Tracked Stripe order was not found for this checkout session.');
+      }
+
       res.status(200).json(buildResponsePayload(session));
       return;
     } catch (error) {
