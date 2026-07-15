@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { showToast } from '../../lib/adminUtils';
 import { type AddressCountryCode, getAdminTaxIdLabel, getPhoneDisplay, getWhatsAppUrl } from '../../lib/customerForm';
-import { ADMIN_ORDERS_STORAGE_KEY } from '../../lib/adminDataBridge';
 import { useAdminCurrency } from '../../hooks/useAdminCurrency';
 import { useDeferredSearchTerm } from '../../hooks/useDeferredSearchTerm';
 import {
@@ -27,7 +26,7 @@ type OrderStatus =
   | StripeTrackedAdminOrder['status']
   | 'Aguardando Pagamento'
   | 'Pago'
-  | 'Em Separação'
+  | 'Em SeparaÃ§Ã£o'
   | 'Enviado'
   | 'Entregue'
   | 'Cancelado';
@@ -78,7 +77,6 @@ type OrderCustomer = {
 };
 
 type AdminOrder = {
-  dataSource?: 'legacy-local' | 'stripe-server';
   id: string;
   orderNumber: string;
   purchaseDate: string;
@@ -102,251 +100,17 @@ type AdminOrder = {
 const statusOptions: OrderStatus[] = [
   'Aguardando Pagamento',
   'Pago',
-  'Em Separação',
+  'Em SeparaÃ§Ã£o',
   'Enviado',
   'Entregue',
   'Cancelado',
 ];
 
-const initialOrders: AdminOrder[] = [
-  {
-    id: 'order-1234',
-    orderNumber: '#1234',
-    purchaseDate: '2026-06-01T10:23:00-03:00',
-    status: 'Pago',
-    total: 359.9,
-    paymentMethod: 'Cartão de crédito',
-    customer: {
-      name: 'Maria Silva',
-      email: 'maria@exemplo.com',
-      phone: '64992023191',
-      cpf: '123.456.789-10',
-    },
-    shippingAddress: {
-      cep: '74000-100',
-      street: 'Rua 15',
-      number: '210',
-      complement: 'Apto 402',
-      district: 'Centro',
-      city: 'Goiânia',
-      state: 'GO',
-    },
-    items: [
-      { id: '1', name: 'Conjunto Alfaiataria Bege', sku: 'CAF-BG-38', quantity: 1, unitPrice: 249.9, subtotal: 249.9 },
-      { id: '2', name: 'Blusa Tricô Off White', sku: 'BTO-OW-U', quantity: 1, unitPrice: 130, subtotal: 130 },
-    ],
-    subtotal: 379.9,
-    shipping: 20,
-    discount: 40,
-    history: {
-      createdAt: '2026-06-01T10:23:00-03:00',
-      paidAt: '2026-06-01T10:27:00-03:00',
-    },
-    logs: [
-      {
-        id: 'log-1234-1',
-        user: 'Sistema',
-        dateTime: '2026-06-01T10:23:00-03:00',
-        ip: '127.0.0.1',
-        action: 'Pedido criado com status Aguardando Pagamento',
-      },
-      {
-        id: 'log-1234-2',
-        user: 'Sistema',
-        dateTime: '2026-06-01T10:27:00-03:00',
-        ip: '127.0.0.1',
-        action: 'Pagamento confirmado automaticamente',
-      },
-    ],
-  },
-  {
-    id: 'order-1233',
-    orderNumber: '#1233',
-    purchaseDate: '2026-06-01T09:12:00-03:00',
-    status: 'Aguardando Pagamento',
-    total: 1250,
-    paymentMethod: 'Pix',
-    customer: {
-      name: 'João Souza',
-      email: 'joao@exemplo.com',
-      phone: '64999998888',
-      cpf: '456.789.123-00',
-    },
-    shippingAddress: {
-      cep: '74934-220',
-      street: 'Avenida das Flores',
-      number: '98',
-      district: 'Jardim Europa',
-      city: 'Aparecida de Goiânia',
-      state: 'GO',
-    },
-    items: [
-      { id: '1', name: 'Vestido Midi Verde', sku: 'VMV-40', quantity: 2, unitPrice: 299, subtotal: 598 },
-      { id: '2', name: 'Calça Linho Caramelo', sku: 'CLC-42', quantity: 1, unitPrice: 220, subtotal: 220 },
-      { id: '3', name: 'Camisa Premium', sku: 'CPR-M', quantity: 2, unitPrice: 210, subtotal: 420 },
-    ],
-    subtotal: 1238,
-    shipping: 22,
-    discount: 10,
-    history: {
-      createdAt: '2026-06-01T09:12:00-03:00',
-    },
-    logs: [
-      {
-        id: 'log-1233-1',
-        user: 'Sistema',
-        dateTime: '2026-06-01T09:12:00-03:00',
-        ip: '127.0.0.1',
-        action: 'Pedido criado com status Aguardando Pagamento',
-      },
-    ],
-  },
-  {
-    id: 'order-1232',
-    orderNumber: '#1232',
-    purchaseDate: '2026-05-31T16:45:00-03:00',
-    status: 'Enviado',
-    total: 89.9,
-    paymentMethod: 'Cartão de crédito',
-    customer: {
-      name: 'Ana Paula',
-      email: 'ana@exemplo.com',
-      phone: '64998887766',
-    },
-    shippingAddress: {
-      cep: '74823-350',
-      street: 'Rua das Palmeiras',
-      number: '14',
-      district: 'Parque Amazônia',
-      city: 'Goiânia',
-      state: 'GO',
-    },
-    items: [{ id: '1', name: 'Top Canelado Preto', sku: 'TCP-U', quantity: 1, unitPrice: 89.9, subtotal: 89.9 }],
-    subtotal: 89.9,
-    shipping: 0,
-    discount: 0,
-    history: {
-      createdAt: '2026-05-31T16:45:00-03:00',
-      paidAt: '2026-05-31T16:48:00-03:00',
-      shippedAt: '2026-06-01T08:10:00-03:00',
-    },
-    logs: [
-      {
-        id: 'log-1232-1',
-        user: 'Sistema',
-        dateTime: '2026-05-31T16:45:00-03:00',
-        ip: '127.0.0.1',
-        action: 'Pedido criado com status Aguardando Pagamento',
-      },
-      {
-        id: 'log-1232-2',
-        user: 'Admin Loja',
-        dateTime: '2026-06-01T08:10:00-03:00',
-        ip: '127.0.0.1',
-        action: 'Status alterado para Enviado',
-      },
-    ],
-  },
-  {
-    id: 'order-1231',
-    orderNumber: '#1231',
-    purchaseDate: '2026-05-31T14:20:00-03:00',
-    status: 'Entregue',
-    total: 450.5,
-    paymentMethod: 'Pix',
-    customer: {
-      name: 'Carlos Eduardo',
-      email: 'carlos@exemplo.com',
-      phone: '64991112222',
-      cpf: '987.123.654-90',
-    },
-    shippingAddress: {
-      cep: '75083-310',
-      street: 'Rua do Comércio',
-      number: '501',
-      complement: 'Sala 3',
-      district: 'Vila Jaiara',
-      city: 'Anápolis',
-      state: 'GO',
-    },
-    items: [
-      { id: '1', name: 'Calça Wide Off White', sku: 'CWO-40', quantity: 1, unitPrice: 199.9, subtotal: 199.9 },
-      { id: '2', name: 'Camiseta Cotton Premium', sku: 'CCP-G', quantity: 1, unitPrice: 150.6, subtotal: 150.6 },
-      { id: '3', name: 'Cinto Couro Café', sku: 'CCC-U', quantity: 1, unitPrice: 120, subtotal: 120 },
-    ],
-    subtotal: 470.5,
-    shipping: 0,
-    discount: 20,
-    history: {
-      createdAt: '2026-05-31T14:20:00-03:00',
-      paidAt: '2026-05-31T14:25:00-03:00',
-      shippedAt: '2026-05-31T18:40:00-03:00',
-      deliveredAt: '2026-06-01T12:15:00-03:00',
-    },
-    logs: [
-      {
-        id: 'log-1231-1',
-        user: 'Sistema',
-        dateTime: '2026-05-31T14:20:00-03:00',
-        ip: '127.0.0.1',
-        action: 'Pedido criado com status Aguardando Pagamento',
-      },
-      {
-        id: 'log-1231-2',
-        user: 'Admin Loja',
-        dateTime: '2026-06-01T12:15:00-03:00',
-        ip: '127.0.0.1',
-        action: 'Status alterado para Entregue',
-      },
-    ],
-  },
-  {
-    id: 'order-1230',
-    orderNumber: '#1230',
-    purchaseDate: '2026-05-30T11:00:00-03:00',
-    status: 'Cancelado',
-    total: 299,
-    paymentMethod: 'Boleto',
-    customer: {
-      name: 'Fernanda Lima',
-      email: 'fernanda@exemplo.com',
-      phone: '64994445555',
-    },
-    shippingAddress: {
-      cep: '74395-120',
-      street: 'Alameda das Rosas',
-      number: '73',
-      district: 'Setor Oeste',
-      city: 'Goiânia',
-      state: 'GO',
-    },
-    items: [{ id: '1', name: 'Saia Midi Nude', sku: 'SMN-38', quantity: 1, unitPrice: 299, subtotal: 299 }],
-    subtotal: 299,
-    shipping: 0,
-    discount: 0,
-    history: {
-      createdAt: '2026-05-30T11:00:00-03:00',
-    },
-    logs: [
-      {
-        id: 'log-1230-1',
-        user: 'Admin Loja',
-        dateTime: '2026-05-30T18:02:00-03:00',
-        ip: '127.0.0.1',
-        action: 'Pedido cancelado por falta de pagamento',
-      },
-    ],
-  },
-];
-
-function getOrderDocumentLabel(order: AdminOrder) {
-  return order.customer.documentLabel || getAdminTaxIdLabel(order.shippingAddress.country, 'F');
-}
-
 const statusTone: Record<string, string> = {
   'Aguardando Pagamento': 'bg-amber-50 text-amber-600',
   Pago: 'bg-emerald-50 text-emerald-600',
-  'Em Separação': 'bg-violet-50 text-violet-600',
+  'Em SeparaÃ§Ã£o': 'bg-violet-50 text-violet-600',
+  'Em Separacao': 'bg-violet-50 text-violet-600',
   Enviado: 'bg-blue-50 text-blue-600',
   Entregue: 'bg-neutral-100 text-neutral-600',
   Cancelado: 'bg-red-50 text-red-600',
@@ -371,54 +135,6 @@ function normalizeStatusKey(value: string) {
     .trim();
 }
 
-function withOrderSource(order: AdminOrder, dataSource: 'legacy-local' | 'stripe-server'): AdminOrder {
-  return {
-    ...order,
-    dataSource,
-  };
-}
-
-function loadCachedOrders(): AdminOrder[] {
-  if (typeof window === 'undefined') {
-    return initialOrders.map((order) => withOrderSource(order, 'legacy-local'));
-  }
-
-  try {
-    const storedOrders = window.localStorage.getItem(ADMIN_ORDERS_STORAGE_KEY);
-
-    if (!storedOrders) {
-      return initialOrders.map((order) => withOrderSource(order, 'legacy-local'));
-    }
-
-    const parsed = JSON.parse(storedOrders) as AdminOrder[];
-    return Array.isArray(parsed)
-      ? parsed.map((order) => withOrderSource(order, order.dataSource || 'legacy-local'))
-      : initialOrders.map((order) => withOrderSource(order, 'legacy-local'));
-  } catch (error) {
-    console.error('Falha ao carregar pedidos do painel', error);
-    return initialOrders.map((order) => withOrderSource(order, 'legacy-local'));
-  }
-}
-
-function mergeOrders(serverOrders: StripeTrackedAdminOrder[], cachedOrders: AdminOrder[]) {
-  const merged = new Map<string, AdminOrder>();
-
-  for (const order of cachedOrders) {
-    merged.set(order.orderNumber, withOrderSource(order, order.dataSource || 'legacy-local'));
-  }
-
-  for (const order of serverOrders) {
-    merged.set(order.orderNumber, {
-      ...order,
-      dataSource: 'stripe-server',
-    });
-  }
-
-  return [...merged.values()].sort(
-    (left, right) => new Date(right.purchaseDate).getTime() - new Date(left.purchaseDate).getTime(),
-  );
-}
-
 function resolveStatusTone(status: string) {
   if (statusTone[status]) {
     return statusTone[status];
@@ -431,9 +147,19 @@ function resolveStatusTone(status: string) {
   return 'bg-neutral-100 text-neutral-600';
 }
 
+function getOrderDocumentLabel(order: AdminOrder) {
+  return order.customer.documentLabel || getAdminTaxIdLabel(order.shippingAddress.country, 'F');
+}
+
+function mapServerOrders(serverOrders: StripeTrackedAdminOrder[]): AdminOrder[] {
+  return [...serverOrders]
+    .map((order) => ({ ...order }))
+    .sort((left, right) => new Date(right.purchaseDate).getTime() - new Date(left.purchaseDate).getTime());
+}
+
 export function Orders() {
   const { formatCurrency } = useAdminCurrency();
-  const [orders, setOrders] = useState<AdminOrder[]>(() => loadCachedOrders());
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -441,22 +167,21 @@ export function Orders() {
   const [statusMenuOrderId, setStatusMenuOrderId] = useState<string | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState('');
-  const [trackingBackend, setTrackingBackend] = useState<'file' | 'supabase' | null>(null);
+  const [trackingBackend, setTrackingBackend] = useState<'file' | 'supabase' | 'mariadb' | null>(null);
   const normalizedSearchTerm = useDeferredSearchTerm(searchTerm);
 
   const loadOrders = React.useCallback(async () => {
-    const cachedOrders = loadCachedOrders();
-    setOrders(cachedOrders);
     setOrdersLoading(true);
     setOrdersError('');
 
     try {
       const payload = await getStripeTrackedOrders();
       setTrackingBackend(payload.backend);
-      setOrders(mergeOrders(payload.orders, cachedOrders));
+      setOrders(mapServerOrders(payload.orders));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Nao foi possivel sincronizar os pedidos Stripe.';
+      const message = error instanceof Error ? error.message : 'Nao foi possivel sincronizar os pedidos.';
       setOrdersError(message);
+      setOrders([]);
     } finally {
       setOrdersLoading(false);
     }
@@ -466,25 +191,15 @@ export function Orders() {
     void loadOrders();
   }, [loadOrders]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      window.localStorage.setItem(ADMIN_ORDERS_STORAGE_KEY, JSON.stringify(orders));
-    } catch (error) {
-      console.error('Falha ao persistir pedidos do painel', error);
-    }
-  }, [orders]);
-
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       const matchesSearch =
-        !normalizedSearchTerm ||
-        order.orderNumber.toLowerCase().includes(normalizedSearchTerm) ||
-        order.customer.name.toLowerCase().includes(normalizedSearchTerm) ||
-        order.customer.email.toLowerCase().includes(normalizedSearchTerm);
+        !normalizedSearchTerm
+        || order.orderNumber.toLowerCase().includes(normalizedSearchTerm)
+        || order.customer.name.toLowerCase().includes(normalizedSearchTerm)
+        || order.customer.email.toLowerCase().includes(normalizedSearchTerm);
 
-      const matchesStatus = !statusFilter || order.status === statusFilter;
+      const matchesStatus = !statusFilter || normalizeStatusKey(order.status) === normalizeStatusKey(statusFilter);
 
       return matchesSearch && matchesStatus;
     });
@@ -492,12 +207,15 @@ export function Orders() {
 
   const orderSummary = useMemo(() => orders.reduce((summary, order) => {
     summary.totalOrders += 1;
-    if (['Aguardando Pagamento', 'Pago', 'Em SeparaÃ§Ã£o'].includes(order.status)) {
+
+    if (['aguardando pagamento', 'pago', 'em separacao'].includes(normalizeStatusKey(order.status))) {
       summary.pendingAction += 1;
     }
-    if (order.status === 'Enviado') {
+
+    if (normalizeStatusKey(order.status) === 'enviado') {
       summary.inTransit += 1;
     }
+
     summary.totalRevenue += order.total;
     return summary;
   }, {
@@ -517,72 +235,27 @@ export function Orders() {
     [orders, selectedOrderId],
   );
 
-  const getSessionIp = () => {
-    if (typeof window === 'undefined') return '127.0.0.1';
-    const hostname = window.location.hostname;
-    return hostname === 'localhost' || hostname === '127.0.0.1' ? '127.0.0.1' : hostname;
-  };
-
   const updateOrderStatus = async (order: AdminOrder, nextStatus: OrderStatus) => {
-    if (order.status === nextStatus) {
+    if (normalizeStatusKey(order.status) === normalizeStatusKey(nextStatus)) {
       setStatusMenuOrderId(null);
       return;
     }
 
-    if (order.dataSource === 'stripe-server') {
-      try {
-        const payload = await updateStripeTrackedOrderStatus(order.orderNumber, nextStatus, adminUserName);
-        setOrders((currentOrders) =>
-          currentOrders.map((currentOrder) =>
-            currentOrder.orderNumber === order.orderNumber
-              ? {
-                  ...payload.order,
-                  dataSource: 'stripe-server',
-                }
-              : currentOrder,
-          ),
-        );
-        showToast(`Status atualizado para ${nextStatus}.`);
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : 'Nao foi possivel atualizar o status deste pedido.');
-      } finally {
-        setStatusMenuOrderId(null);
-      }
-      return;
+    try {
+      const payload = await updateStripeTrackedOrderStatus(order.orderNumber, nextStatus, adminUserName);
+      setOrders((currentOrders) =>
+        currentOrders.map((currentOrder) =>
+          currentOrder.orderNumber === order.orderNumber
+            ? { ...payload.order }
+            : currentOrder,
+        ),
+      );
+      showToast(`Status atualizado para ${nextStatus}.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Nao foi possivel atualizar o status deste pedido.');
+    } finally {
+      setStatusMenuOrderId(null);
     }
-
-    setOrders((currentOrders) =>
-      currentOrders.map((currentOrder) => {
-        if (currentOrder.id !== order.id) return currentOrder;
-        if (currentOrder.status === nextStatus) return currentOrder;
-
-        const now = new Date().toISOString();
-        const nextHistory: OrderHistory = { ...currentOrder.history };
-
-        if (nextStatus === 'Pago' && !nextHistory.paidAt) nextHistory.paidAt = now;
-        if (nextStatus === 'Enviado' && !nextHistory.shippedAt) nextHistory.shippedAt = now;
-        if (nextStatus === 'Entregue' && !nextHistory.deliveredAt) nextHistory.deliveredAt = now;
-
-        return {
-          ...currentOrder,
-          status: nextStatus,
-          history: nextHistory,
-          logs: [
-            {
-              id: crypto.randomUUID(),
-              user: adminUserName,
-              dateTime: now,
-              ip: getSessionIp(),
-              action: `Status alterado para ${nextStatus}`,
-            },
-            ...currentOrder.logs,
-          ],
-        };
-      }),
-    );
-
-    setStatusMenuOrderId(null);
-    showToast(`Status atualizado para ${nextStatus}.`);
   };
 
   const openWhatsApp = (order: AdminOrder) => {
@@ -599,7 +272,7 @@ export function Orders() {
   const openEmail = (order: AdminOrder) => {
     const subject = encodeURIComponent(`Pedido ${order.orderNumber}`);
     const body = encodeURIComponent(
-      `Olá ${order.customer.name},\n\nEstamos entrando em contato referente ao seu pedido.\n\nAtenciosamente,\nEquipe da Loja`,
+      `OlÃ¡ ${order.customer.name},\n\nEstamos entrando em contato referente ao seu pedido.\n\nAtenciosamente,\nEquipe da Loja`,
     );
     window.location.href = `mailto:${order.customer.email}?subject=${subject}&body=${body}`;
     setContactMenuOrderId(null);
@@ -608,7 +281,7 @@ export function Orders() {
   const printOrder = (order: AdminOrder) => {
     const printWindow = window.open('', '_blank', 'width=980,height=760');
     if (!printWindow) {
-      showToast('Não foi possível abrir a janela de impressão.');
+      showToast('NÃ£o foi possÃ­vel abrir a janela de impressÃ£o.');
       return;
     }
 
@@ -664,7 +337,7 @@ export function Orders() {
               <div>${order.customer.name}</div>
               <div>${order.customer.email}</div>
               <div>${formatPhone(order.customer.phoneE164 || order.customer.phone, order.customer.phoneCountry || 'BR')}</div>
-              <div>${documentLabel}: ${order.customer.cpf || 'Não informado'}</div>
+              <div>${documentLabel}: ${order.customer.cpf || 'NÃ£o informado'}</div>
             </div>
             <div class="card">
               <h2>Entrega</h2>
@@ -683,7 +356,7 @@ export function Orders() {
                   <th>Produto</th>
                   <th>SKU</th>
                   <th>Qtd.</th>
-                  <th>Unitário</th>
+                  <th>UnitÃ¡rio</th>
                   <th>Subtotal</th>
                 </tr>
               </thead>
@@ -705,9 +378,9 @@ export function Orders() {
               <thead>
                 <tr>
                   <th>Data/Hora</th>
-                  <th>Usuário</th>
+                  <th>UsuÃ¡rio</th>
                   <th>IP</th>
-                  <th>Ação</th>
+                  <th>AÃ§Ã£o</th>
                 </tr>
               </thead>
               <tbody>${logsRows}</tbody>
@@ -742,19 +415,19 @@ export function Orders() {
 
       {trackingBackend ? (
         <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-[12px] leading-relaxed text-sky-700">
-          Pedidos Stripe sincronizados pelo backend <span className="font-semibold">{trackingBackend}</span>. Quando o cliente conclui o pagamento, o painel passa a enxergar a trilha server-side do checkout.
+          Pedidos sincronizados pelo backend <span className="font-semibold">{trackingBackend}</span>. A tela agora exibe apenas registros reais retornados pela API.
         </div>
       ) : null}
 
       {ordersError ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] leading-relaxed text-amber-700">
-          Nao conseguimos sincronizar os pedidos Stripe agora. O painel segue exibindo o cache local enquanto a conexao nao volta. Detalhe: {ordersError}
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-[12px] leading-relaxed text-red-700">
+          Nao foi possivel carregar os pedidos reais agora. Detalhe: {ordersError}
         </div>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">
         <SummaryCard label="Total de pedidos" value={String(orderSummary.totalOrders)} />
-        <SummaryCard label="Aguardando ação" value={String(orders.filter((order) => ['Aguardando Pagamento', 'Pago', 'Em Separação'].includes(order.status)).length)} />
+        <SummaryCard label="Aguardando aÃ§Ã£o" value={String(orderSummary.pendingAction)} />
         <SummaryCard label="Em transporte" value={String(orderSummary.inTransit)} />
         <SummaryCard label="Faturamento listado" value={formatCurrency(orderSummary.totalRevenue)} />
       </div>
@@ -798,11 +471,29 @@ export function Orders() {
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Status</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Itens</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">Total</th>
-                <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">Ações</th>
+                <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">AÃ§Ãµes</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100/60">
-              {orderRows.map(({ order, itemCount }) => (
+              {ordersLoading ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-10 text-center text-[13px] text-neutral-500">
+                    Carregando pedidos reais...
+                  </td>
+                </tr>
+              ) : null}
+
+              {!ordersLoading && orderRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-10 text-center text-[13px] text-neutral-500">
+                    {orders.length === 0
+                      ? 'Nenhum pedido real foi encontrado ainda.'
+                      : 'Nenhum pedido encontrado com os filtros atuais.'}
+                  </td>
+                </tr>
+              ) : null}
+
+              {!ordersLoading && orderRows.map(({ order, itemCount }) => (
                 <tr key={order.id} className="hover:bg-neutral-50/50 transition-colors group cursor-pointer" onClick={() => setSelectedOrderId(order.id)}>
                   <td className="py-4 px-6">
                     <div className="font-medium text-[13px] text-neutral-900 group-hover:text-blue-600 transition-colors">{order.orderNumber}</div>
@@ -900,7 +591,7 @@ export function Orders() {
                                 type="button"
                                 className={`
                                   w-full rounded-xl px-3 py-2 text-sm text-left transition-colors
-                                  ${order.status === status ? 'bg-neutral-900 text-white' : 'hover:bg-neutral-50 text-neutral-700'}
+                                  ${normalizeStatusKey(order.status) === normalizeStatusKey(status) ? 'bg-neutral-900 text-white' : 'hover:bg-neutral-50 text-neutral-700'}
                                 `}
                                 onClick={(event) => {
                                   event.stopPropagation();
@@ -923,17 +614,12 @@ export function Orders() {
 
         <div className="p-4 border-t border-neutral-100/60 flex items-center justify-between text-[13px] text-neutral-500 bg-white">
           <div>
-            Mostrando <span className="font-medium text-neutral-900">1</span> a{' '}
+            Mostrando <span className="font-medium text-neutral-900">{orderRows.length === 0 ? 0 : 1}</span> a{' '}
             <span className="font-medium text-neutral-900">{filteredOrders.length}</span> de{' '}
             <span className="font-medium text-neutral-900">{orders.length}</span> pedidos
           </div>
-          <div className="flex gap-2">
-            <button className="px-4 py-2 border border-neutral-200/60 rounded-xl hover:bg-neutral-50 disabled:opacity-50 text-[11px] font-semibold uppercase tracking-wider transition-colors">
-              Anterior
-            </button>
-            <button className="px-4 py-2 border border-neutral-200/60 rounded-xl hover:bg-neutral-50 text-neutral-900 text-[11px] font-semibold uppercase tracking-wider transition-colors">
-              Próxima
-            </button>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
+            Lista em tempo real
           </div>
         </div>
       </div>
@@ -979,7 +665,7 @@ function OrderDetailsModal({
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-neutral-500">Pedido {order.orderNumber}</div>
             <h3 className="mt-2 text-2xl font-serif text-neutral-900">Detalhes completos do pedido</h3>
-            <p className="mt-1 text-[13px] text-neutral-500">Consulta operacional, auditoria e atualização de status em um só lugar.</p>
+            <p className="mt-1 text-[13px] text-neutral-500">Consulta operacional, auditoria e atualizaÃ§Ã£o de status em um sÃ³ lugar.</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -999,7 +685,7 @@ function OrderDetailsModal({
 
         <div className="max-h-[calc(92vh-88px)] overflow-y-auto p-6 md:p-8 space-y-8">
           <section className="grid gap-4 md:grid-cols-4">
-            <InfoCard icon={<Package className="w-4 h-4" />} label="Número do pedido" value={order.orderNumber} />
+            <InfoCard icon={<Package className="w-4 h-4" />} label="NÃºmero do pedido" value={order.orderNumber} />
             <InfoCard icon={<RotateCw className="w-4 h-4" />} label="Status atual" value={<StatusBadge status={order.status} />} />
             <InfoCard icon={<ChevronDown className="w-4 h-4" />} label="Forma de pagamento" value={order.paymentMethod} />
             <InfoCard icon={<MapPin className="w-4 h-4" />} label="Total" value={formatCurrency(order.total)} />
@@ -1012,15 +698,15 @@ function OrderDetailsModal({
                   <DetailField label="Nome completo" value={order.customer.name} />
                   <DetailField label="E-mail" value={order.customer.email} />
                   <DetailField label="Telefone" value={formatPhone(order.customer.phoneE164 || order.customer.phone, order.customer.phoneCountry || 'BR')} />
-                  <DetailField label={getOrderDocumentLabel(order)} value={order.customer.cpf || 'Não informado'} />
+                  <DetailField label={getOrderDocumentLabel(order)} value={order.customer.cpf || 'NÃ£o informado'} />
                 </div>
               </Panel>
 
-              <Panel title="Endereço de Entrega" icon={<MapPin className="w-4 h-4" />}>
+              <Panel title="EndereÃ§o de Entrega" icon={<MapPin className="w-4 h-4" />}>
                 <div className="grid gap-4 md:grid-cols-2">
                   <DetailField label="CEP" value={order.shippingAddress.cep} />
                   <DetailField label="Rua" value={order.shippingAddress.street} />
-                  <DetailField label="Número" value={order.shippingAddress.number} />
+                  <DetailField label="NÃºmero" value={order.shippingAddress.number} />
                   <DetailField label="Complemento" value={order.shippingAddress.complement || 'Sem complemento'} />
                   <DetailField label="Bairro" value={order.shippingAddress.district} />
                   <DetailField label="Cidade" value={order.shippingAddress.city} />
@@ -1036,7 +722,7 @@ function OrderDetailsModal({
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Produto</th>
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">SKU</th>
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Qtd.</th>
-                        <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Unitário</th>
+                        <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">UnitÃ¡rio</th>
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">Subtotal</th>
                       </tr>
                     </thead>
@@ -1066,16 +752,16 @@ function OrderDetailsModal({
                 </div>
               </Panel>
 
-              <Panel title="Histórico">
+              <Panel title="HistÃ³rico">
                 <div className="space-y-3">
-                  <SummaryLine label="Data da criação" value={formatDateTime(order.history.createdAt)} />
-                  <SummaryLine label="Data do pagamento" value={order.history.paidAt ? formatDateTime(order.history.paidAt) : 'Ainda não registrado'} />
-                  <SummaryLine label="Data do envio" value={order.history.shippedAt ? formatDateTime(order.history.shippedAt) : 'Ainda não registrado'} />
-                  <SummaryLine label="Data da entrega" value={order.history.deliveredAt ? formatDateTime(order.history.deliveredAt) : 'Ainda não registrado'} />
+                  <SummaryLine label="Data da criaÃ§Ã£o" value={formatDateTime(order.history.createdAt)} />
+                  <SummaryLine label="Data do pagamento" value={order.history.paidAt ? formatDateTime(order.history.paidAt) : 'Ainda nÃ£o registrado'} />
+                  <SummaryLine label="Data do envio" value={order.history.shippedAt ? formatDateTime(order.history.shippedAt) : 'Ainda nÃ£o registrado'} />
+                  <SummaryLine label="Data da entrega" value={order.history.deliveredAt ? formatDateTime(order.history.deliveredAt) : 'Ainda nÃ£o registrado'} />
                 </div>
               </Panel>
 
-              <Panel title="Ações rápidas">
+              <Panel title="AÃ§Ãµes rÃ¡pidas">
                 <div className="space-y-3">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <button
@@ -1103,7 +789,7 @@ function OrderDetailsModal({
                         type="button"
                         onClick={() => onChangeStatus(status)}
                         className={`rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
-                          order.status === status
+                          normalizeStatusKey(order.status) === normalizeStatusKey(status)
                             ? 'bg-neutral-900 text-white'
                             : 'border border-neutral-200 text-neutral-700 hover:bg-neutral-50'
                         }`}
@@ -1117,7 +803,7 @@ function OrderDetailsModal({
             </div>
           </section>
 
-          <Panel title="Logs de alterações">
+          <Panel title="Logs de alteraÃ§Ãµes">
             <div className="space-y-3">
               {order.logs.map((log) => (
                 <div key={log.id} className="rounded-2xl border border-neutral-100 bg-neutral-50/70 px-4 py-3">

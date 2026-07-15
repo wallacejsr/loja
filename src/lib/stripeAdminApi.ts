@@ -130,7 +130,7 @@ export type StripeTrackedAdminOrder = {
 };
 
 export type StripeTrackedOrdersResponse = {
-  backend: 'file' | 'supabase';
+  backend: 'file' | 'supabase' | 'mariadb';
   orders: StripeTrackedAdminOrder[];
   success: true;
   timestamp: string;
