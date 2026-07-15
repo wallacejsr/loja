@@ -70,6 +70,16 @@ export function registerStoreRoutes(repository: StoreRepository, config: StoreAp
     response.json({ ok: true, service: 'store-api' });
   });
 
+  router.get(
+    '/admin/dashboard',
+    ...protect(
+      'dashboard:read',
+      async (_request, response) => {
+        response.json(await repository.getAdminDashboardSummary());
+      },
+    ),
+  );
+
   router.get('/products', async (request, response) => {
     try {
       response.json(await repository.getProducts({ onlyActive: isTruthyFlag(request.query.onlyActive, true) }));
@@ -389,4 +399,3 @@ export function registerStoreRoutes(repository: StoreRepository, config: StoreAp
 
   return router;
 }
-

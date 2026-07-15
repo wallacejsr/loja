@@ -26,6 +26,31 @@ type RequestOptions = {
   method?: 'DELETE' | 'GET' | 'POST' | 'PUT';
 };
 
+export type AdminDashboardMetric = {
+  description?: string;
+  label: string;
+  value: number;
+};
+
+export type AdminDashboardRecentOrder = {
+  createdAt: string;
+  customerName: string;
+  orderNumber: string;
+  source: 'orders' | 'stripe_checkout_orders';
+  status: string;
+  total: number;
+};
+
+export type AdminDashboardSummary = {
+  metrics: {
+    activeProducts: AdminDashboardMetric;
+    newCustomers: AdminDashboardMetric;
+    orders: AdminDashboardMetric;
+    revenue: AdminDashboardMetric;
+  };
+  recentOrders: AdminDashboardRecentOrder[];
+};
+
 function buildStoreUrl(path: string, params?: Record<string, boolean | number | string | undefined>) {
   const url = new URL(`${getStoreApiBaseUrl()}${path}`, window.location.origin);
 
@@ -66,6 +91,10 @@ async function requestStoreApi<T>(path: string, options: RequestOptions = {}, pa
 
 export async function getProducts(): Promise<Product[]> {
   return requestStoreApi<Product[]>('/products', {}, { onlyActive: true });
+}
+
+export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
+  return requestStoreApi<AdminDashboardSummary>('/admin/dashboard');
 }
 
 export async function uploadProductImage(file: File): Promise<string> {

@@ -49,6 +49,8 @@ import {
 import { getAdminRolePermissions, type AdminRole } from '../auth/adminPermissions';
 import { createDefaultStoreSnapshot, createId } from './defaultData';
 import type {
+  AdminDashboardRecentOrder,
+  AdminDashboardSummary,
   AdminAuthLookup,
   AuditLogRecord,
   AdminPasswordResetTokenRecord,
@@ -71,6 +73,8 @@ import type {
   StoredStripeCredentialSet,
   StripeCredentialInput,
 } from './types';
+
+const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 
 type MariaDbPool = any;
 type MariaDbConnection = any;
@@ -188,6 +192,48 @@ function normalizeAdminRole(value: unknown): AdminRole {
   }
 
   return 'support';
+}
+
+function normalizeDashboardOrderStatus(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase();
+
+  switch (normalized) {
+    case 'pending_payment':
+    case 'awaiting_payment':
+    case 'aguardando pagamento':
+      return 'Aguardando Pagamento';
+    case 'paid':
+    case 'pago':
+      return 'Pago';
+    case 'processing':
+    case 'em separacao':
+    case 'em separação':
+      return 'Em Separacao';
+    case 'shipped':
+    case 'enviado':
+      return 'Enviado';
+    case 'delivered':
+    case 'entregue':
+      return 'Entregue';
+    case 'cancelled':
+    case 'canceled':
+    case 'cancelado':
+      return 'Cancelado';
+    default:
+      return String(value || 'Aguardando Pagamento');
+  }
+}
+
+function parseDashboardCustomerName(value: unknown) {
+  const payload = parseJsonValue<Record<string, unknown>>(value, {});
+  return String(
+    payload.fullName
+    || payload.full_name
+    || payload.name
+    || payload.customerName
+    || payload.customer_name
+    || 'Cliente',
+  );
 }
 
 function toPublicAdminUser(row: any): AdminUserProfile {
@@ -1702,6 +1748,134 @@ export class MariaDbStoreRepository implements StoreRepository {
       expiresAt: toIsoDateTime(row.expires_at),
       id: String(row.id),
       usedAt: row.used_at ? toIsoDateTime(row.used_at) : null,
+    };
+  }
+
+  async getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
+    const thirtyDaysAgo = new Date(Date.now() - THIRTY_DAYS_IN_MS);
+    const thirtyDaysAgoSql = toSqlDateTime(thirtyDaysAgo) || toSqlDateTime(new Date())!;
+
+    const [[{ activeProducts }]] = await this.pool.query(
+      "SELECT COUNT(*) AS activeProducts FROM products WHERE status = 'Ativo'",
+    );
+
+    const [[{ newCustomers }]] = await this.pool.query(
+      'SELECT COUNT(*) AS newCustomers FROM customers WHERE created_at >= ?',
+      [thirtyDaysAgoSql],
+    );
+
+    const [[{ ordersTableCount }]] = await this.pool.query(
+      'SELECT COUNT(*) AS ordersTableCount FROM orders',
+    );
+
+    if (toNumber(ordersTableCount) > 0) {
+      const [[ordersMetrics]] = await this.pool.query(
+        `SELECT
+          COUNT(*) AS totalOrders,
+          COALESCE(SUM(total), 0) AS totalRevenue
+        FROM orders
+        WHERE created_at >= ?`,
+        [thirtyDaysAgoSql],
+      );
+
+      const [recentOrderRows] = await this.pool.query(
+        `SELECT
+          order_number,
+          status,
+          total,
+          created_at,
+          customer_snapshot
+        FROM orders
+        ORDER BY created_at DESC
+        LIMIT 5`,
+      );
+
+      return {
+        metrics: {
+          revenue: {
+            label: 'Receita total',
+            value: toNumber(ordersMetrics.totalRevenue),
+            description: 'Ultimos 30 dias.',
+          },
+          orders: {
+            label: 'Pedidos',
+            value: toNumber(ordersMetrics.totalOrders),
+            description: 'Ultimos 30 dias.',
+          },
+          newCustomers: {
+            label: 'Clientes novos',
+            value: toNumber(newCustomers),
+            description: 'Ultimos 30 dias.',
+          },
+          activeProducts: {
+            label: 'Produtos ativos',
+            value: toNumber(activeProducts),
+            description: 'Catalogo ativo agora.',
+          },
+        },
+        recentOrders: (recentOrderRows as any[]).map<AdminDashboardRecentOrder>((row) => ({
+          orderNumber: String(row.order_number || ''),
+          customerName: parseDashboardCustomerName(row.customer_snapshot),
+          createdAt: toIsoDateTime(row.created_at),
+          status: normalizeDashboardOrderStatus(row.status),
+          total: toNumber(row.total),
+          source: 'orders',
+        })),
+      };
+    }
+
+    const [[stripeMetrics]] = await this.pool.query(
+      `SELECT
+        COUNT(*) AS totalOrders,
+        COALESCE(SUM(total), 0) AS totalRevenue
+      FROM stripe_checkout_orders
+      WHERE created_at >= ?`,
+      [thirtyDaysAgoSql],
+    );
+
+    const [recentStripeRows] = await this.pool.query(
+      `SELECT
+        order_number,
+        order_status,
+        total,
+        created_at,
+        customer
+      FROM stripe_checkout_orders
+      ORDER BY created_at DESC
+      LIMIT 5`,
+    );
+
+    return {
+      metrics: {
+        revenue: {
+          label: 'Receita total',
+          value: toNumber(stripeMetrics.totalRevenue),
+          description: 'Ultimos 30 dias.',
+        },
+        orders: {
+          label: 'Pedidos',
+          value: toNumber(stripeMetrics.totalOrders),
+          description: 'Ultimos 30 dias.',
+        },
+        newCustomers: {
+          label: 'Clientes novos',
+          value: toNumber(newCustomers),
+          description: 'Ultimos 30 dias.',
+        },
+        activeProducts: {
+          label: 'Produtos ativos',
+          value: toNumber(activeProducts),
+          description: 'Catalogo ativo agora.',
+        },
+      },
+      recentOrders: (recentStripeRows as any[]).map<AdminDashboardRecentOrder>((row) => ({
+        orderNumber: String(row.order_number || ''),
+        customerName: parseDashboardCustomerName(row.customer),
+        createdAt: toIsoDateTime(row.created_at),
+        status: normalizeDashboardOrderStatus(row.order_status),
+        total: toNumber(row.total),
+        source: 'stripe_checkout_orders',
+      })),
     };
   }
 

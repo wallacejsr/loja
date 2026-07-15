@@ -266,6 +266,31 @@ export type StripeCredentials = {
   webhookSecret: string;
 };
 
+export type AdminDashboardMetric = {
+  description?: string;
+  label: string;
+  value: number;
+};
+
+export type AdminDashboardRecentOrder = {
+  createdAt: string;
+  customerName: string;
+  orderNumber: string;
+  source: 'orders' | 'stripe_checkout_orders';
+  status: string;
+  total: number;
+};
+
+export type AdminDashboardSummary = {
+  metrics: {
+    activeProducts: AdminDashboardMetric;
+    newCustomers: AdminDashboardMetric;
+    orders: AdminDashboardMetric;
+    revenue: AdminDashboardMetric;
+  };
+  recentOrders: AdminDashboardRecentOrder[];
+};
+
 export type CustomerProfileUpdateResult = CustomerSessionPayload;
 export type CustomerAddressMutationResult = CustomerSessionPayload;
 export type CustomerBenefitMutationResult = CustomerSessionPayload;
@@ -295,6 +320,7 @@ export interface StoreRepository {
   findAdminAuthByEmail(email: string): Promise<AdminAuthLookup | null>;
   findCustomerAuthByEmail(email: string): Promise<CustomerAuthLookup | null>;
   getAdminPasswordResetByTokenHash(tokenHash: string): Promise<AdminPasswordResetTokenRecord | null>;
+  getAdminDashboardSummary(): Promise<AdminDashboardSummary>;
   getAdminSessionByTokenHash(tokenHash: string): Promise<AdminSessionLookup | null>;
   getAdminSessionPayload(adminUserId: string): Promise<AdminSessionPayload | null>;
   getAdminUserById(adminUserId: string): Promise<AdminUserProfile | null>;

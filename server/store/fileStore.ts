@@ -49,6 +49,7 @@ import {
 import { getAdminRolePermissions, type AdminRole } from '../auth/adminPermissions';
 import { cloneStoreSnapshot, createDefaultStoreSnapshot, createId } from './defaultData';
 import type {
+  AdminDashboardSummary,
   AdminAuthLookup,
   AuditLogRecord,
   AdminPasswordResetTokenRecord,
@@ -877,6 +878,41 @@ export class FileStoreRepository implements StoreRepository {
       expiresAt: reset.expiresAt,
       id: reset.id,
       usedAt: reset.usedAt,
+    };
+  }
+
+  async getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
+    const snapshot = await this.readSnapshot();
+    const now = Date.now();
+    const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+    const activeProducts = snapshot.products.filter((product) => product.status === 'Ativo').length;
+    const customers = snapshot.customers || [];
+    const newCustomers = customers.filter((customer) => new Date(customer.createdAt).getTime() >= thirtyDaysAgo).length;
+
+    return {
+      metrics: {
+        revenue: {
+          label: 'Receita total',
+          value: 0,
+          description: 'Sem pedidos consolidados nesta fonte de dados.',
+        },
+        orders: {
+          label: 'Pedidos',
+          value: 0,
+          description: 'Sem pedidos consolidados nesta fonte de dados.',
+        },
+        newCustomers: {
+          label: 'Clientes novos',
+          value: newCustomers,
+          description: 'Ultimos 30 dias.',
+        },
+        activeProducts: {
+          label: 'Produtos ativos',
+          value: activeProducts,
+          description: 'Catalogo ativo agora.',
+        },
+      },
+      recentOrders: [],
     };
   }
 
