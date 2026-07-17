@@ -15,9 +15,9 @@ import {
 import { showToast } from '../../lib/adminUtils';
 import { StorePhoneField } from '../../components/StorePhoneField';
 import { type AddressCountryCode, formatPhone as formatPhoneByCountry, getAdminTaxIdLabel, getPhoneE164, getWhatsAppUrl } from '../../lib/customerForm';
-import { ADMIN_CUSTOMERS_STORAGE_KEY } from '../../lib/adminDataBridge';
 import { useAdminCurrency } from '../../hooks/useAdminCurrency';
 import { useDeferredSearchTerm } from '../../hooks/useDeferredSearchTerm';
+import { getAdminCustomers as fetchAdminCustomers, updateAdminCustomer as persistAdminCustomer } from '../../lib/storeApiRest';
 
 type CustomerStatus = 'Ativo' | 'Inativo';
 type OrderStatus = 'Aguardando Pagamento' | 'Pago' | 'Em SeparaÃ§Ã£o' | 'Enviado' | 'Entregue' | 'Cancelado';
@@ -104,7 +104,6 @@ type ActionMenuState = {
   openUp: boolean;
 };
 
-const adminUserName = 'Admin Loja';
 
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
@@ -114,250 +113,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
 const shortDateFormatter = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
 });
-
-const initialCustomers: CustomerRecord[] = [
-  {
-    id: 'cust-001',
-    name: 'Maria Silva',
-    cpf: '123.456.789-10',
-    birthDate: '1990-05-12',
-    email: 'maria@exemplo.com',
-    phone: '64992023191',
-    registeredAt: '2026-04-22T09:12:00-03:00',
-    status: 'Ativo',
-    blockPurchases: false,
-    allowMarketing: true,
-    shippingAddress: {
-      cep: '74000-100',
-      street: 'Rua 15',
-      number: '210',
-      complement: 'Apto 402',
-      district: 'Centro',
-      city: 'GoiÃ¢nia',
-      state: 'GO',
-    },
-    billingAddress: {
-      cep: '74000-100',
-      street: 'Rua 15',
-      number: '210',
-      complement: 'Apto 402',
-      district: 'Centro',
-      city: 'GoiÃ¢nia',
-      state: 'GO',
-    },
-    orders: [
-      {
-        id: 'order-1234',
-        orderNumber: '#1234',
-        date: '2026-06-01T10:23:00-03:00',
-        status: 'Pago',
-        itemsCount: 2,
-        total: 359.9,
-        paymentMethod: 'CartÃ£o de crÃ©dito',
-        shippingAddress: {
-          cep: '74000-100',
-          street: 'Rua 15',
-          number: '210',
-          complement: 'Apto 402',
-          district: 'Centro',
-          city: 'GoiÃ¢nia',
-          state: 'GO',
-        },
-        billingAddress: {
-          cep: '74000-100',
-          street: 'Rua 15',
-          number: '210',
-          complement: 'Apto 402',
-          district: 'Centro',
-          city: 'GoiÃ¢nia',
-          state: 'GO',
-        },
-        items: [
-          { id: '1', name: 'Conjunto Alfaiataria Bege', sku: 'CAF-BG-38', quantity: 1, unitPrice: 249.9, subtotal: 249.9 },
-          { id: '2', name: 'Blusa TricÃ´ Off White', sku: 'BTO-OW-U', quantity: 1, unitPrice: 130, subtotal: 130 },
-        ],
-        subtotal: 379.9,
-        shipping: 20,
-        discount: 40,
-      },
-      {
-        id: 'order-1191',
-        orderNumber: '#1191',
-        date: '2026-05-12T15:08:00-03:00',
-        status: 'Entregue',
-        itemsCount: 3,
-        total: 640,
-        paymentMethod: 'Pix',
-        shippingAddress: {
-          cep: '74000-100',
-          street: 'Rua 15',
-          number: '210',
-          complement: 'Apto 402',
-          district: 'Centro',
-          city: 'GoiÃ¢nia',
-          state: 'GO',
-        },
-        billingAddress: {
-          cep: '74000-100',
-          street: 'Rua 15',
-          number: '210',
-          complement: 'Apto 402',
-          district: 'Centro',
-          city: 'GoiÃ¢nia',
-          state: 'GO',
-        },
-        items: [
-          { id: '1', name: 'Vestido Midi Verde', sku: 'VMV-40', quantity: 1, unitPrice: 320, subtotal: 320 },
-          { id: '2', name: 'Bolsa Couro Caramelo', sku: 'BCC-U', quantity: 1, unitPrice: 190, subtotal: 190 },
-          { id: '3', name: 'Cinto Fino Dourado', sku: 'CFD-U', quantity: 1, unitPrice: 130, subtotal: 130 },
-        ],
-        subtotal: 640,
-        shipping: 0,
-        discount: 0,
-      },
-    ],
-    activities: [
-      { id: 'act-1', type: 'Cliente cadastrado', description: 'Cadastro criado no painel da loja.', dateTime: '2026-04-22T09:12:00-03:00' },
-      { id: 'act-2', type: 'Pedido criado', description: 'Pedido #1191 registrado para a cliente.', dateTime: '2026-05-12T15:08:00-03:00' },
-      { id: 'act-3', type: 'Pedido entregue', description: 'Pedido #1191 marcado como entregue.', dateTime: '2026-05-15T13:30:00-03:00' },
-      { id: 'act-4', type: 'Pedido criado', description: 'Pedido #1234 registrado para a cliente.', dateTime: '2026-06-01T10:23:00-03:00' },
-      { id: 'act-5', type: 'Pagamento aprovado', description: 'Pagamento do pedido #1234 aprovado.', dateTime: '2026-06-01T10:27:00-03:00' },
-    ],
-    auditLogs: [],
-  },
-  {
-    id: 'cust-002',
-    name: 'JoÃ£o Souza',
-    cpf: '456.789.123-00',
-    birthDate: '1987-11-03',
-    email: 'joao@exemplo.com',
-    phone: '64999998888',
-    registeredAt: '2026-05-01T08:40:00-03:00',
-    status: 'Ativo',
-    blockPurchases: false,
-    allowMarketing: false,
-    shippingAddress: {
-      cep: '74934-220',
-      street: 'Avenida das Flores',
-      number: '98',
-      district: 'Jardim Europa',
-      city: 'Aparecida de GoiÃ¢nia',
-      state: 'GO',
-    },
-    billingAddress: {
-      cep: '74934-220',
-      street: 'Avenida das Flores',
-      number: '98',
-      district: 'Jardim Europa',
-      city: 'Aparecida de GoiÃ¢nia',
-      state: 'GO',
-    },
-    orders: [
-      {
-        id: 'order-1233',
-        orderNumber: '#1233',
-        date: '2026-06-01T09:12:00-03:00',
-        status: 'Aguardando Pagamento',
-        itemsCount: 5,
-        total: 1250,
-        paymentMethod: 'Pix',
-        shippingAddress: {
-          cep: '74934-220',
-          street: 'Avenida das Flores',
-          number: '98',
-          district: 'Jardim Europa',
-          city: 'Aparecida de GoiÃ¢nia',
-          state: 'GO',
-        },
-        billingAddress: {
-          cep: '74934-220',
-          street: 'Avenida das Flores',
-          number: '98',
-          district: 'Jardim Europa',
-          city: 'Aparecida de GoiÃ¢nia',
-          state: 'GO',
-        },
-        items: [
-          { id: '1', name: 'Vestido Midi Verde', sku: 'VMV-40', quantity: 2, unitPrice: 299, subtotal: 598 },
-          { id: '2', name: 'CalÃ§a Linho Caramelo', sku: 'CLC-42', quantity: 1, unitPrice: 220, subtotal: 220 },
-          { id: '3', name: 'Camisa Premium', sku: 'CPR-M', quantity: 2, unitPrice: 210, subtotal: 420 },
-        ],
-        subtotal: 1238,
-        shipping: 22,
-        discount: 10,
-      },
-    ],
-    activities: [
-      { id: 'act-6', type: 'Cliente cadastrado', description: 'Cadastro criado no checkout.', dateTime: '2026-05-01T08:40:00-03:00' },
-      { id: 'act-7', type: 'Pedido criado', description: 'Pedido #1233 criado para o cliente.', dateTime: '2026-06-01T09:12:00-03:00' },
-    ],
-    auditLogs: [],
-  },
-  {
-    id: 'cust-003',
-    name: 'Ana Paula',
-    cpf: '789.456.123-88',
-    birthDate: '1995-02-19',
-    email: 'ana@exemplo.com',
-    phone: '64998887766',
-    registeredAt: '2026-05-18T11:21:00-03:00',
-    status: 'Inativo',
-    blockPurchases: true,
-    allowMarketing: true,
-    shippingAddress: {
-      cep: '74823-350',
-      street: 'Rua das Palmeiras',
-      number: '14',
-      district: 'Parque AmazÃ´nia',
-      city: 'GoiÃ¢nia',
-      state: 'GO',
-    },
-    billingAddress: {
-      cep: '74823-350',
-      street: 'Rua das Palmeiras',
-      number: '14',
-      district: 'Parque AmazÃ´nia',
-      city: 'GoiÃ¢nia',
-      state: 'GO',
-    },
-    orders: [
-      {
-        id: 'order-1232',
-        orderNumber: '#1232',
-        date: '2026-05-31T16:45:00-03:00',
-        status: 'Enviado',
-        itemsCount: 1,
-        total: 89.9,
-        paymentMethod: 'CartÃ£o de crÃ©dito',
-        shippingAddress: {
-          cep: '74823-350',
-          street: 'Rua das Palmeiras',
-          number: '14',
-          district: 'Parque AmazÃ´nia',
-          city: 'GoiÃ¢nia',
-          state: 'GO',
-        },
-        billingAddress: {
-          cep: '74823-350',
-          street: 'Rua das Palmeiras',
-          number: '14',
-          district: 'Parque AmazÃ´nia',
-          city: 'GoiÃ¢nia',
-          state: 'GO',
-        },
-        items: [{ id: '1', name: 'Top Canelado Preto', sku: 'TCP-U', quantity: 1, unitPrice: 89.9, subtotal: 89.9 }],
-        subtotal: 89.9,
-        shipping: 0,
-        discount: 0,
-      },
-    ],
-    activities: [
-      { id: 'act-8', type: 'Cliente cadastrado', description: 'Cliente criado na base em 18/05.', dateTime: '2026-05-18T11:21:00-03:00' },
-      { id: 'act-9', type: 'Pedido enviado', description: 'Pedido #1232 enviado para a cliente.', dateTime: '2026-06-01T08:10:00-03:00' },
-    ],
-    auditLogs: [],
-  },
-];
 
 function getCustomerDocumentLabel(customer: Pick<CustomerRecord, 'documentLabel' | 'shippingAddress'>) {
   return customer.documentLabel || getAdminTaxIdLabel(customer.shippingAddress.country, 'F');
@@ -370,34 +125,47 @@ const statusTone: Record<CustomerStatus, string> = {
 
 export function Customers() {
   const { formatCurrency } = useAdminCurrency();
-  const [customers, setCustomers] = useState<CustomerRecord[]>(initialCustomers);
+  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [actionMenu, setActionMenu] = useState<ActionMenuState | null>(null);
+  const [loadingCustomers, setLoadingCustomers] = useState(true);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
   const normalizedSearchTerm = useDeferredSearchTerm(searchTerm);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const stored = window.localStorage.getItem(ADMIN_CUSTOMERS_STORAGE_KEY);
-      if (stored) {
-        setCustomers(JSON.parse(stored) as CustomerRecord[]);
-      }
-    } catch (error) {
-      console.error('Falha ao carregar clientes do painel', error);
-    }
-  }, []);
+    let mounted = true;
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(ADMIN_CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
-    } catch (error) {
-      console.error('Falha ao persistir clientes do painel', error);
+    async function loadCustomers() {
+      setLoadingCustomers(true);
+      setLoadingError(null);
+
+      try {
+        const nextCustomers = await fetchAdminCustomers();
+        if (mounted) {
+          setCustomers(nextCustomers);
+        }
+      } catch (error) {
+        console.error('Falha ao carregar clientes do painel', error);
+        if (mounted) {
+          setLoadingError(error instanceof Error ? error.message : 'Nao foi possivel carregar os clientes.');
+          setCustomers([]);
+        }
+      } finally {
+        if (mounted) {
+          setLoadingCustomers(false);
+        }
+      }
     }
-  }, [customers]);
+
+    void loadCustomers();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!actionMenu || typeof window === 'undefined') return;
@@ -462,12 +230,6 @@ export function Customers() {
     return null;
   }, [customers, selectedOrderId]);
 
-  const getSessionIp = () => {
-    if (typeof window === 'undefined') return '127.0.0.1';
-    const hostname = window.location.hostname;
-    return hostname === 'localhost' || hostname === '127.0.0.1' ? '127.0.0.1' : hostname;
-  };
-
   const copyToClipboard = async (label: string, value: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -520,72 +282,18 @@ export function Customers() {
     });
   };
 
-  const saveCustomer = (updatedCustomer: CustomerRecord) => {
-    const existingCustomer = customers.find((customer) => customer.id === updatedCustomer.id);
-    if (!existingCustomer) return;
-
-    const trackedFields: Array<{ key: string; label: string; previous: string; next: string }> = [];
-
-    const compareField = (label: string, previous: unknown, next: unknown, key: string) => {
-      const previousValue = String(previous ?? '');
-      const nextValue = String(next ?? '');
-      if (previousValue !== nextValue) {
-        trackedFields.push({ key, label, previous: previousValue, next: nextValue });
-      }
-    };
-
-    compareField('Nome', existingCustomer.name, updatedCustomer.name, 'name');
-    compareField(getCustomerDocumentLabel(updatedCustomer), existingCustomer.cpf, updatedCustomer.cpf, 'cpf');
-    compareField('Data de nascimento', existingCustomer.birthDate, updatedCustomer.birthDate, 'birthDate');
-    compareField('E-mail', existingCustomer.email, updatedCustomer.email, 'email');
-    compareField('Telefone', existingCustomer.phone, updatedCustomer.phone, 'phone');
-    compareField('Status', existingCustomer.status, updatedCustomer.status, 'status');
-    compareField('Bloquear compras', existingCustomer.blockPurchases ? 'Sim' : 'NÃ£o', updatedCustomer.blockPurchases ? 'Sim' : 'NÃ£o', 'blockPurchases');
-    compareField('Permitir marketing', existingCustomer.allowMarketing ? 'Sim' : 'NÃ£o', updatedCustomer.allowMarketing ? 'Sim' : 'NÃ£o', 'allowMarketing');
-    compareField('CEP entrega', existingCustomer.shippingAddress.cep, updatedCustomer.shippingAddress.cep, 'shippingCep');
-    compareField('Rua entrega', existingCustomer.shippingAddress.street, updatedCustomer.shippingAddress.street, 'shippingStreet');
-    compareField('NÃºmero entrega', existingCustomer.shippingAddress.number, updatedCustomer.shippingAddress.number, 'shippingNumber');
-    compareField('Complemento entrega', existingCustomer.shippingAddress.complement || '', updatedCustomer.shippingAddress.complement || '', 'shippingComplement');
-    compareField('Bairro entrega', existingCustomer.shippingAddress.district, updatedCustomer.shippingAddress.district, 'shippingDistrict');
-    compareField('Cidade entrega', existingCustomer.shippingAddress.city, updatedCustomer.shippingAddress.city, 'shippingCity');
-    compareField('Estado entrega', existingCustomer.shippingAddress.state, updatedCustomer.shippingAddress.state, 'shippingState');
-
-    const now = new Date().toISOString();
-    const auditLogs: CustomerAuditLog[] = trackedFields.map((field) => ({
-      id: crypto.randomUUID(),
-      customerId: updatedCustomer.id,
-      user: adminUserName,
-      field: field.label,
-      previousValue: field.previous || 'Vazio',
-      nextValue: field.next || 'Vazio',
-      dateTime: now,
-      ip: getSessionIp(),
-    }));
-
-    setCustomers((current) =>
-      current.map((customer) =>
-        customer.id === updatedCustomer.id
-          ? {
-              ...updatedCustomer,
-              activities: trackedFields.length
-                ? [
-                    {
-                      id: crypto.randomUUID(),
-                      type: 'Cadastro alterado',
-                      description: `Cadastro atualizado com ${trackedFields.length} campo(s) alterado(s).`,
-                      dateTime: now,
-                    },
-                    ...customer.activities,
-                  ]
-                : customer.activities,
-              auditLogs: trackedFields.length ? [...auditLogs, ...customer.auditLogs] : customer.auditLogs,
-            }
-          : customer,
-      ),
-    );
-
-    setEditingCustomerId(null);
-    showToast('Cliente atualizado com sucesso.');
+  const saveCustomer = async (updatedCustomer: CustomerRecord) => {
+    try {
+      const savedCustomer = await persistAdminCustomer(updatedCustomer.id, updatedCustomer);
+      setCustomers((current) =>
+        current.map((customer) => (customer.id === savedCustomer.id ? savedCustomer : customer)),
+      );
+      setEditingCustomerId(null);
+      showToast('Cliente atualizado com sucesso.');
+    } catch (error) {
+      console.error('Falha ao salvar cliente', error);
+      showToast(error instanceof Error ? error.message : 'Nao foi possivel salvar o cliente.');
+    }
   };
 
   return (
@@ -621,7 +329,17 @@ export function Customers() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {loadingCustomers ? (
+          <div className="px-6 py-12 text-center text-sm text-neutral-500">Carregando clientes...</div>
+        ) : loadingError ? (
+          <div className="px-6 py-12 text-center">
+            <div className="text-sm font-medium text-red-600">{loadingError}</div>
+            <div className="mt-2 text-xs text-neutral-500">Tente recarregar a página para consultar a base real.</div>
+          </div>
+        ) : filteredCustomers.length === 0 ? (
+          <div className="px-6 py-12 text-center text-sm text-neutral-500">Nenhum cliente encontrado.</div>
+        ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-neutral-100/60 bg-neutral-50/50">
@@ -671,7 +389,8 @@ export function Customers() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        )}
 
         <div className="p-4 border-t border-neutral-100/60 flex items-center justify-between text-[13px] text-neutral-500 bg-white">
           <div>
@@ -990,7 +709,7 @@ function CustomerEditModal({
 }: {
   customer: CustomerRecord;
   onClose: () => void;
-  onSave: (customer: CustomerRecord) => void;
+  onSave: (customer: CustomerRecord) => Promise<void>;
 }) {
   const [formData, setFormData] = useState<CustomerRecord>(customer);
 
@@ -1012,9 +731,9 @@ function CustomerEditModal({
     }));
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    onSave({
+    await onSave({
       ...formData,
       phone: formatPhoneByCountry(formData.phoneE164 || formData.phone, formData.phoneCountry || 'BR'),
       phoneE164: getPhoneE164(formData.phoneE164 || formData.phone, formData.phoneCountry || 'BR'),

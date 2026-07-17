@@ -1,4 +1,5 @@
 import type { Product } from '../data/mockData';
+import type { AddressCountryCode } from './customerForm';
 import type { StoreSettings } from '../types/settings';
 import { getStoreApiBaseUrl } from './storeBackend';
 import type {
@@ -51,6 +52,81 @@ export type AdminDashboardSummary = {
   recentOrders: AdminDashboardRecentOrder[];
 };
 
+export type AdminCustomerAddress = {
+  country?: AddressCountryCode;
+  cep: string;
+  street: string;
+  number: string;
+  complement?: string;
+  district: string;
+  city: string;
+  state: string;
+};
+
+export type AdminCustomerOrderItem = {
+  id: string;
+  name: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+};
+
+export type AdminCustomerOrder = {
+  id: string;
+  orderNumber: string;
+  date: string;
+  status: 'Aguardando Pagamento' | 'Pago' | 'Em Separacao' | 'Enviado' | 'Entregue' | 'Cancelado';
+  itemsCount: number;
+  total: number;
+  paymentMethod: string;
+  shippingAddress: AdminCustomerAddress;
+  billingAddress: AdminCustomerAddress;
+  items: AdminCustomerOrderItem[];
+  subtotal: number;
+  shipping: number;
+  discount: number;
+};
+
+export type AdminCustomerActivity = {
+  id: string;
+  type: string;
+  description: string;
+  dateTime: string;
+};
+
+export type AdminCustomerAuditLog = {
+  id: string;
+  customerId: string;
+  user: string;
+  field: string;
+  previousValue: string;
+  nextValue: string;
+  dateTime: string;
+  ip: string;
+};
+
+export type AdminCustomerRecord = {
+  id: string;
+  name: string;
+  cpf: string;
+  documentLabel?: string;
+  birthDate: string;
+  email: string;
+  phone: string;
+  phoneCountry?: AddressCountryCode;
+  phoneE164?: string;
+  registeredAt: string;
+  status: 'Ativo' | 'Inativo';
+  blockPurchases: boolean;
+  allowMarketing: boolean;
+  shippingAddress: AdminCustomerAddress;
+  billingAddress: AdminCustomerAddress;
+  orders: AdminCustomerOrder[];
+  activities: AdminCustomerActivity[];
+  auditLogs: AdminCustomerAuditLog[];
+};
+
 function buildStoreUrl(path: string, params?: Record<string, boolean | number | string | undefined>) {
   const url = new URL(`${getStoreApiBaseUrl()}${path}`, window.location.origin);
 
@@ -95,6 +171,17 @@ export async function getProducts(): Promise<Product[]> {
 
 export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
   return requestStoreApi<AdminDashboardSummary>('/admin/dashboard');
+}
+
+export async function getAdminCustomers(): Promise<AdminCustomerRecord[]> {
+  return requestStoreApi<AdminCustomerRecord[]>('/admin/customers');
+}
+
+export async function updateAdminCustomer(id: string, input: AdminCustomerRecord): Promise<AdminCustomerRecord> {
+  return requestStoreApi<AdminCustomerRecord>(`/admin/customers/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function uploadProductImage(file: File): Promise<string> {

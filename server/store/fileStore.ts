@@ -50,6 +50,7 @@ import { getAdminRolePermissions, type AdminRole } from '../auth/adminPermission
 import { cloneStoreSnapshot, createDefaultStoreSnapshot, createId } from './defaultData';
 import type {
   AdminDashboardSummary,
+  AdminCustomerRecord,
   AdminAuthLookup,
   AuditLogRecord,
   AdminPasswordResetTokenRecord,
@@ -211,6 +212,50 @@ function buildAdminSessionPayload(adminUser: StoredAdminUserProfile | null): Adm
     authenticated: true,
     permissions: getAdminRolePermissions(adminUser.role),
     user: toPublicAdminUser(adminUser),
+  };
+}
+
+function toAdminCustomerRecord(customer: StoredCustomerProfile): AdminCustomerRecord {
+  const primaryAddress = customer.addresses.find((address) => address.isPrimary) || customer.addresses[0] || null;
+  const secondaryAddress = customer.addresses.find((address) => !address.isPrimary) || primaryAddress || null;
+
+  const toAdminAddress = (address: StoreCustomerAddress | null) => ({
+    country: address?.country || 'US',
+    cep: address?.postalCode || '',
+    street: address?.street || '',
+    number: address?.number || '',
+    complement: address?.complement || '',
+    district: address?.neighborhood || '',
+    city: address?.city || '',
+    state: address?.region || '',
+  });
+
+  return {
+    id: customer.id,
+    name: customer.fullName,
+    cpf: customer.taxId,
+    documentLabel: customer.taxDocumentType === 'business_tax_id' ? 'CNPJ' : 'CPF',
+    birthDate: customer.birthDate || '',
+    email: customer.email,
+    phone: customer.phone,
+    phoneCountry: customer.phoneCountry,
+    phoneE164: '',
+    registeredAt: customer.createdAt,
+    status: customer.status === 'inactive' ? 'Inativo' : 'Ativo',
+    blockPurchases: customer.blockPurchases,
+    allowMarketing: customer.allowMarketing,
+    shippingAddress: toAdminAddress(primaryAddress),
+    billingAddress: toAdminAddress(secondaryAddress || primaryAddress),
+    orders: [],
+    activities: [
+      {
+        id: `${customer.id}-created`,
+        type: 'Cliente cadastrado',
+        description: 'Cadastro criado na base local.',
+        dateTime: customer.createdAt,
+      },
+    ],
+    auditLogs: [],
   };
 }
 
@@ -914,6 +959,70 @@ export class FileStoreRepository implements StoreRepository {
       },
       recentOrders: [],
     };
+  }
+
+  async getAdminCustomers(): Promise<AdminCustomerRecord[]> {
+    const snapshot = await this.readSnapshot();
+    ensureAdminCollections(snapshot);
+    return (snapshot.customers || []).map((customer) => toAdminCustomerRecord(customer));
+  }
+
+  async getAdminCustomer(customerId: string): Promise<AdminCustomerRecord | null> {
+    const snapshot = await this.readSnapshot();
+    ensureAdminCollections(snapshot);
+    const customer = snapshot.customers?.find((item) => item.id === customerId) || null;
+    return customer ? toAdminCustomerRecord(customer) : null;
+  }
+
+  async updateAdminCustomer(customerId: string, input: AdminCustomerRecord): Promise<AdminCustomerRecord> {
+    return this.mutate(async (snapshot) => {
+      ensureAdminCollections(snapshot);
+      const customer = snapshot.customers?.find((item) => item.id === customerId) || null;
+      if (!customer) {
+        throw new Error('Cliente nao encontrado.');
+      }
+
+      customer.fullName = input.name.trim();
+      customer.taxId = input.cpf.trim();
+      customer.birthDate = input.birthDate || '';
+      customer.email = input.email.trim().toLowerCase();
+      customer.phone = input.phone.trim();
+      customer.phoneCountry = input.phoneCountry || 'US';
+      customer.blockPurchases = input.blockPurchases;
+      customer.allowMarketing = input.allowMarketing;
+      customer.status = input.status === 'Inativo' ? 'inactive' : 'active';
+      customer.updatedAt = new Date().toISOString();
+      customer.addresses = [
+        {
+          id: customer.addresses[0]?.id || createId('address'),
+          label: 'Entrega',
+          country: input.shippingAddress.country || 'US',
+          postalCode: input.shippingAddress.cep,
+          street: input.shippingAddress.street,
+          number: input.shippingAddress.number,
+          complement: input.shippingAddress.complement || '',
+          neighborhood: input.shippingAddress.district,
+          city: input.shippingAddress.city,
+          region: input.shippingAddress.state,
+          isPrimary: true,
+        },
+        {
+          id: customer.addresses[1]?.id || createId('address'),
+          label: 'Cobrança',
+          country: input.billingAddress.country || 'US',
+          postalCode: input.billingAddress.cep,
+          street: input.billingAddress.street,
+          number: input.billingAddress.number,
+          complement: input.billingAddress.complement || '',
+          neighborhood: input.billingAddress.district,
+          city: input.billingAddress.city,
+          region: input.billingAddress.state,
+          isPrimary: false,
+        },
+      ];
+
+      return toAdminCustomerRecord(customer);
+    });
   }
 
   async markAdminPasswordResetTokenUsed(id: string): Promise<void> {

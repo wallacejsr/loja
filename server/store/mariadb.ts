@@ -51,6 +51,12 @@ import { createDefaultStoreSnapshot, createId } from './defaultData';
 import type {
   AdminDashboardRecentOrder,
   AdminDashboardSummary,
+  AdminCustomerActivity,
+  AdminCustomerAddress,
+  AdminCustomerAuditLog,
+  AdminCustomerOrder,
+  AdminCustomerOrderItem,
+  AdminCustomerRecord,
   AdminAuthLookup,
   AuditLogRecord,
   AdminPasswordResetTokenRecord,
@@ -234,6 +240,49 @@ function parseDashboardCustomerName(value: unknown) {
     || payload.customer_name
     || 'Cliente',
   );
+}
+
+function mapAdminCustomerAddress(row: any): AdminCustomerAddress {
+  return {
+    country: row.country || 'US',
+    cep: row.postal_code || '',
+    street: row.street || '',
+    number: row.number || '',
+    complement: row.complement || '',
+    district: row.neighborhood || '',
+    city: row.city || '',
+    state: row.region || '',
+  };
+}
+
+function normalizeAdminCustomerOrderStatus(value: unknown) {
+  const normalized = String(value || '').trim().toLowerCase();
+
+  switch (normalized) {
+    case 'pending_payment':
+    case 'awaiting_payment':
+    case 'aguardando pagamento':
+      return 'Aguardando Pagamento';
+    case 'paid':
+    case 'pago':
+      return 'Pago';
+    case 'processing':
+    case 'em separacao':
+    case 'em separação':
+      return 'Em Separação';
+    case 'shipped':
+    case 'enviado':
+      return 'Enviado';
+    case 'delivered':
+    case 'entregue':
+      return 'Entregue';
+    case 'cancelled':
+    case 'canceled':
+    case 'cancelado':
+      return 'Cancelado';
+    default:
+      return 'Aguardando Pagamento';
+  }
 }
 
 function toPublicAdminUser(row: any): AdminUserProfile {
@@ -766,6 +815,183 @@ export class MariaDbStoreRepository implements StoreRepository {
       customer: profile,
       primaryAddress: profile.addresses.find((address) => address.isPrimary) || profile.addresses[0] || null,
     };
+  }
+
+  private async loadAdminCustomerOrders(customerId: string, executor: MariaDbPool | MariaDbConnection = this.pool): Promise<AdminCustomerOrder[]> {
+    const orders = await this.queryRowsWithExecutor(
+      executor,
+      'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
+      [customerId],
+    );
+
+    if (!orders.length) {
+      return [];
+    }
+
+    const orderIds = orders.map((row) => String(row.id));
+    const placeholders = orderIds.map(() => '?').join(', ');
+    const items = await this.queryRowsWithExecutor(
+      executor,
+      `SELECT * FROM order_items WHERE order_id IN (${placeholders}) ORDER BY created_at ASC`,
+      orderIds,
+    );
+
+    const itemsByOrderId = new Map<string, AdminCustomerOrderItem[]>();
+    for (const item of items) {
+      const orderId = String(item.order_id);
+      const current = itemsByOrderId.get(orderId) || [];
+      current.push({
+        id: String(item.id),
+        name: item.product_name_snapshot || '',
+        sku: item.sku_snapshot || '',
+        quantity: toNumber(item.quantity, 1),
+        unitPrice: toNumber(item.unit_price),
+        subtotal: toNumber(item.subtotal),
+      });
+      itemsByOrderId.set(orderId, current);
+    }
+
+    return orders.map((row) => {
+      const shippingAddress = mapAdminCustomerAddress(parseJsonValue<Record<string, unknown>>(row.shipping_address_snapshot, {}));
+      const billingAddress = mapAdminCustomerAddress(parseJsonValue<Record<string, unknown>>(row.billing_address_snapshot || row.shipping_address_snapshot, {}));
+      const orderItems = itemsByOrderId.get(String(row.id)) || [];
+
+      return {
+        id: String(row.id),
+        orderNumber: row.order_number || '',
+        date: toIsoDateTime(row.created_at),
+        status: normalizeAdminCustomerOrderStatus(row.status),
+        itemsCount: orderItems.reduce((sum, item) => sum + item.quantity, 0) || toNumber(row.item_count, orderItems.length),
+        total: toNumber(row.total),
+        paymentMethod: row.payment_method || '',
+        shippingAddress,
+        billingAddress,
+        items: orderItems,
+        subtotal: toNumber(row.subtotal),
+        shipping: toNumber(row.shipping),
+        discount: toNumber(row.discount),
+      };
+    });
+  }
+
+  private async loadAdminCustomerActivities(customerId: string, registeredAt: string, orders: AdminCustomerOrder[]): Promise<AdminCustomerActivity[]> {
+    const activities: AdminCustomerActivity[] = [
+      {
+        id: `${customerId}-registered`,
+        type: 'Cliente cadastrado',
+        description: 'Cadastro criado na base.',
+        dateTime: registeredAt,
+      },
+    ];
+
+    for (const order of orders) {
+      activities.push({
+        id: `${order.id}-created`,
+        type: 'Pedido criado',
+        description: `Pedido ${order.orderNumber} registrado para o cliente.`,
+        dateTime: order.date,
+      });
+
+      const statusMap: Record<string, { type: string; description: string }> = {
+        'Pago': { type: 'Pagamento aprovado', description: `Pagamento do pedido ${order.orderNumber} aprovado.` },
+        'Enviado': { type: 'Pedido enviado', description: `Pedido ${order.orderNumber} enviado.` },
+        'Entregue': { type: 'Pedido entregue', description: `Pedido ${order.orderNumber} entregue.` },
+        'Cancelado': { type: 'Pedido cancelado', description: `Pedido ${order.orderNumber} cancelado.` },
+      };
+
+      const event = statusMap[order.status];
+      if (event) {
+        activities.push({
+          id: `${order.id}-${order.status}`,
+          type: event.type,
+          description: event.description,
+          dateTime: order.date,
+        });
+      }
+    }
+
+    return activities.sort((left, right) => right.dateTime.localeCompare(left.dateTime));
+  }
+
+  private async loadAdminCustomerAuditLogs(customerId: string, executor: MariaDbPool | MariaDbConnection = this.pool): Promise<AdminCustomerAuditLog[]> {
+    const rows = await this.queryRowsWithExecutor(
+      executor,
+      `SELECT * FROM audit_logs WHERE entity_type = 'customer' AND entity_id = ? ORDER BY created_at DESC LIMIT 100`,
+      [customerId],
+    );
+
+    return rows.map((row) => {
+      const diff = parseJsonValue<Record<string, unknown>>(row.diff_json, {});
+      const previousValue = diff.previous !== undefined ? String(diff.previous) : diff.before !== undefined ? String(diff.before) : '';
+      const nextValue = diff.next !== undefined ? String(diff.next) : diff.after !== undefined ? String(diff.after) : '';
+      const field = diff.field ? String(diff.field) : row.action || 'Alteração';
+
+      return {
+        id: String(row.id),
+        customerId,
+        user: row.actor_email || row.actor_id || 'Sistema',
+        field,
+        previousValue,
+        nextValue,
+        dateTime: toIsoDateTime(row.created_at),
+        ip: row.ip_address || '',
+      };
+    });
+  }
+
+  private async loadAdminCustomerRecord(customerId: string, executor: MariaDbPool | MariaDbConnection = this.pool): Promise<AdminCustomerRecord | null> {
+    const [row] = await this.queryRowsWithExecutor(executor, 'SELECT * FROM customers WHERE id = ? LIMIT 1', [customerId]);
+
+    if (!row) {
+      return null;
+    }
+
+    const [addresses, welcomeBenefits, orders] = await Promise.all([
+      this.loadCustomerAddresses(customerId, executor),
+      this.loadCustomerBenefits(customerId, executor),
+      this.loadAdminCustomerOrders(customerId, executor),
+    ]);
+
+    const shippingAddress = addresses[0] || null;
+    const billingAddress = addresses[1] || shippingAddress || null;
+    const customerCreatedAt = toIsoDateTime(row.created_at);
+    const activities = await this.loadAdminCustomerActivities(customerId, customerCreatedAt, orders);
+    const auditLogs = await this.loadAdminCustomerAuditLogs(customerId, executor);
+
+    const toAdminAddress = (address: StoreCustomerAddress | null): AdminCustomerAddress => ({
+      country: address?.country || 'US',
+      cep: address?.postalCode || '',
+      street: address?.street || '',
+      number: address?.number || '',
+      complement: address?.complement || '',
+      district: address?.neighborhood || '',
+      city: address?.city || '',
+      state: address?.region || '',
+    });
+
+    return {
+      id: String(row.id),
+      name: row.full_name || '',
+      cpf: row.tax_document || '',
+      documentLabel: row.tax_document_type === 'business_tax_id' ? 'CNPJ' : 'CPF',
+      birthDate: row.birth_date ? String(row.birth_date).slice(0, 10) : '',
+      email: row.email || '',
+      phone: row.phone_national || row.phone_e164 || '',
+      phoneCountry: row.phone_country || 'US',
+      phoneE164: row.phone_e164 || '',
+      registeredAt: customerCreatedAt,
+      status: row.status === 'inactive' ? 'Inativo' : 'Ativo',
+      blockPurchases: toBoolean(row.block_purchases),
+      allowMarketing: toBoolean(row.allow_marketing),
+      shippingAddress: toAdminAddress(shippingAddress),
+      billingAddress: toAdminAddress(billingAddress),
+      orders,
+      activities,
+      auditLogs,
+      // keep compatible access to newsletter-derived benefits on session payloads elsewhere
+      // not exposed in the admin customers view
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as AdminCustomerRecord;
   }
 
   private async ensureNewsletterBenefitForCustomer(customerId: string, executor: MariaDbPool | MariaDbConnection = this.pool) {
@@ -1889,6 +2115,106 @@ export class MariaDbStoreRepository implements StoreRepository {
       `,
       [id],
     );
+  }
+
+  async getAdminCustomers(): Promise<AdminCustomerRecord[]> {
+    const rows = await this.queryRows('SELECT id FROM customers ORDER BY created_at DESC');
+    const customers = await Promise.all(rows.map((row) => this.loadAdminCustomerRecord(String(row.id))));
+    return customers.filter((customer): customer is AdminCustomerRecord => Boolean(customer));
+  }
+
+  async getAdminCustomer(customerId: string): Promise<AdminCustomerRecord | null> {
+    return this.loadAdminCustomerRecord(customerId);
+  }
+
+  async updateAdminCustomer(customerId: string, input: AdminCustomerRecord): Promise<AdminCustomerRecord> {
+    const current = await this.loadAdminCustomerRecord(customerId);
+    if (!current) {
+      throw new Error('Cliente nao encontrado.');
+    }
+
+    const connection = await this.pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      await connection.query(
+        `
+          UPDATE customers
+          SET email = ?,
+              full_name = ?,
+              tax_document = ?,
+              birth_date = ?,
+              phone_e164 = ?,
+              phone_country = ?,
+              phone_national = ?,
+              allow_marketing = ?,
+              block_purchases = ?,
+              status = ?,
+              updated_at = NOW()
+          WHERE id = ?
+        `,
+        [
+          input.email.trim().toLowerCase(),
+          input.name.trim(),
+          input.cpf.trim(),
+          toSqlDate(input.birthDate),
+          getPhoneE164(input.phone.trim(), input.phoneCountry || 'US'),
+          input.phoneCountry || 'US',
+          input.phone.trim(),
+          input.allowMarketing ? 1 : 0,
+          input.blockPurchases ? 1 : 0,
+          input.status === 'Inativo' ? 'inactive' : 'active',
+          customerId,
+        ],
+      );
+
+      await connection.query('DELETE FROM customer_addresses WHERE customer_id = ?', [customerId]);
+
+      const addresses = [
+        { label: 'Entrega', address: input.shippingAddress, primary: true },
+        { label: 'Cobrança', address: input.billingAddress, primary: false },
+      ];
+
+      for (const item of addresses) {
+        await connection.query(
+          `
+            INSERT INTO customer_addresses (
+              id, customer_id, label, country, postal_code, street, number,
+              complement, neighborhood, city, region, is_primary, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+          `,
+          [
+            createId('address'),
+            customerId,
+            item.label,
+            item.address.country || 'US',
+            item.address.cep.trim(),
+            item.address.street.trim(),
+            item.address.number.trim(),
+            item.address.complement || '',
+            item.address.district.trim(),
+            item.address.city.trim(),
+            item.address.state.trim(),
+            item.primary ? 1 : 0,
+          ],
+        );
+      }
+
+      await connection.commit();
+
+      const updated = await this.loadAdminCustomerRecord(customerId, connection);
+      if (!updated) {
+        throw new Error('Cliente nao encontrado apos atualizacao.');
+      }
+
+      return updated;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async recordAdminLoginFailure(adminUserId: string, failedAttempts: number, lockedUntil: string | null): Promise<void> {

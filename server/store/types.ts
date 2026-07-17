@@ -7,6 +7,7 @@ import type {
   StoreCustomerAddress,
   StoreCustomerProfile,
 } from '../../src/lib/storeCustomerApi.ts';
+import type { AddressCountryCode } from '../../src/lib/customerForm.ts';
 import type { StoreSettings, StripeMode } from '../../src/types/settings.ts';
 import type { StoreCustomerWelcomeBenefit } from '../../src/lib/welcomeBenefit.ts';
 import type { AdminPermission, AdminRole } from '../auth/adminPermissions';
@@ -291,11 +292,89 @@ export type AdminDashboardSummary = {
   recentOrders: AdminDashboardRecentOrder[];
 };
 
+export type AdminCustomerAddress = {
+  country?: AddressCountryCode;
+  cep: string;
+  street: string;
+  number: string;
+  complement?: string;
+  district: string;
+  city: string;
+  state: string;
+};
+
+export type AdminCustomerOrderItem = {
+  id: string;
+  name: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+};
+
+export type AdminCustomerOrder = {
+  id: string;
+  orderNumber: string;
+  date: string;
+  status: 'Aguardando Pagamento' | 'Pago' | 'Em Separacao' | 'Enviado' | 'Entregue' | 'Cancelado';
+  itemsCount: number;
+  total: number;
+  paymentMethod: string;
+  shippingAddress: AdminCustomerAddress;
+  billingAddress: AdminCustomerAddress;
+  items: AdminCustomerOrderItem[];
+  subtotal: number;
+  shipping: number;
+  discount: number;
+};
+
+export type AdminCustomerActivity = {
+  id: string;
+  type: string;
+  description: string;
+  dateTime: string;
+};
+
+export type AdminCustomerAuditLog = {
+  id: string;
+  customerId: string;
+  user: string;
+  field: string;
+  previousValue: string;
+  nextValue: string;
+  dateTime: string;
+  ip: string;
+};
+
+export type AdminCustomerRecord = {
+  id: string;
+  name: string;
+  cpf: string;
+  documentLabel?: string;
+  birthDate: string;
+  email: string;
+  phone: string;
+  phoneCountry?: AddressCountryCode;
+  phoneE164?: string;
+  registeredAt: string;
+  status: 'Ativo' | 'Inativo';
+  blockPurchases: boolean;
+  allowMarketing: boolean;
+  shippingAddress: AdminCustomerAddress;
+  billingAddress: AdminCustomerAddress;
+  orders: AdminCustomerOrder[];
+  activities: AdminCustomerActivity[];
+  auditLogs: AdminCustomerAuditLog[];
+};
+
 export type CustomerProfileUpdateResult = CustomerSessionPayload;
 export type CustomerAddressMutationResult = CustomerSessionPayload;
 export type CustomerBenefitMutationResult = CustomerSessionPayload;
 
 export interface StoreRepository {
+  getAdminCustomers(): Promise<AdminCustomerRecord[]>;
+  getAdminCustomer(customerId: string): Promise<AdminCustomerRecord | null>;
+  updateAdminCustomer(customerId: string, input: AdminCustomerRecord): Promise<AdminCustomerRecord>;
   createBanner(input: Pick<Banner, 'title' | 'desktop' | 'mobile' | 'link'>): Promise<Banner>;
   createCategory(input: CategoryInput): Promise<StoreCategory>;
   createContactMessage(input: ContactMessageInput): Promise<ContactMessage>;

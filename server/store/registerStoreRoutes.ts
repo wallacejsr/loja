@@ -370,6 +370,28 @@ export function registerStoreRoutes(repository: StoreRepository, config: StoreAp
     ),
   );
 
+  router.get(
+    '/admin/customers',
+    ...protect(
+      'customers:read',
+      async (_request, response) => {
+        response.json(await repository.getAdminCustomers());
+      },
+    ),
+  );
+
+  router.put(
+    '/admin/customers/:id',
+    ...protect(
+      'customers:write',
+      async (request, response) => {
+        const updated = await repository.updateAdminCustomer(request.params.id, request.body);
+        response.json(updated);
+      },
+      { action: 'admin.customer_updated', entityId: (request) => request.params.id, entityType: 'customer' },
+    ),
+  );
+
   router.post('/contact-messages', async (request, response) => {
     try {
       response.status(201).json(await repository.createContactMessage(request.body));
