@@ -20,7 +20,7 @@ import { useDeferredSearchTerm } from '../../hooks/useDeferredSearchTerm';
 import { getAdminCustomers as fetchAdminCustomers, updateAdminCustomer as persistAdminCustomer } from '../../lib/storeApiRest';
 
 type CustomerStatus = 'Ativo' | 'Inativo';
-type OrderStatus = 'Aguardando Pagamento' | 'Pago' | 'Em SeparaÃ§Ã£o' | 'Enviado' | 'Entregue' | 'Cancelado';
+type OrderStatus = 'Aguardando Pagamento' | 'Pago' | 'Em Separação' | 'Enviado' | 'Entregue' | 'Cancelado';
 
 type Address = {
   country?: AddressCountryCode;
@@ -235,7 +235,7 @@ export function Customers() {
       await navigator.clipboard.writeText(value);
       showToast(`${label} copiado com sucesso.`);
     } catch (error) {
-      showToast(`NÃ£o foi possÃ­vel copiar ${label.toLowerCase()}.`);
+      showToast(`Não foi possível copiar ${label.toLowerCase()}.`);
     }
   };
 
@@ -253,7 +253,7 @@ export function Customers() {
   const openEmail = (customer: CustomerRecord) => {
     const subject = encodeURIComponent('Atendimento - Loja');
     const body = encodeURIComponent(
-      `OlÃ¡ ${customer.name},\n\nEstamos entrando em contato referente ao seu cadastro/pedido em nossa loja.\n\nAtenciosamente,\nEquipe da Loja`,
+      `Olá ${customer.name},\n\nEstamos entrando em contato referente ao seu cadastro/pedido em nossa loja.\n\nAtenciosamente,\nEquipe da Loja`,
     );
     window.location.href = `mailto:${customer.email}?subject=${subject}&body=${body}`;
     setActionMenu(null);
@@ -301,7 +301,7 @@ export function Customers() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex flex-col gap-1.5">
           <h2 className="text-3xl font-serif text-neutral-900 tracking-tight">Clientes</h2>
-          <p className="text-neutral-500 text-[13px]">Mini CRM do painel com visÃ£o 360Âº, histÃ³rico de pedidos e auditoria.</p>
+          <p className="text-neutral-500 text-[13px]">Mini CRM do painel com visão 360º, histórico de pedidos e auditoria.</p>
         </div>
       </div>
 
@@ -348,7 +348,7 @@ export function Customers() {
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-center">Pedidos</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">Total gasto</th>
                 <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Status</th>
-                <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">AÃ§Ãµes</th>
+                <th className="py-3.5 px-6 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100/60">
@@ -380,7 +380,7 @@ export function Customers() {
                         onClick={(event) => toggleActionMenu(event, customer.id)}
                         className="inline-flex items-center gap-2 rounded-xl border border-neutral-200/70 bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-700 transition-colors hover:bg-neutral-50"
                       >
-                        AÃ§Ãµes
+                        Ações
                         <ChevronDown className="w-4 h-4" />
                       </button>
                     </div>
@@ -403,7 +403,7 @@ export function Customers() {
               Anterior
             </button>
             <button className="px-4 py-2 border border-neutral-200/60 rounded-xl hover:bg-neutral-50 text-neutral-900 text-[11px] font-semibold uppercase tracking-wider transition-colors">
-              PrÃ³xima
+              Próxima
             </button>
           </div>
         </div>
@@ -566,7 +566,7 @@ function CustomerViewModal({
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-neutral-500">Cliente {customer.id}</div>
             <h3 className="mt-2 text-2xl font-serif text-neutral-900">Perfil completo do cliente</h3>
-            <p className="mt-1 text-[13px] text-neutral-500">VisÃ£o consolidada de cadastro, pedidos, indicadores e atividades.</p>
+            <p className="mt-1 text-[13px] text-neutral-500">Visão consolidada de cadastro, pedidos, indicadores e atividades.</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -597,22 +597,22 @@ function CustomerViewModal({
               <Panel title="Dados do cliente" icon={<User className="w-4 h-4" />}>
                 <div className="grid gap-4 md:grid-cols-2">
                   <DetailField label="ID" value={customer.id} />
-                  <DetailField label={getCustomerDocumentLabel(customer)} value={customer.cpf || 'NÃ£o informado'} />
+                  <DetailField label={getCustomerDocumentLabel(customer)} value={customer.cpf || 'Não informado'} />
                   <DetailField label="E-mail" value={customer.email} />
                   <DetailField label="Telefone" value={formatPhone(customer.phoneE164 || customer.phone, customer.phoneCountry || 'BR')} />
                   <DetailField label="Data de cadastro" value={formatDateTime(customer.registeredAt)} />
-                  <DetailField label="Data de nascimento" value={customer.birthDate ? formatShortDate(customer.birthDate) : 'NÃ£o informada'} />
+                  <DetailField label="Data de nascimento" value={customer.birthDate ? formatShortDate(customer.birthDate) : 'Não informada'} />
                 </div>
               </Panel>
 
-              <Panel title="EndereÃ§os">
+              <Panel title="Endereços">
                 <div className="grid gap-4 md:grid-cols-2">
                   <AddressCard title="Entrega" address={customer.shippingAddress} />
-                  <AddressCard title="CobranÃ§a" address={customer.billingAddress} />
+                  <AddressCard title="Cobrança" address={customer.billingAddress} />
                 </div>
               </Panel>
 
-              <Panel title="HistÃ³rico de pedidos" icon={<ShoppingBag className="w-4 h-4" />}>
+              <Panel title="Histórico de pedidos" icon={<ShoppingBag className="w-4 h-4" />}>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
@@ -647,20 +647,20 @@ function CustomerViewModal({
                 <div className="space-y-3">
                   <SummaryLine label="Total de pedidos" value={String(customer.orders.length)} />
                   <SummaryLine label="Total gasto" value={formatCurrency(totalSpent)} />
-                  <SummaryLine label="Ticket mÃ©dio" value={formatCurrency(ticketAverage)} />
-                  <SummaryLine label="Ãšltima compra" value={lastOrder ? formatDateTime(lastOrder.date) : 'Sem compras'} />
+                  <SummaryLine label="Ticket médio" value={formatCurrency(ticketAverage)} />
+                  <SummaryLine label="Última compra" value={lastOrder ? formatDateTime(lastOrder.date) : 'Sem compras'} />
                   <SummaryLine label="Maior compra" value={biggestOrder ? formatCurrency(biggestOrder.total) : formatCurrency(0)} />
                 </div>
               </Panel>
 
-              <Panel title="AÃ§Ãµes rÃ¡pidas">
+              <Panel title="Ações rápidas">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <QuickButton icon={<MessageCircle className="w-4 h-4 text-emerald-600" />} label="WhatsApp" onClick={onOpenWhatsApp} />
                   <QuickButton icon={<Mail className="w-4 h-4 text-blue-600" />} label="E-mail" onClick={onOpenEmail} />
                 </div>
               </Panel>
 
-              <Panel title="HistÃ³rico de atividades">
+              <Panel title="Histórico de atividades">
                 <div className="space-y-3">
                   {customer.activities.map((activity) => (
                     <div key={activity.id} className="rounded-2xl border border-neutral-100 bg-neutral-50/70 px-4 py-3">
@@ -683,13 +683,13 @@ function CustomerViewModal({
                           <span>IP {log.ip}</span>
                         </div>
                         <div className="mt-2 text-sm text-neutral-800">
-                          <strong>{log.field}:</strong> {log.previousValue} â†’ {log.nextValue}
+                          <strong>{log.field}:</strong> {log.previousValue} → {log.nextValue}
                         </div>
                       </div>
                     ))
                   ) : (
                     <div className="rounded-2xl border border-dashed border-neutral-200 bg-neutral-50/70 px-4 py-4 text-sm text-neutral-500">
-                      Nenhuma alteraÃ§Ã£o manual registrada ainda.
+                      Nenhuma alteração manual registrada ainda.
                     </div>
                   )}
                 </div>
@@ -749,7 +749,7 @@ function CustomerEditModal({
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-neutral-500">Cliente {customer.id}</div>
             <h3 className="mt-2 text-2xl font-serif text-neutral-900">Editar cadastro do cliente</h3>
-            <p className="mt-1 text-[13px] text-neutral-500">AtualizaÃ§Ã£o instantÃ¢nea no painel, sem recarregar a pÃ¡gina.</p>
+            <p className="mt-1 text-[13px] text-neutral-500">Atualização instantânea no painel, sem recarregar a página.</p>
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-xl text-neutral-400 hover:text-neutral-900 hover:bg-white">
             <X className="w-5 h-5" />
@@ -784,15 +784,15 @@ function CustomerEditModal({
             </div>
           </Panel>
 
-          <Panel title="EndereÃ§o de entrega">
+          <Panel title="Endereço de entrega">
             <AddressForm address={formData.shippingAddress} onChange={(field, value) => updateAddress('shippingAddress', field, value)} />
           </Panel>
 
-          <Panel title="EndereÃ§o de cobranÃ§a">
+          <Panel title="Endereço de cobrança">
             <AddressForm address={formData.billingAddress} onChange={(field, value) => updateAddress('billingAddress', field, value)} />
           </Panel>
 
-          <Panel title="ConfiguraÃ§Ãµes">
+          <Panel title="Configurações">
             <div className="grid gap-4 md:grid-cols-3">
               <SelectField
                 label="Status"
@@ -802,15 +802,15 @@ function CustomerEditModal({
               />
               <SelectField
                 label="Bloquear compras"
-                value={formData.blockPurchases ? 'Sim' : 'NÃ£o'}
+                value={formData.blockPurchases ? 'Sim' : 'Não'}
                 onChange={(value) => updateField('blockPurchases', value === 'Sim')}
-                options={['NÃ£o', 'Sim']}
+                options={['Não', 'Sim']}
               />
               <SelectField
                 label="Permitir marketing"
-                value={formData.allowMarketing ? 'Sim' : 'NÃ£o'}
+                value={formData.allowMarketing ? 'Sim' : 'Não'}
                 onChange={(value) => updateField('allowMarketing', value === 'Sim')}
-                options={['Sim', 'NÃ£o']}
+                options={['Sim', 'Não']}
               />
             </div>
           </Panel>
@@ -828,7 +828,7 @@ function CustomerEditModal({
               className="bg-neutral-950 text-white px-8 py-3 font-semibold uppercase tracking-wider text-[11px] rounded-xl hover:bg-neutral-800 transition-all flex items-center gap-2 shadow-lg shadow-neutral-900/10"
             >
               <Edit className="w-4 h-4" />
-              Salvar alteraÃ§Ãµes
+              Salvar alterações
             </button>
           </div>
         </form>
@@ -866,7 +866,7 @@ function CustomerOrderDetailsModal({
 
         <div className="max-h-[calc(92vh-88px)] overflow-y-auto p-6 md:p-8 space-y-8">
           <section className="grid gap-4 md:grid-cols-4">
-            <InfoCard icon={<ShoppingBag className="w-4 h-4" />} label="NÃºmero do pedido" value={order.orderNumber} />
+            <InfoCard icon={<ShoppingBag className="w-4 h-4" />} label="Número do pedido" value={order.orderNumber} />
             <InfoCard icon={<Phone className="w-4 h-4" />} label="Cliente" value={customer.name} />
             <InfoCard icon={<Mail className="w-4 h-4" />} label="Pagamento" value={order.paymentMethod} />
             <InfoCard icon={<User className="w-4 h-4" />} label="Status" value={<OrderStatusBadge status={order.status} />} />
@@ -882,7 +882,7 @@ function CustomerOrderDetailsModal({
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Produto</th>
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">SKU</th>
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Qtd.</th>
-                        <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">UnitÃ¡rio</th>
+                        <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Unitário</th>
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">Subtotal</th>
                       </tr>
                     </thead>
@@ -901,10 +901,10 @@ function CustomerOrderDetailsModal({
                 </div>
               </Panel>
 
-              <Panel title="EndereÃ§os">
+              <Panel title="Endereços">
                 <div className="grid gap-4 md:grid-cols-2">
                   <AddressCard title="Entrega" address={order.shippingAddress} />
-                  <AddressCard title="CobranÃ§a" address={order.billingAddress} />
+                  <AddressCard title="Cobrança" address={order.billingAddress} />
                 </div>
               </Panel>
             </div>
@@ -1131,7 +1131,7 @@ function AddressForm({
     <div className="grid gap-4 md:grid-cols-2">
       <InputField label="CEP" value={address.cep} onChange={(value) => onChange('cep', value)} />
       <InputField label="Rua" value={address.street} onChange={(value) => onChange('street', value)} />
-      <InputField label="NÃºmero" value={address.number} onChange={(value) => onChange('number', value)} />
+      <InputField label="Número" value={address.number} onChange={(value) => onChange('number', value)} />
       <InputField label="Complemento" value={address.complement || ''} onChange={(value) => onChange('complement', value)} />
       <InputField label="Bairro" value={address.district} onChange={(value) => onChange('district', value)} />
       <InputField label="Cidade" value={address.city} onChange={(value) => onChange('city', value)} />
@@ -1150,7 +1150,7 @@ function OrderStatusBadge({ status }: { status: OrderStatus }) {
       ? 'bg-emerald-50 text-emerald-600'
       : status === 'Aguardando Pagamento'
         ? 'bg-amber-50 text-amber-600'
-        : status === 'Em SeparaÃ§Ã£o'
+        : status === 'Em Separação'
           ? 'bg-violet-50 text-violet-600'
           : status === 'Enviado'
             ? 'bg-blue-50 text-blue-600'
