@@ -585,6 +585,8 @@ export async function getStoredStripeCredentials(mode: StripeMode) {
 }
 
 export async function resolveStripeSecretKey(mode: StripeMode) {
+  let storageReadError: Error | null = null;
+
   try {
     const storedCredentials = await getStoredStripeCredentials(mode);
 
@@ -594,13 +596,21 @@ export async function resolveStripeSecretKey(mode: StripeMode) {
         source: 'database' as const,
       };
     }
-  } catch {
-    // Fall through to environment variables.
+  } catch (error) {
+    storageReadError = error instanceof Error
+      ? error
+      : new Error('Nao foi possivel ler a secret key da Stripe salva no storage privado.');
   }
 
   const directModeKey = process.env[`STRIPE_${mode.toUpperCase()}_SECRET_KEY`]?.trim() || '';
   const fallbackKey = process.env.STRIPE_SECRET_KEY?.trim() || '';
   const secretKey = directModeKey || fallbackKey;
+
+  if (!secretKey && storageReadError) {
+    throw new Error(
+      `Nao foi possivel ler a secret key da Stripe no modo ${mode}: ${storageReadError.message}`,
+    );
+  }
 
   return {
     secretKey,
