@@ -578,3 +578,27 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   KEY audit_logs_actor_idx (actor_type, actor_id),
   KEY audit_logs_action_idx (action)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS promotions (
+  id VARCHAR(191) NOT NULL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT NOT NULL,
+  promo_code VARCHAR(80) NOT NULL DEFAULT '',
+  discount_type VARCHAR(40) NOT NULL DEFAULT 'percentual',
+  discount_value DECIMAL(10,2) NOT NULL DEFAULT 0,
+  min_order_value DECIMAL(10,2) NOT NULL DEFAULT 0,
+  total_use_limit INT NOT NULL DEFAULT 0,
+  use_limit_per_customer INT NOT NULL DEFAULT 1,
+  starts_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME NULL,
+  application_type VARCHAR(40) NOT NULL DEFAULT 'todos',
+  category_names LONGTEXT NOT NULL,
+  product_ids LONGTEXT NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'Ativo',
+  audience_size INT NOT NULL DEFAULT 0,
+  usages LONGTEXT NOT NULL,
+  logs LONGTEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

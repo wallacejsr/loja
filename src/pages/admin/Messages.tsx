@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Archive, CheckCircle2, Mail, MessageSquareText, RefreshCw, Search, Send, User, X } from 'lucide-react';
-import { ContactMessage, ContactMessageStatus, getContactMessages, updateContactMessage } from '../../lib/storeApi';
 import { showToast } from '../../lib/adminUtils';
+import {
+  type ContactMessage,
+  type ContactMessageStatus,
+  getContactMessages,
+  updateContactMessage,
+} from '../../lib/storeApiRest';
 
 const statusTone: Record<ContactMessageStatus, string> = {
   Novo: 'bg-blue-50 text-blue-700',

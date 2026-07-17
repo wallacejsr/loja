@@ -19,6 +19,12 @@ import type {
   Raffle,
   RaffleInput,
   StoreCategory,
+  PromotionCampaign,
+} from './storeApiSupabase';
+
+export type {
+  ContactMessage,
+  ContactMessageStatus,
 } from './storeApiSupabase';
 
 type RequestOptions = {
@@ -76,7 +82,7 @@ export type AdminCustomerOrder = {
   id: string;
   orderNumber: string;
   date: string;
-  status: 'Aguardando Pagamento' | 'Pago' | 'Em Separacao' | 'Enviado' | 'Entregue' | 'Cancelado';
+  status: 'Aguardando Pagamento' | 'Pago' | 'Em Separacao' | 'Em Separação' | 'Em SeparaÃ§Ã£o' | 'Enviado' | 'Entregue' | 'Cancelado';
   itemsCount: number;
   total: number;
   paymentMethod: string;
@@ -349,5 +355,29 @@ export async function updateContactMessage(id: string, input: ContactMessageUpda
   return requestStoreApi<ContactMessage>(`/contact-messages/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify(input),
+  });
+}
+
+export async function getPromotions(): Promise<PromotionCampaign[]> {
+  return requestStoreApi<PromotionCampaign[]>('/admin/promotions');
+}
+
+export async function createPromotion(input: Partial<PromotionCampaign>): Promise<PromotionCampaign> {
+  return requestStoreApi<PromotionCampaign>('/admin/promotions', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updatePromotion(id: string, input: Partial<PromotionCampaign>): Promise<PromotionCampaign> {
+  return requestStoreApi<PromotionCampaign>(`/admin/promotions/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deletePromotion(id: string): Promise<void> {
+  return requestStoreApi<void>(`/admin/promotions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
   });
 }

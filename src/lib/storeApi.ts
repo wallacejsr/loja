@@ -19,6 +19,7 @@ import type {
   Raffle,
   RaffleInput,
   StoreCategory,
+  PromotionCampaign,
 } from './storeApiSupabase';
 
 export type {
@@ -40,6 +41,7 @@ export type {
   Raffle,
   RaffleInput,
   StoreCategory,
+  PromotionCampaign,
 } from './storeApiSupabase';
 
 type StoreApiModule = {
@@ -74,6 +76,10 @@ type StoreApiModule = {
   updateProduct: (id: string, input: ProductInput) => Promise<Product>;
   updateRaffle: (id: string, input: RaffleInput) => Promise<Raffle>;
   uploadProductImage: (file: File) => Promise<string>;
+  getPromotions: () => Promise<PromotionCampaign[]>;
+  createPromotion: (input: Partial<PromotionCampaign>) => Promise<PromotionCampaign>;
+  updatePromotion: (id: string, input: Partial<PromotionCampaign>) => Promise<PromotionCampaign>;
+  deletePromotion: (id: string) => Promise<void>;
 };
 
 let activeBackendName: StoreBackend | null = null;
@@ -227,4 +233,20 @@ export async function createNewsletterSubscriber(input: NewsletterSubscriberInpu
 
 export async function updateContactMessage(id: string, input: ContactMessageUpdateInput) {
   return (await getStoreApiModule()).updateContactMessage(id, input);
+}
+
+export async function getPromotions() {
+  return (await getStoreApiModule()).getPromotions();
+}
+
+export async function createPromotion(input: Partial<PromotionCampaign>) {
+  return (await getStoreApiModule()).createPromotion(input);
+}
+
+export async function updatePromotion(id: string, input: Partial<PromotionCampaign>) {
+  return (await getStoreApiModule()).updatePromotion(id, input);
+}
+
+export async function deletePromotion(id: string) {
+  return (await getStoreApiModule()).deletePromotion(id);
 }

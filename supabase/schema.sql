@@ -392,3 +392,35 @@ for update using (bucket_id = 'product-images') with check (bucket_id = 'product
 
 create policy "Anon delete product images" on storage.objects
 for delete using (bucket_id = 'product-images');
+
+create table if not exists public.promotions (
+  id text primary key default gen_random_uuid()::text,
+  name text not null,
+  description text default '',
+  promo_code text default '',
+  discount_type text not null default 'percentual',
+  discount_value numeric(10, 2) not null default 0,
+  min_order_value numeric(10, 2) not null default 0,
+  total_use_limit integer not null default 0,
+  use_limit_per_customer integer not null default 1,
+  starts_at timestamptz not null default now(),
+  expires_at timestamptz,
+  application_type text not null default 'todos',
+  category_names jsonb not null default '[]'::jsonb,
+  product_ids jsonb not null default '[]'::jsonb,
+  status text not null default 'Ativo',
+  audience_size integer not null default 0,
+  usages jsonb not null default '[]'::jsonb,
+  logs jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.promotions enable row level security;
+
+drop policy if exists "Public read promotions" on public.promotions;
+drop policy if exists "Anon write promotions" on public.promotions;
+
+create policy "Public read promotions" on public.promotions for select using (true);
+create policy "Anon write promotions" on public.promotions for all using (true) with check (true);
+

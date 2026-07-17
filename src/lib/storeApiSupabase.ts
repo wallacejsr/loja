@@ -1297,3 +1297,245 @@ export async function updateContactMessage(id: string, input: ContactMessageUpda
   if (error) throw error;
   return toContactMessage(data);
 }
+
+export type PromotionStatus = 'Ativo' | 'Pausado' | 'Finalizado' | 'Arquivada';
+export type DiscountType = 'percentual' | 'valor_fixo';
+export type ApplicationType = 'todos' | 'categorias' | 'produtos';
+export type OrderStatus =
+  | 'Aguardando Pagamento'
+  | 'Pago'
+  | 'Em Separação'
+  | 'Em SeparaÃ§Ã£o'
+  | 'Em Separacao'
+  | 'Enviado'
+  | 'Entregue'
+  | 'Cancelado';
+
+export interface PromotionAddress {
+  cep: string;
+  street: string;
+  number: string;
+  complement?: string;
+  district: string;
+  city: string;
+  state: string;
+}
+
+export interface PromotionOrderItem {
+  id: string;
+  name: string;
+  sku: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+}
+
+export interface PromotionOrder {
+  id: string;
+  orderNumber: string;
+  purchaseDate: string;
+  status: OrderStatus;
+  total: number;
+  paymentMethod: string;
+  customer: {
+    name: string;
+    email: string;
+    phone: string;
+    cpf?: string;
+  };
+  shippingAddress: PromotionAddress;
+  items: PromotionOrderItem[];
+  subtotal: number;
+  shipping: number;
+  discount: number;
+  history: {
+    createdAt: string;
+    paidAt?: string;
+    shippedAt?: string;
+    deliveredAt?: string;
+  };
+}
+
+export interface PromotionUsage {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  dateTime: string;
+  orderValue: number;
+  discountApplied: number;
+  order: PromotionOrder;
+}
+
+export interface PromotionLog {
+  id: string;
+  user: string;
+  dateTime: string;
+  ip: string;
+  action: string;
+}
+
+export interface PromotionCampaign {
+  id: string;
+  name: string;
+  description: string;
+  promoCode: string;
+  discountType: DiscountType;
+  discountValue: number;
+  minOrderValue: number;
+  totalUseLimit: number;
+  useLimitPerCustomer: number;
+  startsAt: string;
+  expiresAt: string;
+  applicationType: ApplicationType;
+  categoryNames: string[];
+  productIds: string[];
+  status: PromotionStatus;
+  audienceSize: number;
+  usages: PromotionUsage[];
+  logs: PromotionLog[];
+}
+
+const toPromotionCampaign = (row: any): PromotionCampaign => ({
+  id: String(row.id),
+  name: row.name || '',
+  description: row.description || '',
+  promoCode: row.promo_code || '',
+  discountType: row.discount_type || 'percentual',
+  discountValue: Number(row.discount_value || 0),
+  minOrderValue: Number(row.min_order_value || 0),
+  totalUseLimit: Number(row.total_use_limit || 0),
+  useLimitPerCustomer: Number(row.use_limit_per_customer || 0),
+  startsAt: row.starts_at || '',
+  expiresAt: row.expires_at || '',
+  applicationType: row.application_type || 'todos',
+  categoryNames: Array.isArray(row.category_names) ? row.category_names : [],
+  productIds: Array.isArray(row.product_ids) ? row.product_ids : [],
+  status: row.status || 'Ativo',
+  audienceSize: Number(row.audience_size || 0),
+  usages: Array.isArray(row.usages) ? row.usages : [],
+  logs: Array.isArray(row.logs) ? row.logs : [],
+});
+
+const fromPromotionCampaign = (campaign: Partial<PromotionCampaign>) => ({
+  name: campaign.name,
+  description: campaign.description || '',
+  promo_code: campaign.promoCode || '',
+  discount_type: campaign.discountType || 'percentual',
+  discount_value: campaign.discountValue || 0,
+  min_order_value: campaign.minOrderValue || 0,
+  total_use_limit: campaign.totalUseLimit || 0,
+  use_limit_per_customer: campaign.useLimitPerCustomer || 0,
+  starts_at: campaign.startsAt || new Date().toISOString(),
+  expires_at: campaign.expiresAt || null,
+  application_type: campaign.applicationType || 'todos',
+  category_names: campaign.categoryNames || [],
+  product_ids: campaign.productIds || [],
+  status: campaign.status || 'Ativo',
+  audience_size: campaign.audienceSize || 0,
+  usages: campaign.usages || [],
+  logs: campaign.logs || [],
+});
+
+export async function getPromotions(): Promise<PromotionCampaign[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+
+  const { data, error } = await supabase
+    .from('promotions')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(toPromotionCampaign);
+}
+
+export async function createPromotion(input: Partial<PromotionCampaign>): Promise<PromotionCampaign> {
+  const id = input.id || crypto.randomUUID();
+  const payload = {
+    id,
+    ...fromPromotionCampaign(input),
+  };
+
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      id,
+      name: input.name || '',
+      description: input.description || '',
+      promoCode: input.promoCode || '',
+      discountType: input.discountType || 'percentual',
+      discountValue: input.discountValue || 0,
+      minOrderValue: input.minOrderValue || 0,
+      totalUseLimit: input.totalUseLimit || 0,
+      useLimitPerCustomer: input.useLimitPerCustomer || 1,
+      startsAt: input.startsAt || new Date().toISOString(),
+      expiresAt: input.expiresAt || '',
+      applicationType: input.applicationType || 'todos',
+      categoryNames: input.categoryNames || [],
+      productIds: input.productIds || [],
+      status: input.status || 'Ativo',
+      audienceSize: input.audienceSize || 0,
+      usages: input.usages || [],
+      logs: input.logs || [],
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('promotions')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toPromotionCampaign(data);
+}
+
+export async function updatePromotion(id: string, input: Partial<PromotionCampaign>): Promise<PromotionCampaign> {
+  const payload = {
+    ...fromPromotionCampaign(input),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (!isSupabaseConfigured || !supabase) {
+    return {
+      id,
+      name: input.name || '',
+      description: input.description || '',
+      promoCode: input.promoCode || '',
+      discountType: input.discountType || 'percentual',
+      discountValue: input.discountValue || 0,
+      minOrderValue: input.minOrderValue || 0,
+      totalUseLimit: input.totalUseLimit || 0,
+      useLimitPerCustomer: input.useLimitPerCustomer || 1,
+      startsAt: input.startsAt || new Date().toISOString(),
+      expiresAt: input.expiresAt || '',
+      applicationType: input.applicationType || 'todos',
+      categoryNames: input.categoryNames || [],
+      productIds: input.productIds || [],
+      status: input.status || 'Ativo',
+      audienceSize: input.audienceSize || 0,
+      usages: input.usages || [],
+      logs: input.logs || [],
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('promotions')
+    .update(payload)
+    .eq('id', id)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return toPromotionCampaign(data);
+}
+
+export async function deletePromotion(id: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+
+  const { error } = await supabase
+    .from('promotions')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+

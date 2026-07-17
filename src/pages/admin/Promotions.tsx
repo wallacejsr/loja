@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpRight,
   Calendar,
@@ -26,6 +26,7 @@ import { useStoreCategories, useStoreProducts } from '../../hooks/useStoreData';
 import { useAdminCurrency } from '../../hooks/useAdminCurrency';
 import { showToast } from '../../lib/adminUtils';
 import { useDeferredSearchTerm } from '../../hooks/useDeferredSearchTerm';
+import { getPromotions, createPromotion, updatePromotion, deletePromotion } from '../../lib/storeApi';
 
 type PromotionStatus = 'Ativo' | 'Pausado' | 'Finalizado' | 'Arquivada';
 type DiscountType = 'percentual' | 'valor_fixo';
@@ -34,6 +35,8 @@ type OrderStatus =
   | 'Aguardando Pagamento'
   | 'Pago'
   | 'Em SeparaÃ§Ã£o'
+  | 'Em Separação'
+  | 'Em Separacao'
   | 'Enviado'
   | 'Entregue'
   | 'Cancelado';
@@ -197,397 +200,11 @@ const emptyDraft: CampaignDraft = {
   audienceSize: 1000,
 };
 
-const makeAddress = (street: string, number: string, district: string, city: string, state: string, cep: string, complement?: string): PromotionAddress => ({
-  cep,
-  street,
-  number,
-  complement,
-  district,
-  city,
-  state,
-});
-
-const buildOrder = ({
-  id,
-  orderNumber,
-  purchaseDate,
-  status,
-  paymentMethod,
-  customer,
-  address,
-  items,
-  shipping,
-  discount,
-  paidAt,
-  shippedAt,
-  deliveredAt,
-}: {
-  id: string;
-  orderNumber: string;
-  purchaseDate: string;
-  status: OrderStatus;
-  paymentMethod: string;
-  customer: PromotionOrder['customer'];
-  address: PromotionAddress;
-  items: PromotionOrderItem[];
-  shipping: number;
-  discount: number;
-  paidAt?: string;
-  shippedAt?: string;
-  deliveredAt?: string;
-}): PromotionOrder => {
-  const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
-  return {
-    id,
-    orderNumber,
-    purchaseDate,
-    status,
-    total: subtotal + shipping - discount,
-    paymentMethod,
-    customer,
-    shippingAddress: address,
-    items,
-    subtotal,
-    shipping,
-    discount,
-    history: {
-      createdAt: purchaseDate,
-      paidAt,
-      shippedAt,
-      deliveredAt,
-    },
-  };
-};
-
-const initialPromotions: PromotionCampaign[] = [
-  (() => {
-    const orderOne = buildOrder({
-      id: 'promo-order-1234',
-      orderNumber: '#1234',
-      purchaseDate: '2026-05-28T10:23:00-03:00',
-      status: 'Pago',
-      paymentMethod: 'CartÃ£o de crÃ©dito',
-      customer: {
-        name: 'Maria Silva',
-        email: 'maria@exemplo.com',
-        phone: '64992023191',
-        cpf: '123.456.789-10',
-      },
-      address: makeAddress('Rua 15', '210', 'Centro', 'GoiÃ¢nia', 'GO', '74000-100', 'Apto 402'),
-      items: [
-        { id: '1', name: 'Conjunto Alfaiataria Bege', sku: 'CAF-BG-38', quantity: 1, unitPrice: 249.9, subtotal: 249.9 },
-        { id: '2', name: 'Blusa Tricot Off White', sku: 'BTO-OW-U', quantity: 1, unitPrice: 149.9, subtotal: 149.9 },
-      ],
-      shipping: 16,
-      discount: 39.98,
-      paidAt: '2026-05-28T10:27:00-03:00',
-    });
-
-    const orderTwo = buildOrder({
-      id: 'promo-order-1288',
-      orderNumber: '#1288',
-      purchaseDate: '2026-05-29T15:08:00-03:00',
-      status: 'Enviado',
-      paymentMethod: 'Pix',
-      customer: {
-        name: 'Carla Mendes',
-        email: 'carla@exemplo.com',
-        phone: '64998888777',
-        cpf: '321.456.789-22',
-      },
-      address: makeAddress('Avenida das Flores', '88', 'Jardim GoiÃ¡s', 'GoiÃ¢nia', 'GO', '74805-260'),
-      items: [
-        { id: '1', name: 'Vestido Midi Verde', sku: 'VMV-40', quantity: 1, unitPrice: 320, subtotal: 320 },
-        { id: '2', name: 'Bolsa Couro Caramelo', sku: 'BCC-U', quantity: 1, unitPrice: 299.9, subtotal: 299.9 },
-        { id: '3', name: 'Cinto Fino Dourado', sku: 'CFD-U', quantity: 1, unitPrice: 90, subtotal: 90 },
-      ],
-      shipping: 22,
-      discount: 70.99,
-      paidAt: '2026-05-29T15:12:00-03:00',
-      shippedAt: '2026-05-30T09:15:00-03:00',
-    });
-
-    const orderThree = buildOrder({
-      id: 'promo-order-1294',
-      orderNumber: '#1294',
-      purchaseDate: '2026-05-31T18:30:00-03:00',
-      status: 'Entregue',
-      paymentMethod: 'CartÃ£o de crÃ©dito',
-      customer: {
-        name: 'Rafael Souza',
-        email: 'rafael@exemplo.com',
-        phone: '64994443322',
-      },
-      address: makeAddress('Rua das Palmeiras', '19', 'Parque AmazÃ´nia', 'GoiÃ¢nia', 'GO', '74840-300'),
-      items: [
-        { id: '1', name: 'Camisa Premium', sku: 'CPR-M', quantity: 1, unitPrice: 210, subtotal: 210 },
-        { id: '2', name: 'CalÃ§a Linho Caramelo', sku: 'CLC-42', quantity: 1, unitPrice: 220, subtotal: 220 },
-      ],
-      shipping: 14,
-      discount: 43,
-      paidAt: '2026-05-31T18:34:00-03:00',
-      shippedAt: '2026-06-01T08:20:00-03:00',
-      deliveredAt: '2026-06-01T14:50:00-03:00',
-    });
-
-    return {
-      id: 'promo-001',
-      name: 'Black Friday 2026',
-      description: 'Campanha principal de novembro com incentivo forte para aumentar o volume de carrinhos aprovados.',
-      promoCode: 'BLACK10',
-      discountType: 'percentual',
-      discountValue: 10,
-      minOrderValue: 200,
-      totalUseLimit: 5000,
-      useLimitPerCustomer: 2,
-      startsAt: '2026-11-20T00:00',
-      expiresAt: '2026-11-30T23:59',
-      applicationType: 'todos',
-      categoryNames: [],
-      productIds: [],
-      status: 'Ativo',
-      audienceSize: 1800,
-      usages: [
-        {
-          id: 'use-1',
-          customerName: orderOne.customer.name,
-          customerEmail: orderOne.customer.email,
-          dateTime: orderOne.purchaseDate,
-          orderValue: orderOne.total,
-          discountApplied: 39.98,
-          order: orderOne,
-        },
-        {
-          id: 'use-2',
-          customerName: orderTwo.customer.name,
-          customerEmail: orderTwo.customer.email,
-          dateTime: orderTwo.purchaseDate,
-          orderValue: orderTwo.total,
-          discountApplied: 70.99,
-          order: orderTwo,
-        },
-        {
-          id: 'use-3',
-          customerName: orderThree.customer.name,
-          customerEmail: orderThree.customer.email,
-          dateTime: orderThree.purchaseDate,
-          orderValue: orderThree.total,
-          discountApplied: 43,
-          order: orderThree,
-        },
-      ],
-      logs: [
-        createLogEntry('Campanha criada', '2026-05-10T09:00:00-03:00'),
-        createLogEntry('CÃ³digo promocional publicado no storefront', '2026-05-10T09:10:00-03:00'),
-      ],
-    };
-  })(),
-  (() => {
-    const orderOne = buildOrder({
-      id: 'promo-order-1201',
-      orderNumber: '#1201',
-      purchaseDate: '2026-01-10T11:15:00-03:00',
-      status: 'Entregue',
-      paymentMethod: 'Pix',
-      customer: {
-        name: 'Fernanda Lima',
-        email: 'fernanda@exemplo.com',
-        phone: '64994445555',
-      },
-      address: makeAddress('Alameda das Rosas', '73', 'Setor Oeste', 'GoiÃ¢nia', 'GO', '74395-120'),
-      items: [
-        { id: '1', name: 'Saia Midi Nude', sku: 'SMN-38', quantity: 1, unitPrice: 299.9, subtotal: 299.9 },
-      ],
-      shipping: 0,
-      discount: 74.98,
-      paidAt: '2026-01-10T11:20:00-03:00',
-      shippedAt: '2026-01-10T17:00:00-03:00',
-      deliveredAt: '2026-01-12T10:00:00-03:00',
-    });
-
-    const orderTwo = buildOrder({
-      id: 'promo-order-1209',
-      orderNumber: '#1209',
-      purchaseDate: '2026-01-15T14:42:00-03:00',
-      status: 'Entregue',
-      paymentMethod: 'Boleto',
-      customer: {
-        name: 'Paula Andrade',
-        email: 'paula@exemplo.com',
-        phone: '64997776611',
-      },
-      address: makeAddress('Rua do ComÃ©rcio', '501', 'Vila Jaiara', 'AnÃ¡polis', 'GO', '75083-310', 'Sala 3'),
-      items: [
-        { id: '1', name: 'CalÃ§a Wide Off White', sku: 'CWO-40', quantity: 1, unitPrice: 220, subtotal: 220 },
-        { id: '2', name: 'Camiseta Cotton Premium', sku: 'CCP-G', quantity: 2, unitPrice: 150, subtotal: 300 },
-      ],
-      shipping: 0,
-      discount: 130,
-      paidAt: '2026-01-16T09:00:00-03:00',
-      shippedAt: '2026-01-16T16:20:00-03:00',
-      deliveredAt: '2026-01-18T09:40:00-03:00',
-    });
-
-    return {
-      id: 'promo-002',
-      name: 'LiquidaÃ§Ã£o de VerÃ£o',
-      description: 'Campanha de giro de estoque com desconto direto aplicado no catÃ¡logo da coleÃ§Ã£o de verÃ£o.',
-      promoCode: '',
-      discountType: 'percentual',
-      discountValue: 25,
-      minOrderValue: 0,
-      totalUseLimit: 0,
-      useLimitPerCustomer: 0,
-      startsAt: '2026-01-05T08:00',
-      expiresAt: '2026-02-15T23:59',
-      applicationType: 'categorias',
-      categoryNames: ['Feminino'],
-      productIds: [],
-      status: 'Finalizado',
-      audienceSize: 2400,
-      usages: [
-        {
-          id: 'use-4',
-          customerName: orderOne.customer.name,
-          customerEmail: orderOne.customer.email,
-          dateTime: orderOne.purchaseDate,
-          orderValue: orderOne.total,
-          discountApplied: 74.98,
-          order: orderOne,
-        },
-        {
-          id: 'use-5',
-          customerName: orderTwo.customer.name,
-          customerEmail: orderTwo.customer.email,
-          dateTime: orderTwo.purchaseDate,
-          orderValue: orderTwo.total,
-          discountApplied: 130,
-          order: orderTwo,
-        },
-      ],
-      logs: [
-        createLogEntry('Campanha criada', '2026-01-02T08:30:00-03:00'),
-        createLogEntry('Campanha finalizada automaticamente no tÃ©rmino da vigÃªncia', '2026-02-15T23:59:00-03:00', 'Sistema'),
-      ],
-    };
-  })(),
-  (() => {
-    const orderOne = buildOrder({
-      id: 'promo-order-1301',
-      orderNumber: '#1301',
-      purchaseDate: '2026-05-24T13:00:00-03:00',
-      status: 'Pago',
-      paymentMethod: 'Pix',
-      customer: {
-        name: 'Lucas Pereira',
-        email: 'lucas@exemplo.com',
-        phone: '64993334455',
-      },
-      address: makeAddress('Rua 7', '100', 'Setor Bueno', 'GoiÃ¢nia', 'GO', '74215-120'),
-      items: [
-        { id: '1', name: 'Camisa Premium', sku: 'CPR-G', quantity: 1, unitPrice: 210, subtotal: 210 },
-      ],
-      shipping: 0,
-      discount: 21,
-      paidAt: '2026-05-24T13:04:00-03:00',
-    });
-
-    const orderTwo = buildOrder({
-      id: 'promo-order-1308',
-      orderNumber: '#1308',
-      purchaseDate: '2026-05-31T20:20:00-03:00',
-      status: 'Enviado',
-      paymentMethod: 'CartÃ£o de crÃ©dito',
-      customer: {
-        name: 'Renata Gomes',
-        email: 'renata@exemplo.com',
-        phone: '64995556677',
-      },
-      address: makeAddress('Avenida T-4', '222', 'Serrinha', 'GoiÃ¢nia', 'GO', '74230-040', 'Casa 2'),
-      items: [
-        { id: '1', name: 'Vestido Midi Verde', sku: 'VMV-38', quantity: 1, unitPrice: 320, subtotal: 320 },
-        { id: '2', name: 'Bolsa Couro Caramelo', sku: 'BCC-U', quantity: 1, unitPrice: 199, subtotal: 199 },
-      ],
-      shipping: 10,
-      discount: 52.9,
-      paidAt: '2026-05-31T20:24:00-03:00',
-      shippedAt: '2026-06-01T09:15:00-03:00',
-    });
-
-    return {
-      id: 'promo-003',
-      name: 'Primeira Compra',
-      description: 'Cupom de boas-vindas para novos clientes com aplicaÃ§Ã£o em produtos especÃ­ficos de maior conversÃ£o.',
-      promoCode: 'WELCOME10',
-      discountType: 'percentual',
-      discountValue: 10,
-      minOrderValue: 99,
-      totalUseLimit: 0,
-      useLimitPerCustomer: 1,
-      startsAt: '2026-03-01T00:00',
-      expiresAt: '',
-      applicationType: 'produtos',
-      categoryNames: [],
-      productIds: ['p1', 'p2', 'p5'],
-      status: 'Ativo',
-      audienceSize: 950,
-      usages: [
-        {
-          id: 'use-6',
-          customerName: orderOne.customer.name,
-          customerEmail: orderOne.customer.email,
-          dateTime: orderOne.purchaseDate,
-          orderValue: orderOne.total,
-          discountApplied: 21,
-          order: orderOne,
-        },
-        {
-          id: 'use-7',
-          customerName: orderTwo.customer.name,
-          customerEmail: orderTwo.customer.email,
-          dateTime: orderTwo.purchaseDate,
-          orderValue: orderTwo.total,
-          discountApplied: 52.9,
-          order: orderTwo,
-        },
-      ],
-      logs: [
-        createLogEntry('Campanha criada', '2026-03-01T08:00:00-03:00'),
-        createLogEntry('Campanha pausada para revisÃ£o de estoque', '2026-04-10T14:20:00-03:00'),
-        createLogEntry('Campanha ativada novamente', '2026-04-11T09:05:00-03:00'),
-      ],
-    };
-  })(),
-  {
-    id: 'promo-004',
-    name: 'VIP Clientes',
-    description: 'Campanha exclusiva para clientes recorrentes com benefÃ­cio de valor fixo em carrinhos de alto valor.',
-    promoCode: 'VIP20',
-    discountType: 'valor_fixo',
-    discountValue: 20,
-    minOrderValue: 300,
-    totalUseLimit: 300,
-    useLimitPerCustomer: 1,
-    startsAt: '2026-06-01T08:00',
-    expiresAt: '2026-07-01T23:59',
-    applicationType: 'categorias',
-    categoryNames: ['AcessÃ³rios'],
-    productIds: [],
-    status: 'Pausado',
-    audienceSize: 400,
-    usages: [],
-    logs: [
-      createLogEntry('Campanha criada', '2026-05-30T10:00:00-03:00'),
-      createLogEntry('Campanha pausada manualmente', '2026-06-01T08:10:00-03:00'),
-    ],
-  },
-];
-
 export function Promotions() {
   const products = useStoreProducts();
   const categories = useStoreCategories();
   const { formatCurrency, currencyCode } = useAdminCurrency();
-  const [campaigns, setCampaigns] = useState<PromotionCampaign[]>(initialPromotions);
+  const [campaigns, setCampaigns] = useState<PromotionCampaign[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [actionMenu, setActionMenu] = useState<ActionMenuState | null>(null);
   const [formModal, setFormModal] = useState<FormModalState | null>(null);
@@ -596,27 +213,31 @@ export function Promotions() {
   const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
   const normalizedSearchTerm = useDeferredSearchTerm(searchTerm);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const stored = window.localStorage.getItem(PROMOTIONS_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as PromotionCampaign[];
-        setCampaigns(parsed.map(normalizeCampaign));
-      }
-    } catch (error) {
-      console.error('Falha ao carregar promoÃ§Ãµes do painel', error);
-    }
-  }, []);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(PROMOTIONS_STORAGE_KEY, JSON.stringify(campaigns));
-    } catch (error) {
-      console.error('Falha ao persistir promoÃ§Ãµes do painel', error);
+    let active = true;
+    async function loadCampaigns() {
+      try {
+        setIsLoading(true);
+        const data = await getPromotions();
+        if (active) {
+          setCampaigns(data.map(normalizeCampaign));
+        }
+      } catch (error) {
+        console.error('Falha ao carregar promoções', error);
+        showToast('Falha ao carregar promoções.');
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
     }
-  }, [campaigns]);
+    loadCampaigns();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!actionMenu || typeof window === 'undefined') return;
@@ -744,103 +365,113 @@ export function Promotions() {
     }
   };
 
-  const saveCampaign = (draft: CampaignDraft) => {
-    if (formModal?.mode === 'edit' && editingCampaign) {
-      const now = new Date().toISOString();
-      const changedCount = countCampaignChanges(editingCampaign, draft);
-
-      setCampaigns((current) =>
-        current.map((campaign) =>
-          campaign.id === editingCampaign.id
-            ? appendLog(
-                {
-                  ...campaign,
-                  ...draft,
-                },
-                changedCount ? `Campanha editada com ${changedCount} ajuste(s)` : 'Campanha salva sem alteraÃ§Ãµes',
-                now,
-              )
-            : campaign,
-        ),
-      );
-
-      showToast('Campanha atualizada com sucesso.');
-      setFormModal(null);
-      return;
-    }
-
-    const newCampaign: PromotionCampaign = {
-      id: crypto.randomUUID(),
-      ...draft,
-      usages: [],
-      logs: [],
-    };
-
-    const createdLog = {
-      id: crypto.randomUUID(),
-      user: adminUserName,
-      dateTime: new Date().toISOString(),
-      ip: getSessionIp(),
-      action:
-        formModal?.mode === 'duplicate' && editingCampaign
-          ? `Campanha duplicada a partir de ${editingCampaign.name}`
-          : 'Campanha criada',
-    };
-
-    setCampaigns((current) => {
-      const next = [{ ...newCampaign, logs: [createdLog] }, ...current];
-
-      if (formModal?.mode === 'duplicate' && editingCampaign) {
-        return next.map((campaign) =>
-          campaign.id === editingCampaign.id
-            ? appendLog(campaign, `Campanha duplicada para ${newCampaign.name}`, createdLog.dateTime)
-            : campaign,
+  const saveCampaign = async (draft: CampaignDraft) => {
+    try {
+      if (formModal?.mode === 'edit' && editingCampaign) {
+        const now = new Date().toISOString();
+        const changedCount = countCampaignChanges(editingCampaign, draft);
+        const updatedPayload = appendLog(
+          {
+            ...editingCampaign,
+            ...draft,
+          },
+          changedCount ? `Campanha editada com ${changedCount} ajuste(s)` : 'Campanha salva sem alterações',
+          now,
         );
+
+        const updated = await updatePromotion(editingCampaign.id, updatedPayload);
+        setCampaigns((current) =>
+          current.map((campaign) => (campaign.id === editingCampaign.id ? normalizeCampaign(updated) : campaign)),
+        );
+
+        showToast('Campanha atualizada com sucesso.');
+        setFormModal(null);
+        return;
       }
 
-      return next;
-    });
+      const createdLog = {
+        id: crypto.randomUUID(),
+        user: adminUserName,
+        dateTime: new Date().toISOString(),
+        ip: getSessionIp(),
+        action:
+          formModal?.mode === 'duplicate' && editingCampaign
+            ? `Campanha duplicada a partir de ${editingCampaign.name}`
+            : 'Campanha criada',
+      };
 
-    showToast(formModal?.mode === 'duplicate' ? 'Campanha duplicada com sucesso.' : 'Campanha criada com sucesso.');
-    setFormModal(null);
+      const newCampaign: Partial<PromotionCampaign> = {
+        ...draft,
+        usages: [],
+        logs: [createdLog],
+      };
+
+      const created = await createPromotion(newCampaign);
+
+      if (formModal?.mode === 'duplicate' && editingCampaign) {
+        const sourceLogPayload = appendLog(editingCampaign, `Campanha duplicada para ${created.name}`, createdLog.dateTime);
+        const updatedSource = await updatePromotion(editingCampaign.id, sourceLogPayload);
+        setCampaigns((current) =>
+          [created, ...current].map((campaign) =>
+            campaign.id === editingCampaign.id ? normalizeCampaign(updatedSource) : normalizeCampaign(campaign)
+          )
+        );
+      } else {
+        setCampaigns((current) => [normalizeCampaign(created), ...current]);
+      }
+
+      showToast(formModal?.mode === 'duplicate' ? 'Campanha duplicada com sucesso.' : 'Campanha criada com sucesso.');
+      setFormModal(null);
+    } catch (error) {
+      console.error('Erro ao salvar campanha', error);
+      showToast('Falha ao salvar a campanha.');
+    }
   };
 
-  const setCampaignStatus = (campaignId: string, status: PromotionStatus, actionLabel: string) => {
-    const now = new Date().toISOString();
-    setCampaigns((current) =>
-      current.map((campaign) =>
-        campaign.id === campaignId ? appendLog({ ...campaign, status }, actionLabel, now) : campaign,
-      ),
-    );
-    setActionMenu(null);
+  const setCampaignStatus = async (campaignId: string, status: PromotionStatus, actionLabel: string) => {
+    try {
+      const campaign = campaigns.find((c) => c.id === campaignId);
+      if (!campaign) return;
+      const now = new Date().toISOString();
+      const updatedPayload = appendLog({ ...campaign, status }, actionLabel, now);
+      const updated = await updatePromotion(campaignId, updatedPayload);
+      setCampaigns((current) =>
+        current.map((item) => (item.id === campaignId ? normalizeCampaign(updated) : item)),
+      );
+      setActionMenu(null);
+      return updated;
+    } catch (error) {
+      console.error('Erro ao atualizar status', error);
+      showToast('Falha ao atualizar status da campanha.');
+    }
   };
 
-  const toggleCampaignStatus = (campaign: PromotionCampaign) => {
+  const toggleCampaignStatus = async (campaign: PromotionCampaign) => {
     if (campaign.status !== 'Ativo' && campaign.status !== 'Pausado') {
-      showToast('Esta campanha nÃ£o pode alternar entre ativo e pausado.');
+      showToast('Esta campanha não pode alternar entre ativo e pausado.');
       setActionMenu(null);
       return;
     }
 
     const nextStatus = campaign.status === 'Ativo' ? 'Pausado' : 'Ativo';
-    setCampaignStatus(campaign.id, nextStatus, `Campanha ${nextStatus === 'Ativo' ? 'ativada' : 'pausada'} manualmente`);
+    await setCampaignStatus(campaign.id, nextStatus, `Campanha ${nextStatus === 'Ativo' ? 'ativada' : 'pausada'} manualmente`);
     showToast(`Campanha ${nextStatus === 'Ativo' ? 'ativada' : 'pausada'} com sucesso.`);
   };
 
   const finalizeCampaign = (campaign: PromotionCampaign) => {
     if (campaign.status === 'Finalizado') {
-      showToast('Esta campanha jÃ¡ estÃ¡ finalizada.');
+      showToast('Esta campanha já está finalizada.');
       setActionMenu(null);
       return;
     }
 
     setConfirmation({
       title: 'Finalizar campanha',
-      description: 'Deseja realmente finalizar esta campanha? Esta aÃ§Ã£o impedirÃ¡ novos resgates.',
+      description: 'Deseja realmente finalizar esta campanha? Esta ação impedirá novos resgates.',
       confirmLabel: 'Finalizar campanha',
       tone: 'danger',
-      onConfirm: () => {
-        setCampaignStatus(campaign.id, 'Finalizado', 'Campanha finalizada manualmente');
+      onConfirm: async () => {
+        await setCampaignStatus(campaign.id, 'Finalizado', 'Campanha finalizada manualmente');
         showToast('Campanha finalizada com sucesso.');
       },
     });
@@ -852,19 +483,25 @@ export function Promotions() {
     setConfirmation({
       title: hasHistory ? 'Arquivar campanha' : 'Excluir campanha',
       description: hasHistory
-        ? 'Esta campanha jÃ¡ possui histÃ³rico de utilizaÃ§Ã£o e nÃ£o pode ser removida. Ela serÃ¡ arquivada.'
-        : 'Deseja realmente excluir esta campanha? Esta aÃ§Ã£o remove a campanha do painel.',
+        ? 'Esta campanha já possui histórico de utilização e não pode ser removida. Ela será arquivada.'
+        : 'Deseja realmente excluir esta campanha? Esta ação remove a campanha do painel.',
       confirmLabel: hasHistory ? 'Arquivar campanha' : 'Excluir campanha',
       tone: 'danger',
-      onConfirm: () => {
+      onConfirm: async () => {
         if (hasHistory) {
-          setCampaignStatus(campaign.id, 'Arquivada', 'Campanha arquivada por possuir histÃ³rico de utilizaÃ§Ã£o');
-          showToast('Esta campanha jÃ¡ possui histÃ³rico de utilizaÃ§Ã£o e nÃ£o pode ser removida. Ela serÃ¡ arquivada.');
+          await setCampaignStatus(campaign.id, 'Arquivada', 'Campanha arquivada por possuir histórico de utilização');
+          showToast('Esta campanha já possui histórico de utilização e não pode ser removida. Ela será arquivada.');
           return;
         }
 
-        setCampaigns((current) => current.filter((item) => item.id !== campaign.id));
-        showToast('Campanha excluÃ­da com sucesso.');
+        try {
+          await deletePromotion(campaign.id);
+          setCampaigns((current) => current.filter((item) => item.id !== campaign.id));
+          showToast('Campanha excluída com sucesso.');
+        } catch (error) {
+          console.error('Erro ao excluir campanha', error);
+          showToast('Falha ao excluir a campanha.');
+        }
       },
     });
     setActionMenu(null);
@@ -937,13 +574,26 @@ export function Promotions() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {campaignRows.map(({ campaign, revenue, discountLabel, expiresLabel }) => (
-                <tr key={campaign.id} className="hover:bg-neutral-50/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-neutral-100 flex items-center justify-center text-neutral-500">
-                        <Tag className="w-4 h-4" />
-                      </div>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-neutral-500 text-[13px]">
+                    Carregando campanhas...
+                  </td>
+                </tr>
+              ) : campaignRows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-neutral-500 text-[13px]">
+                    Nenhuma campanha encontrada.
+                  </td>
+                </tr>
+              ) : (
+                campaignRows.map(({ campaign, revenue, discountLabel, expiresLabel }) => (
+                  <tr key={campaign.id} className="hover:bg-neutral-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-neutral-100 flex items-center justify-center text-neutral-500">
+                          <Tag className="w-4 h-4" />
+                        </div>
                         <div className="min-w-0">
                           <div className="text-[13px] font-semibold text-neutral-900">{campaign.name}</div>
                           <div className="mt-1 flex items-center gap-1 text-[11px] text-neutral-400">
@@ -952,32 +602,33 @@ export function Promotions() {
                           </div>
                         </div>
                       </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="inline-flex text-[11px] font-mono font-bold bg-neutral-100 px-2 py-1 rounded text-neutral-600">
-                      {campaign.promoCode || 'â€”'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-[13px] font-bold text-neutral-900">{discountLabel}</td>
-                  <td className="px-6 py-4 text-[13px] font-medium text-neutral-600">{campaign.usages.length}</td>
-                  <td className="px-6 py-4 text-[13px] font-bold text-neutral-900">{formatCurrency(revenue)}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${statusTone[campaign.status]}`}>
-                      {campaign.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button
-                      type="button"
-                      onClick={(event) => toggleActionMenu(event, campaign.id)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-neutral-200/70 bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-700 transition-colors hover:bg-neutral-50"
-                    >
-                      AÃ§Ãµes
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex text-[11px] font-mono font-bold bg-neutral-100 px-2 py-1 rounded text-neutral-600">
+                        {campaign.promoCode || '—'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-[13px] font-bold text-neutral-900">{discountLabel}</td>
+                    <td className="px-6 py-4 text-[13px] font-medium text-neutral-600">{campaign.usages.length}</td>
+                    <td className="px-6 py-4 text-[13px] font-bold text-neutral-900">{formatCurrency(revenue)}</td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${statusTone[campaign.status]}`}>
+                        {campaign.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={(event) => toggleActionMenu(event, campaign.id)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-neutral-200/70 bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-700 transition-colors hover:bg-neutral-50"
+                      >
+                        Ações
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -988,7 +639,7 @@ export function Promotions() {
             <span className="font-medium text-neutral-900">{campaigns.length}</span> campanhas
           </div>
           <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">
-            Dados persistidos localmente no painel
+            Dados sincronizados com o banco de dados
           </div>
         </div>
       </div>

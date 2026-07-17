@@ -316,7 +316,7 @@ export type AdminCustomerOrder = {
   id: string;
   orderNumber: string;
   date: string;
-  status: 'Aguardando Pagamento' | 'Pago' | 'Em Separacao' | 'Enviado' | 'Entregue' | 'Cancelado';
+  status: 'Aguardando Pagamento' | 'Pago' | 'Em Separacao' | 'Em Separação' | 'Em SeparaÃ§Ã£o' | 'Enviado' | 'Entregue' | 'Cancelado';
   itemsCount: number;
   total: number;
   paymentMethod: string;
