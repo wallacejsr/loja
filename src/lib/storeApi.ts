@@ -1,4 +1,4 @@
-import type { Product } from '../data/mockData';
+import type { StoreProduct as Product } from '../types/store';
 import type { StoreSettings } from '../types/settings';
 import { getConfiguredStoreBackend, type StoreBackend } from './storeBackend';
 import type {

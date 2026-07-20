@@ -1,4 +1,4 @@
-import { categorias as mockCategories, instagramFeed as mockInstagramFeed, produtos as mockProducts, Product } from '../data/mockData';
+import type { StoreProduct as Product } from '../types/store';
 import {
   createNewsletterSubscriberId,
   isValidNewsletterEmail,
@@ -199,69 +199,26 @@ export interface ProductInput {
 }
 
 const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-const CONTACT_MESSAGES_STORAGE_KEY = 'zenv_contact_messages';
-const NEWSLETTER_SUBSCRIBERS_STORAGE_KEY = 'zenv_newsletter_subscribers';
+let localContactMessagesMemory: ContactMessage[] = [];
+let localNewsletterSubscribersMemory: NewsletterSubscriber[] = [];
 
 const getLocalContactMessages = (): ContactMessage[] => {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = window.localStorage.getItem(CONTACT_MESSAGES_STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored) as ContactMessage[];
-    return Array.isArray(parsed) ? parsed.map((item) => toContactMessage(item)) : [];
-  } catch (error) {
-    console.error('Falha ao carregar mensagens de contato locais', error);
-    return [];
-  }
+  return localContactMessagesMemory.map((item) => toContactMessage(item));
 };
 
 const saveLocalContactMessages = (messages: ContactMessage[]) => {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(CONTACT_MESSAGES_STORAGE_KEY, JSON.stringify(messages));
-  } catch (error) {
-    console.error('Falha ao persistir mensagens de contato locais', error);
-  }
+  localContactMessagesMemory = [...messages];
 };
 
 const getLocalNewsletterSubscribers = (): NewsletterSubscriber[] => {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = window.localStorage.getItem(NEWSLETTER_SUBSCRIBERS_STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored) as NewsletterSubscriber[];
-    return Array.isArray(parsed) ? parsed.map((item) => toNewsletterSubscriber(item)) : [];
-  } catch (error) {
-    console.error('Falha ao carregar inscritos da newsletter', error);
-    return [];
-  }
+  return localNewsletterSubscribersMemory.map((item) => toNewsletterSubscriber(item));
 };
 
 const saveLocalNewsletterSubscribers = (subscribers: NewsletterSubscriber[]) => {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(NEWSLETTER_SUBSCRIBERS_STORAGE_KEY, JSON.stringify(subscribers));
-  } catch (error) {
-    console.error('Falha ao persistir inscritos da newsletter', error);
-  }
+  localNewsletterSubscribersMemory = [...subscribers];
 };
 
-const fallbackBanners: Banner[] = [
-  {
-    id: '1',
-    title: 'ZENV Essentials',
-    desktop: mockProducts[0]?.imagens[0] || mockCategories[0]?.imagem || '',
-    mobile: mockProducts[0]?.imagens[0] || mockCategories[0]?.imagem || '',
-    image: mockProducts[0]?.imagens[0] || mockCategories[0]?.imagem || '',
-    link: '/catalog',
-    status: 'Ativo',
-    position: 1,
-  },
-];
+const fallbackBanners: Banner[] = [];
 
 const toProduct = (row: any): Product => ({
   id: String(row.id),
@@ -468,7 +425,7 @@ const fromSettings = (settings: StoreSettings) => ({
 });
 
 export async function getProducts(): Promise<Product[]> {
-  if (!isSupabaseConfigured || !supabase) return mockProducts;
+  if (!isSupabaseConfigured || !supabase) return [];
 
   const { data, error } = await supabase
     .from('products')
@@ -615,28 +572,7 @@ export async function deleteProduct(id: string): Promise<void> {
 }
 
 export async function getCategories(): Promise<StoreCategory[]> {
-  if (!isSupabaseConfigured || !supabase) {
-    return mockCategories.map((category, index) => ({
-      id: category.nome,
-      nome: category.nome,
-      imagem: category.imagem,
-      slug: category.nome.toLowerCase().replace(/\s+/g, '-'),
-      subcategories: Array.from(new Set(
-        mockProducts
-          .filter((product) => product.categoria === category.nome && product.subcategoria)
-          .map((product) => product.subcategoria),
-      )),
-      status: 'Ativo',
-      showInMenu: true,
-      menuOrder: index + 1,
-      showOnHome: false,
-      homeSectionTitle: category.nome,
-      homeSectionOrder: index + 1,
-      homeSectionLimit: 4,
-      homeSectionFilter: 'all',
-      productCount: mockProducts.filter((product) => product.categoria === category.nome).length,
-    }));
-  }
+  if (!isSupabaseConfigured || !supabase) return [];
 
   const { data, error } = await supabase
     .from('categories')
@@ -787,7 +723,7 @@ export async function getHomeSections({ onlyActive = true } = {}): Promise<HomeS
     },
   ];
 
-  if (!isSupabaseConfigured || !supabase) return fallback;
+  if (!isSupabaseConfigured || !supabase) return [];
 
   let query = supabase.from('home_sections').select('*').order('position', { ascending: true });
   if (onlyActive) query = query.eq('status', 'Ativo');
@@ -800,37 +736,7 @@ export async function getHomeSections({ onlyActive = true } = {}): Promise<HomeS
 }
 
 export async function getHomeCards({ onlyActive = true } = {}): Promise<HomeCard[]> {
-  const fallback: HomeCard[] = [
-    {
-      id: '5f3de6ca-2dcb-4b53-9d2f-0a5dd0b9f111',
-      title: 'Camisetas',
-      image: 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&q=80&w=900',
-      link: '/catalog?category=Camisetas',
-      ctaLabel: 'Confira',
-      position: 1,
-      status: 'Ativo',
-    },
-    {
-      id: '33e86420-b6d0-45a1-b53d-5fe6b7f1e222',
-      title: 'Puffer',
-      image: 'https://images.unsplash.com/photo-1548624149-f9b185f6893d?auto=format&fit=crop&q=80&w=900',
-      link: '/catalog?q=puffer',
-      ctaLabel: 'Confira',
-      position: 2,
-      status: 'Ativo',
-    },
-    {
-      id: '8f92cb70-7d15-4ab7-8082-8d6b0e51c333',
-      title: 'Tric\u00f4s',
-      image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=900',
-      link: '/catalog?q=trico',
-      ctaLabel: 'Confira',
-      position: 3,
-      status: 'Ativo',
-    },
-  ];
-
-  if (!isSupabaseConfigured || !supabase) return onlyActive ? fallback.filter((card) => card.status === 'Ativo') : fallback;
+  if (!isSupabaseConfigured || !supabase) return [];
 
   let query = supabase.from('home_cards').select('*').order('position', { ascending: true });
   if (onlyActive) query = query.eq('status', 'Ativo');
@@ -898,26 +804,7 @@ export async function deleteHomeCard(id: string): Promise<void> {
 }
 
 export async function getRaffles({ onlyActive = true } = {}): Promise<Raffle[]> {
-  const fallback: Raffle[] = [
-    {
-      id: 'raffle-1',
-      title: 'Sorteio Ativo',
-      prize: 'Look exclusivo da loja',
-      description: 'Participe do clube de sorteios e concorra a premios especiais.',
-      image: mockProducts[0]?.imagens[0] || '',
-      productId: mockProducts[0]?.id || '',
-      pointsPerTicket: 100,
-      drawDate: '2026-12-31',
-      ctaLabel: 'Participar agora',
-      ctaLink: '/sorteios',
-      totalParticipants: 0,
-      totalTickets: 0,
-      status: 'Ativo',
-      position: 1,
-    },
-  ];
-
-  if (!isSupabaseConfigured || !supabase) return onlyActive ? fallback.filter((raffle) => raffle.status === 'Ativo') : fallback;
+  if (!isSupabaseConfigured || !supabase) return [];
 
   let query = supabase.from('raffles').select('*').order('position', { ascending: true });
   if (onlyActive) query = query.eq('status', 'Ativo');
@@ -1078,13 +965,7 @@ export async function updateBannerPositions(banners: Banner[]): Promise<void> {
 }
 
 export async function getInstagramFeed(): Promise<InstagramPost[]> {
-  if (!isSupabaseConfigured || !supabase) {
-    return mockInstagramFeed.map((image, index) => ({
-      id: String(index + 1),
-      image,
-      position: index + 1,
-    }));
-  }
+  if (!isSupabaseConfigured || !supabase) return [];
 
   const { data, error } = await supabase
     .from('instagram_posts')
@@ -1305,7 +1186,7 @@ export type OrderStatus =
   | 'Aguardando Pagamento'
   | 'Pago'
   | 'Em Separação'
-  | 'Em SeparaÃ§Ã£o'
+  | 'Em Separação'
   | 'Em Separacao'
   | 'Enviado'
   | 'Entregue'
@@ -1538,4 +1419,3 @@ export async function deletePromotion(id: string): Promise<void> {
 
   if (error) throw error;
 }
-

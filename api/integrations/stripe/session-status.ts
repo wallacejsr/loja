@@ -1,4 +1,5 @@
 import { getStripeCandidateSecretKeys } from './runtime.js';
+import { getTrackedStripeOrderByLookup } from './tracking.js';
 
 type VercelRequestLike = {
   headers?: Record<string, string | string[] | undefined>;
@@ -16,19 +17,38 @@ type StripeSessionStatusResponse = {
   amountTotal: number | null;
   currency: string | null;
   customerEmail: string | null;
+  trackedOrder?: {
+    customer: {
+      cpf?: string;
+      documentLabel?: string;
+      email: string;
+      name: string;
+      phone: string;
+      phoneCountry?: string;
+    };
+    discount: number;
+    orderNumber: string;
+    paymentMethod: string;
+    shipping: number;
+    shippingAddress: {
+      cep: string;
+      city: string;
+      complement?: string;
+      country?: string;
+      district: string;
+      number: string;
+      state: string;
+      street: string;
+    };
+    subtotal: number;
+    total: number;
+  } | null;
   orderNumber: string;
   paid: boolean;
   paymentStatus: string | null;
   sessionId: string;
   sessionStatus: string | null;
   success: true;
-};
-
-type TrackedStripeAdminOrder = {
-  orderNumber: string;
-  paymentStatus: string;
-  sessionStatus: string;
-  total: number;
 };
 
 function getQueryValue(query: VercelRequestLike['query'], key: string) {
@@ -84,12 +104,6 @@ function buildResponsePayload(session: any): StripeSessionStatusResponse {
   };
 }
 
-async function findTrackedOrder(orderNumber: string) {
-  const tracking = await import('./tracking.js');
-  const payload = await tracking.listTrackedStripeAdminOrders() as { orders: TrackedStripeAdminOrder[] };
-  return payload.orders.find((order) => order.orderNumber === orderNumber) || null;
-}
-
 export default async function handler(req: VercelRequestLike, res: VercelResponseLike) {
   if (req.method !== 'GET') {
     res.status(405).json({
@@ -141,12 +155,25 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
         throw new Error('Stripe session does not match the informed order number.');
       }
 
-      const trackedOrder = await findTrackedOrder(orderNumber);
+      const trackedOrder = await getTrackedStripeOrderByLookup(orderNumber, sessionId);
       if (!trackedOrder) {
         throw new Error('Tracked Stripe order was not found for this checkout session.');
       }
 
-      res.status(200).json(buildResponsePayload(session));
+      const payload = buildResponsePayload(session);
+      res.status(200).json({
+        ...payload,
+        trackedOrder: {
+          customer: trackedOrder.customer,
+          discount: trackedOrder.discount,
+          orderNumber: trackedOrder.orderNumber,
+          paymentMethod: trackedOrder.paymentMethod,
+          shipping: trackedOrder.shipping,
+          shippingAddress: trackedOrder.shippingAddress,
+          subtotal: trackedOrder.subtotal,
+          total: trackedOrder.total,
+        },
+      });
       return;
     } catch (error) {
       lastError = error instanceof Error ? error.message : lastError;

@@ -380,6 +380,60 @@ export function registerStoreRoutes(repository: StoreRepository, config: StoreAp
     ),
   );
 
+  router.get(
+    '/admin/promotions',
+    ...protect(
+      'promotions:read',
+      async (_request, response) => {
+        response.json(await repository.getAdminPromotions());
+      },
+    ),
+  );
+
+  router.post(
+    '/admin/promotions',
+    ...protect(
+      'promotions:write',
+      async (request, response) => {
+        response.status(201).json(await repository.createAdminPromotion(request.body));
+      },
+      { action: 'admin.promotion_created', entityId: (request) => String(request.body?.promoCode || request.body?.name || 'new'), entityType: 'promotion' },
+    ),
+  );
+
+  router.put(
+    '/admin/promotions/:id',
+    ...protect(
+      'promotions:write',
+      async (request, response) => {
+        response.json(await repository.updateAdminPromotion(request.params.id, request.body));
+      },
+      { action: 'admin.promotion_updated', entityId: (request) => request.params.id, entityType: 'promotion' },
+    ),
+  );
+
+  router.put(
+    '/admin/promotions/:id/status',
+    ...protect(
+      'promotions:write',
+      async (request, response) => {
+        response.json(await repository.setAdminPromotionStatus(request.params.id, request.body?.status));
+      },
+      { action: 'admin.promotion_status_updated', entityId: (request) => request.params.id, entityType: 'promotion' },
+    ),
+  );
+
+  router.delete(
+    '/admin/promotions/:id',
+    ...protect(
+      'promotions:write',
+      async (request, response) => {
+        response.json(await repository.deleteAdminPromotion(request.params.id));
+      },
+      { action: 'admin.promotion_deleted', entityId: (request) => request.params.id, entityType: 'promotion' },
+    ),
+  );
+
   router.put(
     '/admin/customers/:id',
     ...protect(

@@ -17,16 +17,12 @@ import { useLoyalty } from '../hooks/useLoyalty';
 import { useSettings } from '../hooks/useSettings';
 import { useShippingQuotes } from '../hooks/useShippingQuotes';
 import { useStorefront } from '../hooks/useStorefront';
-import { syncCheckoutOrderToAdmin, type CheckoutBridgePayload } from '../lib/adminDataBridge';
 import { StoreCountrySelect } from '../components/StoreCountrySelect';
 import { StorePhoneField } from '../components/StorePhoneField';
 import { StoreImage } from '../components/StoreImage';
 import { getIntegrationsApiBaseUrl } from '../lib/storeBackend';
-import {
-  clearCartPromotionDraft,
-  readCartPromotionDraft,
-  resolveActiveWelcomePromotion,
-} from '../lib/welcomeBenefit';
+import { saveCurrentCustomerCart } from '../lib/storeCustomerApi';
+import { calculateWelcomeBenefitDiscount } from '../lib/welcomeBenefit';
 import {
   AddressCountryCode,
   formatPostalCode,
@@ -61,6 +57,41 @@ type DeliveryFormData = {
   street: string;
 };
 
+type CheckoutBridgePayload = {
+  orderNumber: string;
+  paymentMethod: string;
+  customer: {
+    cpf?: string;
+    documentLabel?: string;
+    email: string;
+    name: string;
+    phone: string;
+    phoneCountry: AddressCountryCode;
+  };
+  shippingAddress: {
+    city: string;
+    complement?: string;
+    country: AddressCountryCode;
+    neighborhood: string;
+    number: string;
+    postalCode: string;
+    region: string;
+    street: string;
+  };
+  items: Array<{
+    color?: string;
+    id: string;
+    name: string;
+    quantity: number;
+    size?: string;
+    unitPrice: number;
+  }>;
+  subtotal: number;
+  shipping: number;
+  shippingMethod?: string;
+  discount: number;
+};
+
 type StripeCheckoutSessionResponse = {
   message?: string;
   orderNumber?: string;
@@ -73,20 +104,38 @@ type StripeSessionStatusResponse = {
   amountTotal: number | null;
   currency: string | null;
   customerEmail: string | null;
+  trackedOrder: {
+    customer: {
+      cpf?: string;
+      documentLabel?: string;
+      email: string;
+      name: string;
+      phone: string;
+      phoneCountry?: AddressCountryCode;
+    };
+    discount: number;
+    orderNumber: string;
+    paymentMethod: string;
+    shipping: number;
+    shippingAddress: {
+      cep: string;
+      city: string;
+      complement?: string;
+      country?: AddressCountryCode;
+      district: string;
+      number: string;
+      state: string;
+      street: string;
+    };
+    subtotal: number;
+    total: number;
+  } | null;
   orderNumber: string;
   paid: boolean;
   paymentStatus: string | null;
   sessionId: string;
   sessionStatus: string | null;
   success: true;
-};
-
-type PendingStripeCheckoutRecord = {
-  bridgePayload: CheckoutBridgePayload;
-  loyaltyPoints: number;
-  orderNumber: string;
-  promotionDraft: ReturnType<typeof readCartPromotionDraft>;
-  sessionId: string;
 };
 
 const INITIAL_IDENTIFICATION_FORM: IdentificationFormData = {
@@ -109,8 +158,7 @@ const INITIAL_DELIVERY_FORM: DeliveryFormData = {
 };
 
 const CHECKOUT_COUNTRY: AddressCountryCode = 'US';
-const PENDING_STRIPE_CHECKOUTS_STORAGE_KEY = '@App:stripe-pending-checkouts';
-const PROCESSED_STRIPE_SESSIONS_STORAGE_KEY = '@App:stripe-processed-sessions';
+const processedStripeSessionsMemory = new Set<string>();
 
 const inputClass =
   'w-full border border-neutral-300 px-4 py-3 bg-neutral-50 focus:bg-white focus:outline-none focus:border-neutral-900 transition-colors disabled:bg-neutral-100 disabled:text-neutral-400 disabled:cursor-not-allowed';
@@ -123,62 +171,13 @@ const postalToneClasses: Record<Exclude<PostalStatusTone, 'idle'>, string> = {
   warning: 'text-amber-600',
 };
 
-function readLocalStorageArray<T>(key: string): T[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error(`Falha ao ler ${key}`, error);
-    return [];
-  }
-}
-
-function writeLocalStorageArray<T>(key: string, value: T[]) {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.error(`Falha ao salvar ${key}`, error);
-  }
-}
-
-function upsertPendingStripeCheckoutRecord(record: PendingStripeCheckoutRecord) {
-  const records = readLocalStorageArray<PendingStripeCheckoutRecord>(PENDING_STRIPE_CHECKOUTS_STORAGE_KEY);
-  const nextRecords = [
-    record,
-    ...records.filter(
-      (item) => item.sessionId !== record.sessionId && item.orderNumber !== record.orderNumber,
-    ),
-  ];
-  writeLocalStorageArray(PENDING_STRIPE_CHECKOUTS_STORAGE_KEY, nextRecords);
-}
-
-function findPendingStripeCheckoutRecord(sessionId: string, orderNumber?: string) {
-  return readLocalStorageArray<PendingStripeCheckoutRecord>(PENDING_STRIPE_CHECKOUTS_STORAGE_KEY).find(
-    (record) => record.sessionId === sessionId || (orderNumber ? record.orderNumber === orderNumber : false),
-  ) || null;
-}
-
-function removePendingStripeCheckoutRecord(sessionId: string, orderNumber?: string) {
-  const nextRecords = readLocalStorageArray<PendingStripeCheckoutRecord>(PENDING_STRIPE_CHECKOUTS_STORAGE_KEY).filter(
-    (record) => record.sessionId !== sessionId && record.orderNumber !== orderNumber,
-  );
-  writeLocalStorageArray(PENDING_STRIPE_CHECKOUTS_STORAGE_KEY, nextRecords);
-}
 
 function hasProcessedStripeSession(sessionId: string) {
-  return readLocalStorageArray<string>(PROCESSED_STRIPE_SESSIONS_STORAGE_KEY).includes(sessionId);
+  return processedStripeSessionsMemory.has(sessionId);
 }
 
 function markStripeSessionAsProcessed(sessionId: string) {
-  const processedSessions = readLocalStorageArray<string>(PROCESSED_STRIPE_SESSIONS_STORAGE_KEY);
-  if (processedSessions.includes(sessionId)) return;
-  writeLocalStorageArray(PROCESSED_STRIPE_SESSIONS_STORAGE_KEY, [sessionId, ...processedSessions].slice(0, 50));
+  processedStripeSessionsMemory.add(sessionId);
 }
 
 function createOrderNumber() {
@@ -215,7 +214,7 @@ function getPostalStatusMessage(
 }
 
 export function Checkout() {
-  const { cart, cartTotal, clearCart } = useCart();
+  const { appliedBenefitId, clearCart, cartTotal, cart } = useCart();
   const navigate = useNavigate();
   const location = useLocation();
   const { addPoints } = useLoyalty();
@@ -225,10 +224,7 @@ export function Checkout() {
     currentCustomer,
     primaryAddress,
     isLoggedIn,
-    availableWelcomeBenefit,
     consumeWelcomeBenefit,
-    guestShippingDraft,
-    saveGuestShippingDraft,
     updateProfile,
     saveAddress,
   } = useCustomerSession();
@@ -241,13 +237,12 @@ export function Checkout() {
   const [stripeFlowState, setStripeFlowState] = useState<StripeFlowState>('idle');
   const [stripeErrorMessage, setStripeErrorMessage] = useState('');
   const [confirmedOrderNumber, setConfirmedOrderNumber] = useState('');
-  const [promotionDraft, setPromotionDraft] = useState(() => readCartPromotionDraft());
   const orderNumber = useMemo(() => createOrderNumber(), []);
-  const activePromotion = useMemo(
-    () => resolveActiveWelcomePromotion(promotionDraft, currentCustomer?.id, availableWelcomeBenefit, cartTotal),
-    [availableWelcomeBenefit, cartTotal, currentCustomer?.id, promotionDraft],
+  const activeBenefit = useMemo(
+    () => currentCustomer?.welcomeBenefits.find((benefit) => benefit.id === appliedBenefitId && benefit.status === 'available') || null,
+    [appliedBenefitId, currentCustomer?.welcomeBenefits],
   );
-  const discountAmount = activePromotion?.discountAmount ?? 0;
+  const discountAmount = activeBenefit ? calculateWelcomeBenefitDiscount(cartTotal, activeBenefit) : 0;
   const discountedSubtotal = Math.max(0, cartTotal - discountAmount);
   const { quotes, selectedQuote, setSelectedQuoteId, loadQuotes, mode, status: shippingQuotesStatus, error: shippingQuotesError, resetQuotes } = useShippingQuotes(
     cart,
@@ -288,27 +283,6 @@ export function Checkout() {
   const previousTaxIdKindRef = useRef<TaxIdFieldKind | null>(null);
   const hasHydratedCustomerDataRef = useRef(false);
   const hasProcessedStripeReturnRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const storedDraft = readCartPromotionDraft();
-    const resolvedPromotion = resolveActiveWelcomePromotion(
-      storedDraft,
-      currentCustomer?.id,
-      availableWelcomeBenefit,
-      cartTotal,
-    );
-
-    if (!resolvedPromotion) {
-      if (storedDraft) {
-        clearCartPromotionDraft();
-      }
-
-      setPromotionDraft(null);
-      return;
-    }
-
-    setPromotionDraft(storedDraft);
-  }, [availableWelcomeBenefit, cartTotal, currentCustomer?.id]);
 
   useEffect(() => {
     const previousKind = previousTaxIdKindRef.current;
@@ -359,28 +333,10 @@ export function Checkout() {
         return;
       }
 
-      if (!guestShippingDraft) {
-        hasHydratedCustomerDataRef.current = true;
-        return;
-      }
-    }
-
-    if (guestShippingDraft) {
-      setDeliveryData({
-        country: guestShippingDraft.country,
-        postalCode: guestShippingDraft.postalCode,
-        street: guestShippingDraft.street,
-        number: guestShippingDraft.number,
-        complement: guestShippingDraft.complement,
-        neighborhood: guestShippingDraft.neighborhood,
-        city: guestShippingDraft.city,
-        region: guestShippingDraft.region,
-      });
-      setIsDeliveryUnlocked(Boolean(guestShippingDraft.postalCode));
-      setPostalStatusTone(guestShippingDraft.postalCode ? 'success' : 'idle');
       hasHydratedCustomerDataRef.current = true;
+      return;
     }
-  }, [currentCustomer, guestShippingDraft, isLoggedIn, primaryAddress]);
+  }, [currentCustomer, isLoggedIn, primaryAddress]);
 
   const updateIdentificationField = <K extends keyof IdentificationFormData>(field: K, value: IdentificationFormData[K]) => {
     setIdentificationData((prev) => ({ ...prev, [field]: value }));
@@ -572,6 +528,22 @@ export function Checkout() {
     const bridgePayload = buildCheckoutBridgePayload();
 
     try {
+      if (isLoggedIn) {
+        await saveCurrentCustomerCart({
+          currency: settings.stripeCurrency || settings.storeCurrency || 'USD',
+          discount: discountAmount,
+          items: cart.map((item) => ({
+            productId: item.product.id,
+            product: item.product,
+            quantity: item.quantity,
+            size: item.size,
+            color: item.color,
+          })),
+          shipping: shippingCost,
+          shippingMethod: selectedQuote.service,
+        });
+      }
+
       const response = await fetch(buildIntegrationsApiUrl('/stripe/checkout-session'), {
         method: 'POST',
         headers: {
@@ -598,14 +570,6 @@ export function Checkout() {
       if (!response.ok || !payload.success || !payload.url || !payload.sessionId) {
         throw new Error(payload.message || t('stripeCheckoutError'));
       }
-
-      upsertPendingStripeCheckoutRecord({
-        sessionId: payload.sessionId,
-        orderNumber: bridgePayload.orderNumber,
-        loyaltyPoints: loyaltyPointsEarned,
-        bridgePayload,
-        promotionDraft,
-      });
 
       window.location.assign(payload.url);
     } catch (error) {
@@ -634,61 +598,41 @@ export function Checkout() {
           throw new Error(('message' in payload && payload.message) || t('stripeVerificationError'));
         }
 
-        const pendingRecord = findPendingStripeCheckoutRecord(stripeSessionIdFromUrl, stripeOrderNumberFromUrl);
-        const resolvedOrderNumber = payload.orderNumber || pendingRecord?.orderNumber || stripeOrderNumberFromUrl || orderNumber;
+        const trackedOrder = payload.trackedOrder;
+        const resolvedOrderNumber = payload.orderNumber || trackedOrder?.orderNumber || stripeOrderNumberFromUrl || orderNumber;
 
         if (payload.paid && !hasProcessedStripeSession(stripeSessionIdFromUrl)) {
-          if (pendingRecord) {
+          if (trackedOrder) {
             if (isLoggedIn) {
               await updateProfile({
-                fullName: pendingRecord.bridgePayload.customer.name,
-                phone: pendingRecord.bridgePayload.customer.phone,
-                phoneCountry: pendingRecord.bridgePayload.customer.phoneCountry || CHECKOUT_COUNTRY,
-                taxId: pendingRecord.bridgePayload.customer.cpf || currentCustomer?.taxId || '',
+                fullName: trackedOrder.customer.name,
+                phone: trackedOrder.customer.phone,
+                phoneCountry: trackedOrder.customer.phoneCountry || CHECKOUT_COUNTRY,
+                taxId: trackedOrder.customer.cpf || currentCustomer?.taxId || '',
               });
 
               await saveAddress({
                 id: primaryAddress?.id || '',
                 label: primaryAddress?.label || t('homeAddress'),
-                country: pendingRecord.bridgePayload.shippingAddress.country,
-                postalCode: pendingRecord.bridgePayload.shippingAddress.postalCode,
-                street: pendingRecord.bridgePayload.shippingAddress.street,
-                number: pendingRecord.bridgePayload.shippingAddress.number,
-                complement: pendingRecord.bridgePayload.shippingAddress.complement || '',
-                neighborhood: pendingRecord.bridgePayload.shippingAddress.neighborhood,
-                city: pendingRecord.bridgePayload.shippingAddress.city,
-                region: pendingRecord.bridgePayload.shippingAddress.region,
+                country: trackedOrder.shippingAddress.country || CHECKOUT_COUNTRY,
+                postalCode: trackedOrder.shippingAddress.cep,
+                street: trackedOrder.shippingAddress.street,
+                number: trackedOrder.shippingAddress.number,
+                complement: trackedOrder.shippingAddress.complement || '',
+                neighborhood: trackedOrder.shippingAddress.district,
+                city: trackedOrder.shippingAddress.city,
+                region: trackedOrder.shippingAddress.state,
                 isPrimary: true,
               });
             } else {
-              saveGuestShippingDraft({
-                country: pendingRecord.bridgePayload.shippingAddress.country,
-                postalCode: pendingRecord.bridgePayload.shippingAddress.postalCode,
-                street: pendingRecord.bridgePayload.shippingAddress.street,
-                number: pendingRecord.bridgePayload.shippingAddress.number,
-                complement: pendingRecord.bridgePayload.shippingAddress.complement || '',
-                neighborhood: pendingRecord.bridgePayload.shippingAddress.neighborhood,
-                city: pendingRecord.bridgePayload.shippingAddress.city,
-                region: pendingRecord.bridgePayload.shippingAddress.region,
-              });
             }
 
-            syncCheckoutOrderToAdmin({
-              ...pendingRecord.bridgePayload,
-              orderNumber: resolvedOrderNumber,
-            });
-
-            if (pendingRecord.promotionDraft) {
-              if (currentCustomer?.id === pendingRecord.promotionDraft.customerId) {
-                await consumeWelcomeBenefit(pendingRecord.promotionDraft.benefitId, resolvedOrderNumber);
-              } else {
-                clearCartPromotionDraft();
-              }
+            if (activeBenefit && currentCustomer) {
+              await consumeWelcomeBenefit(activeBenefit.id, resolvedOrderNumber);
             }
 
-            addPoints(pendingRecord.loyaltyPoints);
+            addPoints(Math.floor(Math.max(0, trackedOrder.subtotal - trackedOrder.discount) * (settings.pointsPerReal || 1)));
             clearCart();
-            removePendingStripeCheckoutRecord(stripeSessionIdFromUrl, pendingRecord.orderNumber);
           }
 
           markStripeSessionAsProcessed(stripeSessionIdFromUrl);
@@ -710,15 +654,14 @@ export function Checkout() {
   }, [
     addPoints,
     clearCart,
-    consumeWelcomeBenefit,
     currentCustomer?.id,
-    currentCustomer?.taxId,
+    activeBenefit,
+    consumeWelcomeBenefit,
     isLoggedIn,
     orderNumber,
     primaryAddress?.id,
     primaryAddress?.label,
     saveAddress,
-    saveGuestShippingDraft,
     stripeOrderNumberFromUrl,
     stripeSessionIdFromUrl,
     t,

@@ -1,4 +1,4 @@
-import type { Product } from '../data/mockData';
+import type { StoreProduct as Product } from '../types/store';
 import type { AddressCountryCode } from './customerForm';
 import type { StoreSettings } from '../types/settings';
 import { getStoreApiBaseUrl } from './storeBackend';
@@ -58,6 +58,53 @@ export type AdminDashboardSummary = {
   recentOrders: AdminDashboardRecentOrder[];
 };
 
+export type AdminPromotionStatus = 'Ativo' | 'Pausado' | 'Finalizado' | 'Arquivada';
+export type AdminPromotionDiscountType = 'percentual' | 'valor_fixo';
+export type AdminPromotionApplicationType = 'todos' | 'categorias' | 'produtos';
+
+export type AdminPromotionInput = {
+  name: string;
+  description: string;
+  promoCode: string;
+  discountType: AdminPromotionDiscountType;
+  discountValue: number;
+  minOrderValue: number;
+  totalUseLimit: number;
+  useLimitPerCustomer: number;
+  startsAt: string;
+  expiresAt: string;
+  applicationType: AdminPromotionApplicationType;
+  categoryNames: string[];
+  productIds: string[];
+  status: Exclude<AdminPromotionStatus, 'Arquivada'>;
+  audienceSize: number;
+};
+
+export type AdminPromotionUsage = {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  dateTime: string;
+  orderNumber: string;
+  orderValue: number;
+  discountApplied: number;
+};
+
+export type AdminPromotionLog = {
+  id: string;
+  user: string;
+  dateTime: string;
+  ip: string;
+  action: string;
+};
+
+export type AdminPromotionRecord = AdminPromotionInput & {
+  id: string;
+  status: AdminPromotionStatus;
+  usages: AdminPromotionUsage[];
+  logs: AdminPromotionLog[];
+};
+
 export type AdminCustomerAddress = {
   country?: AddressCountryCode;
   cep: string;
@@ -82,7 +129,7 @@ export type AdminCustomerOrder = {
   id: string;
   orderNumber: string;
   date: string;
-  status: 'Aguardando Pagamento' | 'Pago' | 'Em Separacao' | 'Em Separação' | 'Em SeparaÃ§Ã£o' | 'Enviado' | 'Entregue' | 'Cancelado';
+  status: 'Aguardando Pagamento' | 'Pago' | 'Em Separacao' | 'Em Separação' | 'Em Separação' | 'Enviado' | 'Entregue' | 'Cancelado';
   itemsCount: number;
   total: number;
   paymentMethod: string;
@@ -177,6 +224,37 @@ export async function getProducts(): Promise<Product[]> {
 
 export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary> {
   return requestStoreApi<AdminDashboardSummary>('/admin/dashboard');
+}
+
+export async function getAdminPromotions(): Promise<AdminPromotionRecord[]> {
+  return requestStoreApi<AdminPromotionRecord[]>('/admin/promotions');
+}
+
+export async function createAdminPromotion(input: AdminPromotionInput): Promise<AdminPromotionRecord> {
+  return requestStoreApi<AdminPromotionRecord>('/admin/promotions', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateAdminPromotion(id: string, input: AdminPromotionInput): Promise<AdminPromotionRecord> {
+  return requestStoreApi<AdminPromotionRecord>(`/admin/promotions/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function setAdminPromotionStatus(id: string, status: AdminPromotionStatus): Promise<AdminPromotionRecord> {
+  return requestStoreApi<AdminPromotionRecord>(`/admin/promotions/${encodeURIComponent(id)}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function deleteAdminPromotion(id: string): Promise<{ archived: boolean }> {
+  return requestStoreApi<{ archived: boolean }>(`/admin/promotions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function getAdminCustomers(): Promise<AdminCustomerRecord[]> {

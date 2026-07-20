@@ -21,25 +21,31 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { Product } from '../../data/mockData';
 import { useStoreCategories, useStoreProducts } from '../../hooks/useStoreData';
 import { useAdminCurrency } from '../../hooks/useAdminCurrency';
 import { showToast } from '../../lib/adminUtils';
 import { useDeferredSearchTerm } from '../../hooks/useDeferredSearchTerm';
-import { getPromotions, createPromotion, updatePromotion, deletePromotion } from '../../lib/storeApi';
+import {
+  type AdminPromotionInput,
+  type AdminPromotionRecord,
+  type AdminPromotionStatus,
+  createAdminPromotion,
+  deleteAdminPromotion,
+  getAdminPromotions,
+  setAdminPromotionStatus,
+  updateAdminPromotion,
+} from '../../lib/storeApiRest';
 
-type PromotionStatus = 'Ativo' | 'Pausado' | 'Finalizado' | 'Arquivada';
-type DiscountType = 'percentual' | 'valor_fixo';
-type ApplicationType = 'todos' | 'categorias' | 'produtos';
-type OrderStatus =
-  | 'Aguardando Pagamento'
-  | 'Pago'
-  | 'Em SeparaÃ§Ã£o'
-  | 'Em Separação'
-  | 'Em Separacao'
-  | 'Enviado'
-  | 'Entregue'
-  | 'Cancelado';
+type Product = {
+  id: string;
+  nome: string;
+  preco: number;
+  imagens: string[];
+};
+
+type PromotionStatus = AdminPromotionStatus;
+type DiscountType = AdminPromotionInput['discountType'];
+type ApplicationType = AdminPromotionInput['applicationType'];
 
 type PromotionAddress = {
   cep: string;
@@ -64,7 +70,7 @@ type PromotionOrder = {
   id: string;
   orderNumber: string;
   purchaseDate: string;
-  status: OrderStatus;
+  status: string;
   total: number;
   paymentMethod: string;
   customer: {
@@ -86,62 +92,11 @@ type PromotionOrder = {
   };
 };
 
-type PromotionUsage = {
-  id: string;
-  customerName: string;
-  customerEmail: string;
-  dateTime: string;
-  orderValue: number;
-  discountApplied: number;
-  order: PromotionOrder;
+type PromotionCampaign = Omit<AdminPromotionRecord, 'usages'> & {
+  usages: Array<AdminPromotionRecord['usages'][number] & { order?: PromotionOrder }>;
 };
 
-type PromotionLog = {
-  id: string;
-  user: string;
-  dateTime: string;
-  ip: string;
-  action: string;
-};
-
-type PromotionCampaign = {
-  id: string;
-  name: string;
-  description: string;
-  promoCode: string;
-  discountType: DiscountType;
-  discountValue: number;
-  minOrderValue: number;
-  totalUseLimit: number;
-  useLimitPerCustomer: number;
-  startsAt: string;
-  expiresAt: string;
-  applicationType: ApplicationType;
-  categoryNames: string[];
-  productIds: string[];
-  status: PromotionStatus;
-  audienceSize: number;
-  usages: PromotionUsage[];
-  logs: PromotionLog[];
-};
-
-type CampaignDraft = {
-  name: string;
-  description: string;
-  promoCode: string;
-  discountType: DiscountType;
-  discountValue: number;
-  minOrderValue: number;
-  totalUseLimit: number;
-  useLimitPerCustomer: number;
-  startsAt: string;
-  expiresAt: string;
-  applicationType: ApplicationType;
-  categoryNames: string[];
-  productIds: string[];
-  status: Exclude<PromotionStatus, 'Arquivada'>;
-  audienceSize: number;
-};
+type CampaignDraft = AdminPromotionInput;
 
 type FormModalState = {
   mode: 'create' | 'edit' | 'duplicate';
@@ -163,8 +118,6 @@ type ConfirmationState = {
   onConfirm: () => void;
 };
 
-const PROMOTIONS_STORAGE_KEY = 'admin-promotions-v2';
-const adminUserName = 'Admin Loja';
 
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
@@ -220,7 +173,7 @@ export function Promotions() {
     async function loadCampaigns() {
       try {
         setIsLoading(true);
-        const data = await getPromotions();
+        const data = await getAdminPromotions();
         if (active) {
           setCampaigns(data.map(normalizeCampaign));
         }
@@ -302,28 +255,9 @@ export function Promotions() {
     campaign,
     revenue: getCampaignRevenue(campaign),
     discountLabel: getDiscountLabel(campaign, formatCurrency),
-    expiresLabel: campaign.expiresAt ? formatShortDate(campaign.expiresAt) : 'AtÃ© revogar',
+    expiresLabel: campaign.expiresAt ? formatShortDate(campaign.expiresAt) : 'Até revogar',
   })), [filteredCampaigns, formatCurrency]);
 
-  const getSessionIp = () => {
-    if (typeof window === 'undefined') return '127.0.0.1';
-    const hostname = window.location.hostname;
-    return hostname === 'localhost' || hostname === '127.0.0.1' ? '127.0.0.1' : hostname;
-  };
-
-  const appendLog = (campaign: PromotionCampaign, action: string, dateTime = new Date().toISOString()) => ({
-    ...campaign,
-    logs: [
-      {
-        id: crypto.randomUUID(),
-        user: adminUserName,
-        dateTime,
-        ip: getSessionIp(),
-        action,
-      },
-      ...campaign.logs,
-    ],
-  });
 
   const toggleActionMenu = (event: React.MouseEvent<HTMLButtonElement>, campaignId: string) => {
     event.stopPropagation();
@@ -350,38 +284,26 @@ export function Promotions() {
 
   const copyCode = async (campaign: PromotionCampaign) => {
     if (!campaign.promoCode) {
-      showToast('Esta campanha nÃ£o usa cÃ³digo promocional.');
+      showToast('Esta campanha não usa código promocional.');
       setActionMenu(null);
       return;
     }
 
     try {
       await navigator.clipboard.writeText(campaign.promoCode);
-      showToast('CÃ³digo copiado com sucesso.');
+      showToast('Código copiado com sucesso.');
     } catch (error) {
-      showToast('NÃ£o foi possÃ­vel copiar o cÃ³digo.');
+      showToast('Não foi possível copiar o código.');
     } finally {
       setActionMenu(null);
     }
   };
-
   const saveCampaign = async (draft: CampaignDraft) => {
     try {
       if (formModal?.mode === 'edit' && editingCampaign) {
-        const now = new Date().toISOString();
-        const changedCount = countCampaignChanges(editingCampaign, draft);
-        const updatedPayload = appendLog(
-          {
-            ...editingCampaign,
-            ...draft,
-          },
-          changedCount ? `Campanha editada com ${changedCount} ajuste(s)` : 'Campanha salva sem alterações',
-          now,
-        );
-
-        const updated = await updatePromotion(editingCampaign.id, updatedPayload);
+        const updated = await updateAdminPromotion(editingCampaign.id, draft);
         setCampaigns((current) =>
-          current.map((campaign) => (campaign.id === editingCampaign.id ? normalizeCampaign(updated) : campaign)),
+          current.map((campaign) => (campaign.id === editingCampaign.id ? normalizeCampaign(updated as PromotionCampaign) : campaign)),
         );
 
         showToast('Campanha atualizada com sucesso.');
@@ -389,36 +311,8 @@ export function Promotions() {
         return;
       }
 
-      const createdLog = {
-        id: crypto.randomUUID(),
-        user: adminUserName,
-        dateTime: new Date().toISOString(),
-        ip: getSessionIp(),
-        action:
-          formModal?.mode === 'duplicate' && editingCampaign
-            ? `Campanha duplicada a partir de ${editingCampaign.name}`
-            : 'Campanha criada',
-      };
-
-      const newCampaign: Partial<PromotionCampaign> = {
-        ...draft,
-        usages: [],
-        logs: [createdLog],
-      };
-
-      const created = await createPromotion(newCampaign);
-
-      if (formModal?.mode === 'duplicate' && editingCampaign) {
-        const sourceLogPayload = appendLog(editingCampaign, `Campanha duplicada para ${created.name}`, createdLog.dateTime);
-        const updatedSource = await updatePromotion(editingCampaign.id, sourceLogPayload);
-        setCampaigns((current) =>
-          [created, ...current].map((campaign) =>
-            campaign.id === editingCampaign.id ? normalizeCampaign(updatedSource) : normalizeCampaign(campaign)
-          )
-        );
-      } else {
-        setCampaigns((current) => [normalizeCampaign(created), ...current]);
-      }
+      const created = await createAdminPromotion(draft);
+      setCampaigns((current) => [normalizeCampaign(created as PromotionCampaign), ...current]);
 
       showToast(formModal?.mode === 'duplicate' ? 'Campanha duplicada com sucesso.' : 'Campanha criada com sucesso.');
       setFormModal(null);
@@ -428,15 +322,11 @@ export function Promotions() {
     }
   };
 
-  const setCampaignStatus = async (campaignId: string, status: PromotionStatus, actionLabel: string) => {
+  const setCampaignStatus = async (campaignId: string, status: PromotionStatus, _actionLabel: string) => {
     try {
-      const campaign = campaigns.find((c) => c.id === campaignId);
-      if (!campaign) return;
-      const now = new Date().toISOString();
-      const updatedPayload = appendLog({ ...campaign, status }, actionLabel, now);
-      const updated = await updatePromotion(campaignId, updatedPayload);
+      const updated = await setAdminPromotionStatus(campaignId, status);
       setCampaigns((current) =>
-        current.map((item) => (item.id === campaignId ? normalizeCampaign(updated) : item)),
+        current.map((item) => (item.id === campaignId ? normalizeCampaign(updated as PromotionCampaign) : item)),
       );
       setActionMenu(null);
       return updated;
@@ -495,9 +385,15 @@ export function Promotions() {
         }
 
         try {
-          await deletePromotion(campaign.id);
+          const result = await deleteAdminPromotion(campaign.id);
+          if (result.archived) {
+            const refreshed = await getAdminPromotions();
+            setCampaigns(refreshed.map((item) => normalizeCampaign(item as PromotionCampaign)));
+            showToast('Esta campanha possui historico e foi arquivada.');
+            return;
+          }
           setCampaigns((current) => current.filter((item) => item.id !== campaign.id));
-          showToast('Campanha excluída com sucesso.');
+          showToast('Campanha excluida com sucesso.');
         } catch (error) {
           console.error('Erro ao excluir campanha', error);
           showToast('Falha ao excluir a campanha.');
@@ -511,7 +407,7 @@ export function Promotions() {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex flex-col gap-1.5">
-          <h2 className="text-3xl font-serif text-neutral-900 tracking-tight">PromoÃ§Ãµes & Cupons</h2>
+          <h2 className="text-3xl font-serif text-neutral-900 tracking-tight">Promoções & Cupons</h2>
           <p className="text-neutral-500 text-[13px]">Gerencie campanhas, acompanhe resultados e controle todo o ciclo de vida dos descontos.</p>
         </div>
 
@@ -521,7 +417,7 @@ export function Promotions() {
           className="bg-neutral-950 text-white px-5 py-3 font-semibold uppercase tracking-wider text-[11px] rounded-xl hover:bg-neutral-800 transition-all flex items-center gap-2 shadow-[0_4px_14px_rgba(0,0,0,0.15)]"
         >
           <Plus className="w-4 h-4" />
-          Nova PromoÃ§Ã£o
+          Nova Promoção
         </button>
       </div>
 
@@ -533,13 +429,13 @@ export function Promotions() {
           iconTone="bg-blue-50 text-blue-600"
         />
         <SummaryCard
-          label="ConversÃ£o de Ativos"
+          label="Conversão de Ativos"
           value={`${campaignSummary.activeConversion.toFixed(1)}%`}
           icon={<ArrowUpRight className="w-4 h-4" />}
           iconTone="bg-emerald-50 text-emerald-600"
         />
         <SummaryCard
-          label="Ticket MÃ©dio (Promo)"
+          label="Ticket Médio (Promo)"
           value={formatCurrency(campaignSummary.averagePromoTicket)}
           icon={<Percent className="w-4 h-4" />}
           iconTone="bg-violet-50 text-violet-600"
@@ -552,7 +448,7 @@ export function Promotions() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
             <input
               type="text"
-              placeholder="Buscar promoÃ§Ã£o ou cÃ³digo..."
+              placeholder="Buscar promoção ou código..."
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-neutral-50/50 border border-neutral-200/60 rounded-xl focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 text-[13px] transition-all"
@@ -565,12 +461,12 @@ export function Promotions() {
             <thead>
               <tr className="bg-neutral-50/50 border-b border-neutral-100/60">
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-neutral-500">Campanha</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-neutral-500">CÃ³digo</th>
+                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-neutral-500">Código</th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-neutral-500">Desconto</th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-neutral-500">Resgates</th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-neutral-500">Receita</th>
                 <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-neutral-500">Status</th>
-                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-neutral-500 text-right">AÃ§Ãµes</th>
+                <th className="px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-neutral-500 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
@@ -684,7 +580,7 @@ export function Promotions() {
           campaign={selectedCampaign}
           products={products}
           onClose={() => setPerformanceCampaignId(null)}
-          onOpenOrder={(order) => setSelectedOrder({ campaignId: selectedCampaign.id, order })}
+          onOpenOrder={() => undefined}
         />
       )}
 
@@ -752,7 +648,7 @@ function ActionMenuOverlay({
         <MenuButton icon={<Eye className="w-4 h-4 text-neutral-500" />} label="Visualizar desempenho" onClick={() => onViewPerformance(campaign)} />
         <MenuButton icon={<Edit className="w-4 h-4 text-neutral-500" />} label="Editar campanha" onClick={() => onEdit(campaign)} />
         <MenuButton icon={<Copy className="w-4 h-4 text-neutral-500" />} label="Duplicar campanha" onClick={() => onDuplicate(campaign)} />
-        <MenuButton icon={<Tag className="w-4 h-4 text-neutral-500" />} label="Copiar cÃ³digo" onClick={() => onCopyCode(campaign)} />
+        <MenuButton icon={<Tag className="w-4 h-4 text-neutral-500" />} label="Copiar código" onClick={() => onCopyCode(campaign)} />
 
         {(campaign.status === 'Ativo' || campaign.status === 'Pausado') && (
           <MenuButton
@@ -809,7 +705,7 @@ function CampaignPerformanceModal({
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-neutral-500">Campanha {campaign.id}</div>
             <h3 className="mt-2 text-2xl font-serif text-neutral-900">Desempenho da campanha</h3>
-            <p className="mt-1 text-[13px] text-neutral-500">Resultados, histÃ³rico de utilizaÃ§Ã£o e auditoria em um sÃ³ lugar.</p>
+            <p className="mt-1 text-[13px] text-neutral-500">Resultados, histórico de utilização e auditoria em um só lugar.</p>
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-xl text-neutral-400 hover:text-neutral-900 hover:bg-white">
             <X className="w-5 h-5" />
@@ -819,7 +715,7 @@ function CampaignPerformanceModal({
         <div className="max-h-[calc(92vh-88px)] overflow-y-auto p-6 md:p-8 space-y-8">
           <section className="grid gap-4 md:grid-cols-4">
             <InfoCard icon={<Tag className="w-4 h-4" />} label="Campanha" value={campaign.name} />
-            <InfoCard icon={<Percent className="w-4 h-4" />} label="CÃ³digo" value={campaign.promoCode || 'Sem cÃ³digo'} />
+            <InfoCard icon={<Percent className="w-4 h-4" />} label="Código" value={campaign.promoCode || 'Sem código'} />
             <InfoCard icon={<Calendar className="w-4 h-4" />} label="Status" value={<StatusBadge status={campaign.status} />} />
             <InfoCard icon={<Users className="w-4 h-4" />} label="Tipo" value={campaign.promoCode ? 'Cupom' : 'Desconto direto'} />
           </section>
@@ -829,17 +725,17 @@ function CampaignPerformanceModal({
               <Panel title="Dados da campanha" icon={<Tag className="w-4 h-4" />}>
                 <div className="grid gap-4 md:grid-cols-2">
                   <DetailField label="Nome da campanha" value={campaign.name} />
-                  <DetailField label="CÃ³digo promocional" value={campaign.promoCode || 'Sem cÃ³digo'} />
+                  <DetailField label="Código promocional" value={campaign.promoCode || 'Sem código'} />
                   <DetailField label="Tipo de desconto" value={campaign.discountType === 'percentual' ? 'Percentual' : 'Valor fixo'} />
                   <DetailField label="Valor do desconto" value={getDiscountLabel(campaign, formatCurrency)} />
-                  <DetailField label="Data de inÃ­cio" value={formatDateTime(campaign.startsAt)} />
-                  <DetailField label="Data de expiraÃ§Ã£o" value={campaign.expiresAt ? formatDateTime(campaign.expiresAt) : 'AtÃ© revogar'} />
+                  <DetailField label="Data de início" value={formatDateTime(campaign.startsAt)} />
+                  <DetailField label="Data de expiração" value={campaign.expiresAt ? formatDateTime(campaign.expiresAt) : 'Até revogar'} />
                   <DetailField label="Status" value={campaign.status} />
-                  <DetailField label="AplicaÃ§Ã£o" value={getApplicationLabel(campaign, products)} />
+                  <DetailField label="Aplicação" value={getApplicationLabel(campaign, products)} />
                 </div>
               </Panel>
 
-              <Panel title="HistÃ³rico de utilizaÃ§Ã£o" icon={<ShoppingBag className="w-4 h-4" />}>
+              <Panel title="Histórico de utilização" icon={<ShoppingBag className="w-4 h-4" />}>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
@@ -853,8 +749,8 @@ function CampaignPerformanceModal({
                     </thead>
                     <tbody className="divide-y divide-neutral-100">
                       {campaign.usages.map((usage) => (
-                        <tr key={usage.id} className="cursor-pointer hover:bg-neutral-50/70" onClick={() => onOpenOrder(usage.order)}>
-                          <td className="py-3.5 text-[13px] font-medium text-neutral-900">{usage.order.orderNumber}</td>
+                        <tr key={usage.id} className="hover:bg-neutral-50/70" onClick={() => usage.order && onOpenOrder(usage.order)}>
+                          <td className="py-3.5 text-[13px] font-medium text-neutral-900">{usage.order?.orderNumber || usage.orderNumber || '-'}</td>
                           <td className="py-3.5 text-[13px] text-neutral-500">{usage.customerName}</td>
                           <td className="py-3.5 text-[13px] text-neutral-500">{formatDateTime(usage.dateTime)}</td>
                           <td className="py-3.5 text-[13px] font-medium text-neutral-900 text-right">{formatCurrency(usage.orderValue)}</td>
@@ -872,19 +768,19 @@ function CampaignPerformanceModal({
                 <div className="space-y-3">
                   <SummaryLine label="Total de resgates" value={String(campaign.usages.length)} />
                   <SummaryLine label="Receita gerada" value={formatCurrency(totalRevenue)} />
-                  <SummaryLine label="Ticket mÃ©dio" value={formatCurrency(avgTicket)} />
-                  <SummaryLine label="Taxa de conversÃ£o" value={`${conversionRate.toFixed(1)}%`} />
+                  <SummaryLine label="Ticket médio" value={formatCurrency(avgTicket)} />
+                  <SummaryLine label="Taxa de conversão" value={`${conversionRate.toFixed(1)}%`} />
                   <SummaryLine label="Valor total descontado" value={formatCurrency(totalDiscount)} />
-                  <SummaryLine label="Clientes Ãºnicos" value={String(uniqueCustomers)} />
+                  <SummaryLine label="Clientes únicos" value={String(uniqueCustomers)} />
                 </div>
               </Panel>
 
               <Panel title="Regras da campanha">
                 <div className="space-y-3">
-                  <SummaryLine label="Valor mÃ­nimo do pedido" value={campaign.minOrderValue ? formatCurrency(campaign.minOrderValue) : 'Sem mÃ­nimo'} />
+                  <SummaryLine label="Valor mínimo do pedido" value={campaign.minOrderValue ? formatCurrency(campaign.minOrderValue) : 'Sem mínimo'} />
                   <SummaryLine label="Limite total de usos" value={campaign.totalUseLimit ? String(campaign.totalUseLimit) : 'Sem limite'} />
                   <SummaryLine label="Limite por cliente" value={campaign.useLimitPerCustomer ? String(campaign.useLimitPerCustomer) : 'Sem limite'} />
-                  <SummaryLine label="DescriÃ§Ã£o" value={campaign.description || 'Sem descriÃ§Ã£o'} />
+                  <SummaryLine label="Descrição" value={campaign.description || 'Sem descrição'} />
                 </div>
               </Panel>
 
@@ -980,7 +876,7 @@ function CampaignFormModal({
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-neutral-500">Campanhas e descontos</div>
             <h3 className="mt-2 text-2xl font-serif text-neutral-900">{title}</h3>
-            <p className="mt-1 text-[13px] text-neutral-500">AtualizaÃ§Ã£o instantÃ¢nea no painel, sem recarregar a pÃ¡gina.</p>
+            <p className="mt-1 text-[13px] text-neutral-500">Atualização instantânea no painel, sem recarregar a página.</p>
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-xl text-neutral-400 hover:text-neutral-900 hover:bg-white">
             <X className="w-5 h-5" />
@@ -988,12 +884,12 @@ function CampaignFormModal({
         </div>
 
         <form onSubmit={handleSubmit} className="max-h-[calc(92vh-88px)] overflow-y-auto p-6 md:p-8 space-y-8">
-          <Panel title="InformaÃ§Ãµes bÃ¡sicas" icon={<Tag className="w-4 h-4" />}>
+          <Panel title="Informações básicas" icon={<Tag className="w-4 h-4" />}>
             <div className="grid gap-4 md:grid-cols-2">
               <InputField label="Nome da campanha" value={formData.name} onChange={(value) => updateField('name', value)} required />
-              <InputField label="CÃ³digo promocional" value={formData.promoCode} onChange={(value) => updateField('promoCode', value.toUpperCase())} placeholder="Ex: BLACK10" />
+              <InputField label="Código promocional" value={formData.promoCode} onChange={(value) => updateField('promoCode', value.toUpperCase())} placeholder="Ex: BLACK10" />
               <div className="md:col-span-2">
-                <TextareaField label="DescriÃ§Ã£o" value={formData.description} onChange={(value) => updateField('description', value)} />
+                <TextareaField label="Descrição" value={formData.description} onChange={(value) => updateField('description', value)} />
               </div>
               <SelectField
                 label="Tipo de desconto"
@@ -1023,10 +919,10 @@ function CampaignFormModal({
             </div>
           </Panel>
 
-          <Panel title="ConfiguraÃ§Ãµes" icon={<Percent className="w-4 h-4" />}>
+          <Panel title="Configurações" icon={<Percent className="w-4 h-4" />}>
             <div className="grid gap-4 md:grid-cols-4">
               <InputField
-                label="Valor mÃ­nimo do pedido"
+                label="Valor mínimo do pedido"
                 type="number"
                 value={String(formData.minOrderValue)}
                 onChange={(value) => updateField('minOrderValue', Number(value || 0))}
@@ -1056,16 +952,16 @@ function CampaignFormModal({
             </div>
           </Panel>
 
-          <Panel title="VigÃªncia" icon={<Calendar className="w-4 h-4" />}>
+          <Panel title="Vigência" icon={<Calendar className="w-4 h-4" />}>
             <div className="grid gap-4 md:grid-cols-2">
               <InputField
-                label="Data de inÃ­cio"
+                label="Data de início"
                 type="datetime-local"
                 value={formData.startsAt}
                 onChange={(value) => updateField('startsAt', value)}
               />
               <InputField
-                label="Data de expiraÃ§Ã£o"
+                label="Data de expiração"
                 type="datetime-local"
                 value={formData.expiresAt}
                 onChange={(value) => updateField('expiresAt', value)}
@@ -1073,7 +969,7 @@ function CampaignFormModal({
             </div>
           </Panel>
 
-          <Panel title="AplicaÃ§Ã£o" icon={<ShoppingBag className="w-4 h-4" />}>
+          <Panel title="Aplicação" icon={<ShoppingBag className="w-4 h-4" />}>
             <div className="space-y-5">
               <SelectField
                 label="Onde aplicar"
@@ -1081,8 +977,8 @@ function CampaignFormModal({
                 onChange={(value) => updateField('applicationType', value as ApplicationType)}
                 options={[
                   { value: 'todos', label: 'Todos os produtos' },
-                  { value: 'categorias', label: 'Categorias especÃ­ficas' },
-                  { value: 'produtos', label: 'Produtos especÃ­ficos' },
+                  { value: 'categorias', label: 'Categorias específicas' },
+                  { value: 'produtos', label: 'Produtos específicos' },
                 ]}
               />
 
@@ -1108,7 +1004,7 @@ function CampaignFormModal({
                       type="text"
                       value={productSearch}
                       onChange={(event) => setProductSearch(event.target.value)}
-                      placeholder="Buscar produtos especÃ­ficos..."
+                      placeholder="Buscar produtos específicos..."
                       className="w-full pl-10 pr-4 py-3 border border-neutral-200/60 bg-neutral-50/50 rounded-xl focus:outline-none focus:ring-1 focus:ring-neutral-900 text-[13px]"
                     />
                   </div>
@@ -1176,7 +1072,7 @@ function PromotionOrderDetailsModal({
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-neutral-500">Pedido {order.orderNumber}</div>
             <h3 className="mt-2 text-2xl font-serif text-neutral-900">Detalhes completos do pedido</h3>
-            <p className="mt-1 text-[13px] text-neutral-500">Pedido vinculado ao histÃ³rico de utilizaÃ§Ã£o da campanha.</p>
+            <p className="mt-1 text-[13px] text-neutral-500">Pedido vinculado ao histórico de utilização da campanha.</p>
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-xl text-neutral-400 hover:text-neutral-900 hover:bg-white">
             <X className="w-5 h-5" />
@@ -1185,7 +1081,7 @@ function PromotionOrderDetailsModal({
 
         <div className="max-h-[calc(92vh-88px)] overflow-y-auto p-6 md:p-8 space-y-8">
           <section className="grid gap-4 md:grid-cols-4">
-            <InfoCard icon={<ShoppingBag className="w-4 h-4" />} label="NÃºmero do pedido" value={order.orderNumber} />
+            <InfoCard icon={<ShoppingBag className="w-4 h-4" />} label="Número do pedido" value={order.orderNumber} />
             <InfoCard icon={<User className="w-4 h-4" />} label="Cliente" value={order.customer.name} />
             <InfoCard icon={<Mail className="w-4 h-4" />} label="Pagamento" value={order.paymentMethod} />
             <InfoCard icon={<Tag className="w-4 h-4" />} label="Status" value={order.status} />
@@ -1201,7 +1097,7 @@ function PromotionOrderDetailsModal({
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Produto</th>
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">SKU</th>
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Qtd.</th>
-                        <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">UnitÃ¡rio</th>
+                        <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Unitário</th>
                         <th className="py-3 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 text-right">Subtotal</th>
                       </tr>
                     </thead>
@@ -1224,7 +1120,7 @@ function PromotionOrderDetailsModal({
                 <div className="grid gap-4 md:grid-cols-2">
                   <DetailField label="CEP" value={order.shippingAddress.cep} />
                   <DetailField label="Rua" value={order.shippingAddress.street} />
-                  <DetailField label="NÃºmero" value={order.shippingAddress.number} />
+                  <DetailField label="Número" value={order.shippingAddress.number} />
                   <DetailField label="Complemento" value={order.shippingAddress.complement || 'Sem complemento'} />
                   <DetailField label="Bairro" value={order.shippingAddress.district} />
                   <DetailField label="Cidade" value={order.shippingAddress.city} />
@@ -1243,12 +1139,12 @@ function PromotionOrderDetailsModal({
                 </div>
               </Panel>
 
-              <Panel title="HistÃ³rico">
+              <Panel title="Histórico">
                 <div className="space-y-3">
-                  <SummaryLine label="Data da criaÃ§Ã£o" value={formatDateTime(order.history.createdAt)} />
-                  <SummaryLine label="Data do pagamento" value={order.history.paidAt ? formatDateTime(order.history.paidAt) : 'Ainda nÃ£o registrado'} />
-                  <SummaryLine label="Data do envio" value={order.history.shippedAt ? formatDateTime(order.history.shippedAt) : 'Ainda nÃ£o registrado'} />
-                  <SummaryLine label="Data da entrega" value={order.history.deliveredAt ? formatDateTime(order.history.deliveredAt) : 'Ainda nÃ£o registrado'} />
+                  <SummaryLine label="Data da criação" value={formatDateTime(order.history.createdAt)} />
+                  <SummaryLine label="Data do pagamento" value={order.history.paidAt ? formatDateTime(order.history.paidAt) : 'Ainda não registrado'} />
+                  <SummaryLine label="Data do envio" value={order.history.shippedAt ? formatDateTime(order.history.shippedAt) : 'Ainda não registrado'} />
+                  <SummaryLine label="Data da entrega" value={order.history.deliveredAt ? formatDateTime(order.history.deliveredAt) : 'Ainda não registrado'} />
                 </div>
               </Panel>
             </div>
@@ -1548,13 +1444,13 @@ function getDiscountLabel(
 
 function getApplicationLabel(campaign: PromotionCampaign, products: Product[]) {
   if (campaign.applicationType === 'todos') return 'Todos os produtos';
-  if (campaign.applicationType === 'categorias') return campaign.categoryNames.length ? campaign.categoryNames.join(', ') : 'Categorias especÃ­ficas';
+  if (campaign.applicationType === 'categorias') return campaign.categoryNames.length ? campaign.categoryNames.join(', ') : 'Categorias específicas';
 
   const productNames = campaign.productIds
     .map((productId) => products.find((product) => product.id === productId)?.nome)
     .filter(Boolean) as string[];
 
-  return productNames.length ? productNames.join(', ') : 'Produtos especÃ­ficos';
+  return productNames.length ? productNames.join(', ') : 'Produtos específicos';
 }
 
 function getInitialDraft(mode: FormModalState['mode'], campaign: PromotionCampaign | null): CampaignDraft {
@@ -1563,7 +1459,7 @@ function getInitialDraft(mode: FormModalState['mode'], campaign: PromotionCampai
   if (mode === 'duplicate') {
     return {
       ...campaign,
-      name: `${campaign.name} - CÃ³pia`,
+      name: `${campaign.name} - Cópia`,
       promoCode: campaign.promoCode ? `${campaign.promoCode}-COPY` : '',
       status: 'Pausado',
     };
@@ -1575,40 +1471,6 @@ function getInitialDraft(mode: FormModalState['mode'], campaign: PromotionCampai
   };
 }
 
-function countCampaignChanges(campaign: PromotionCampaign, draft: CampaignDraft) {
-  const comparable: Array<keyof CampaignDraft> = [
-    'name',
-    'description',
-    'promoCode',
-    'discountType',
-    'discountValue',
-    'minOrderValue',
-    'totalUseLimit',
-    'useLimitPerCustomer',
-    'startsAt',
-    'expiresAt',
-    'applicationType',
-    'categoryNames',
-    'productIds',
-    'status',
-  ];
-
-  return comparable.reduce((count, field) => {
-    const previousValue = JSON.stringify(campaign[field as keyof PromotionCampaign]);
-    const nextValue = JSON.stringify(draft[field]);
-    return previousValue === nextValue ? count : count + 1;
-  }, 0);
-}
-
-function createLogEntry(action: string, dateTime: string, user = adminUserName, ip = '127.0.0.1'): PromotionLog {
-  return {
-    id: crypto.randomUUID(),
-    user,
-    dateTime,
-    ip,
-    action,
-  };
-}
 
 function normalizeCampaign(campaign: PromotionCampaign): PromotionCampaign {
   return {

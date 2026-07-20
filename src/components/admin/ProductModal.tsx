@@ -6,7 +6,7 @@ import { showToast } from '../../lib/adminUtils';
 import { useStoreActions, useStoreCategories } from '../../hooks/useStoreData';
 import { useAdminCurrency } from '../../hooks/useAdminCurrency';
 import { uploadProductImage } from '../../lib/storeApi';
-import { Product } from '../../data/mockData';
+import type { StoreProduct as Product } from '../../types/store';
 
 interface ProductModalProps {
   isOpen: boolean;

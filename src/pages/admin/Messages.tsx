@@ -26,8 +26,7 @@ export function Messages() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
-
-  const loadMessages = async () => {
+  const loadMessages = React.useCallback(async () => {
     setLoading(true);
     try {
       const data = await getContactMessages();
@@ -37,7 +36,7 @@ export function Messages() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadMessages();
@@ -65,8 +64,8 @@ export function Messages() {
 
   const handleMessageUpdate = async (id: string, patch: Parameters<typeof updateContactMessage>[1], successMessage: string) => {
     try {
-      const updated = await updateContactMessage(id, patch);
-      setMessages((current) => current.map((message) => (message.id === id ? updated : message)));
+      await updateContactMessage(id, patch);
+      await loadMessages();
       showToast(successMessage);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Não foi possível atualizar a mensagem.');

@@ -1,3 +1,4 @@
+import type { StoreProduct as Product } from '../types/store';
 import type { AddressCountryCode } from './customerForm';
 import { getAccountApiBaseUrl } from './storeBackend';
 import type { StoreCustomerWelcomeBenefit } from './welcomeBenefit';
@@ -84,6 +85,40 @@ export type CustomerProfileUpdateInput = Partial<
 
 export type CustomerAddressInput = Omit<StoreCustomerAddress, 'id'> & {
   id?: string;
+};
+
+export type CustomerCartItem = {
+  color: string;
+  id: string;
+  product: Product;
+  productId: string;
+  quantity: number;
+  size: string;
+};
+
+export type CustomerCartPayload = {
+  appliedBenefitId: string | null;
+  appliedCouponId: string | null;
+  currency: string;
+  discount: number;
+  items: CustomerCartItem[];
+  shipping: number;
+  shippingMethod: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+  updatedAt: string;
+};
+
+export type CustomerCartSaveInput = {
+  appliedBenefitId?: string | null;
+  appliedCouponId?: string | null;
+  currency?: string;
+  discount?: number;
+  items: Array<Omit<CustomerCartItem, 'id'>>;
+  shipping?: number;
+  shippingMethod?: string;
+  tax?: number;
 };
 
 type AccountRequestOptions = {
@@ -201,5 +236,22 @@ export async function consumeCurrentCustomerBenefit(benefitId: string, orderNumb
   return requestAccountApi<CustomerSessionPayload>(`/benefits/${encodeURIComponent(benefitId)}/consume`, {
     method: 'POST',
     body: JSON.stringify({ orderNumber }),
+  });
+}
+
+export async function getCurrentCustomerCart() {
+  return requestAccountApi<CustomerCartPayload>('/cart');
+}
+
+export async function saveCurrentCustomerCart(input: CustomerCartSaveInput) {
+  return requestAccountApi<CustomerCartPayload>('/cart', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function clearCurrentCustomerCart() {
+  return requestAccountApi<CustomerCartPayload>('/cart/clear', {
+    method: 'POST',
   });
 }

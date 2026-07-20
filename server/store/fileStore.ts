@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Product } from '../../src/data/mockData.ts';
+import type { StoreProduct as Product } from '../../src/types/store';
 import type {
   CustomerAddressInput,
   CustomerProfileUpdateInput,
@@ -10,6 +10,7 @@ import type {
 } from '../../src/lib/storeCustomerApi.ts';
 import {
   createWelcomeBenefitFromSubscriber,
+  calculateWelcomeBenefitDiscount,
   getAvailableWelcomeBenefit,
   type StoreCustomerWelcomeBenefit,
 } from '../../src/lib/welcomeBenefit.ts';
@@ -51,6 +52,11 @@ import { cloneStoreSnapshot, createDefaultStoreSnapshot, createId } from './defa
 import type {
   AdminDashboardSummary,
   AdminCustomerRecord,
+  CustomerCartPayload,
+  CustomerCartSaveInput,
+  AdminPromotionInput,
+  AdminPromotionRecord,
+  AdminPromotionStatus,
   AdminAuthLookup,
   AuditLogRecord,
   AdminPasswordResetTokenRecord,
@@ -71,6 +77,8 @@ import type {
   ListOptions,
   StoreRepository,
   StoreSnapshot,
+  StoredCartItemRecord,
+  StoredCartRecord,
   StoredAdminUserProfile,
   StoredCustomerProfile,
   StoredCustomerSession,
@@ -163,6 +171,124 @@ function ensureAdminCollections(snapshot: StoreSnapshot) {
   snapshot.adminSessions ||= [];
   snapshot.adminPasswordResets ||= [];
   snapshot.auditLogs ||= [];
+}
+
+function ensurePromotionCollections(snapshot: StoreSnapshot) {
+  snapshot.promotions ||= [];
+}
+
+function ensureCartCollections(snapshot: StoreSnapshot) {
+  snapshot.carts ||= [];
+  snapshot.cartItems ||= [];
+}
+
+function resolveCartProduct(snapshot: StoreSnapshot, item: StoredCartItemRecord): Product {
+  const metadataProduct = item.metadata?.product as Product | undefined;
+  if (metadataProduct?.id) {
+    return metadataProduct;
+  }
+
+  return snapshot.products.find((product) => product.id === item.productId) || {
+    id: item.productId,
+    nome: item.productNameSnapshot,
+    preco: item.unitPriceSnapshot,
+    precoPromocional: undefined,
+    categoria: 'Acessórios' as Product['categoria'],
+    subcategoria: '',
+    imagens: [],
+    descricao: '',
+    composicao: '',
+    tamanhos: [],
+    cores: [],
+    avaliacoes: [],
+    estoque: item.quantity,
+    shippingWeightGrams: 500,
+  };
+}
+
+function buildEmptyCustomerCartPayload(): CustomerCartPayload {
+  return {
+    appliedBenefitId: null,
+    appliedCouponId: null,
+    currency: 'USD',
+    discount: 0,
+    items: [],
+    shipping: 0,
+    shippingMethod: '',
+    subtotal: 0,
+    tax: 0,
+    total: 0,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function buildCustomerCartPayload(snapshot: StoreSnapshot, customerId: string): CustomerCartPayload {
+  ensureCartCollections(snapshot);
+  const cart = snapshot.carts?.find((item) => item.customerId === customerId && item.status === 'active') || null;
+
+  if (!cart) {
+    return buildEmptyCustomerCartPayload();
+  }
+
+  const cartItems = (snapshot.cartItems || [])
+    .filter((item) => item.cartId === cart.id)
+    .map((item) => ({
+      id: item.id,
+      productId: item.productId,
+      product: resolveCartProduct(snapshot, item),
+      quantity: item.quantity,
+      size: item.sizeLabel,
+      color: item.colorLabel,
+    }));
+
+  return {
+    appliedBenefitId: cart.appliedBenefitId || null,
+    appliedCouponId: cart.appliedCouponId || null,
+    currency: cart.currency || 'USD',
+    discount: cart.discount || 0,
+    items: cartItems,
+    shipping: cart.shipping || 0,
+    shippingMethod: cart.shippingMethod || '',
+    subtotal: cart.subtotal || 0,
+    tax: cart.tax || 0,
+    total: cart.total || 0,
+    updatedAt: cart.updatedAt,
+  };
+}
+
+function normalizeCartInput(input: CustomerCartSaveInput) {
+  const items = (input.items || [])
+    .filter((item) => item.product?.id && Number(item.quantity) > 0)
+    .map((item) => ({
+      id: createId('cart-item'),
+      productId: item.product.id,
+      productNameSnapshot: item.product.nome || '',
+      skuSnapshot: (item.product as Product & { sku?: string }).sku || '',
+      unitPriceSnapshot: item.product.precoPromocional || item.product.preco || 0,
+      quantity: Math.max(1, Math.trunc(Number(item.quantity) || 1)),
+      sizeLabel: item.size || '',
+      colorLabel: item.color || '',
+      metadata: { product: deepClone(item.product) },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })) as Array<Omit<StoredCartItemRecord, 'cartId'>>;
+
+  const subtotal = items.reduce((sum, item) => sum + item.unitPriceSnapshot * item.quantity, 0);
+  const discount = Math.max(0, Number(input.discount || 0));
+  const shipping = Math.max(0, Number(input.shipping || 0));
+  const tax = Math.max(0, Number(input.tax || 0));
+  const total = Math.max(0, subtotal - discount + shipping + tax);
+
+  return {
+    currency: (input.currency || 'USD').toUpperCase(),
+    discount,
+    items,
+    shipping,
+    shippingMethod: String(input.shippingMethod || ''),
+    subtotal,
+    tax,
+    total,
+  };
 }
 
 function mapStoredCustomerToPublic(customer: StoredCustomerProfile): StoreCustomerProfile {
@@ -324,6 +450,7 @@ export class FileStoreRepository implements StoreRepository {
       parsed.newsletterSubscribers ||= [];
       ensureCustomerCollections(parsed);
       ensureAdminCollections(parsed);
+      ensurePromotionCollections(parsed);
       ensureStripeCredentials(parsed);
       return deepClone(parsed);
     } catch (error) {
@@ -1400,6 +1527,161 @@ export class FileStoreRepository implements StoreRepository {
       customer.updatedAt = timestamp;
 
       return buildCustomerSessionPayload(customer);
+    });
+  }
+
+  async getCustomerCart(customerId: string): Promise<CustomerCartPayload> {
+    return this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      ensureCartCollections(snapshot);
+      return buildCustomerCartPayload(snapshot, customerId);
+    });
+  }
+
+  async saveCustomerCart(customerId: string, input: CustomerCartSaveInput): Promise<CustomerCartPayload> {
+    return this.mutate(async (snapshot) => {
+      ensureCustomerCollections(snapshot);
+      ensureCartCollections(snapshot);
+
+      const customer = snapshot.customers?.find((item) => item.id === customerId) || null;
+      if (!customer) {
+        throw new Error('Customer account not found.');
+      }
+
+      const availableBenefit = getAvailableWelcomeBenefit(customer.welcomeBenefits || []);
+      const normalized = normalizeCartInput(input);
+      const existingCart = snapshot.carts?.find((item) => item.customerId === customerId && item.status === 'active') || null;
+
+      if (!normalized.items.length) {
+        if (existingCart) {
+          snapshot.carts = snapshot.carts?.filter((item) => item.id !== existingCart.id) || [];
+          snapshot.cartItems = snapshot.cartItems?.filter((item) => item.cartId !== existingCart.id) || [];
+        }
+
+        return buildEmptyCustomerCartPayload();
+      }
+
+      const requestedBenefitId = String(input.appliedBenefitId || '').trim();
+      const resolvedBenefit =
+        (requestedBenefitId
+          ? (customer.welcomeBenefits || []).find((benefit) => benefit.id === requestedBenefitId && benefit.status === 'available') || null
+          : null)
+        || availableBenefit;
+
+      let appliedBenefitId: string | null = null;
+      if (resolvedBenefit && (Number(input.discount || 0) > 0 || requestedBenefitId)) {
+        const expectedDiscount = calculateWelcomeBenefitDiscount(normalized.subtotal, resolvedBenefit);
+        if (Math.abs(expectedDiscount - Number(input.discount || 0)) > 0.01 && Number(input.discount || 0) > 0) {
+          throw new Error('The discount amount does not match the customer benefit.');
+        }
+
+        normalized.discount = expectedDiscount;
+        appliedBenefitId = resolvedBenefit.id;
+      }
+
+      const timestamp = new Date().toISOString();
+      const cartId = existingCart?.id || createId('cart');
+      const cartRecord: StoredCartRecord = {
+        id: cartId,
+        customerId,
+        status: 'active',
+        currency: normalized.currency,
+        subtotal: normalized.subtotal,
+        discount: normalized.discount,
+        shipping: normalized.shipping,
+        tax: normalized.tax,
+        total: normalized.total,
+        shippingMethod: normalized.shippingMethod,
+        shippingQuoteSnapshot: null,
+        appliedCouponId: input.appliedCouponId ? String(input.appliedCouponId).trim() || null : null,
+        appliedBenefitId,
+        convertedOrderId: null,
+        createdAt: existingCart?.createdAt || timestamp,
+        updatedAt: timestamp,
+        convertedAt: null,
+      };
+
+      snapshot.carts = (snapshot.carts || []).filter((item) => item.id !== cartId);
+      snapshot.carts.unshift(cartRecord);
+
+      snapshot.cartItems = (snapshot.cartItems || []).filter((item) => item.cartId !== cartId);
+      snapshot.cartItems.unshift(
+        ...normalized.items.map((item) => ({
+          ...item,
+          cartId,
+        })),
+      );
+
+      customer.updatedAt = timestamp;
+
+      return buildCustomerCartPayload(snapshot, customerId);
+    });
+  }
+
+  async clearCustomerCart(customerId: string): Promise<CustomerCartPayload> {
+    return this.saveCustomerCart(customerId, { items: [] });
+  }
+
+  async getAdminPromotions(): Promise<AdminPromotionRecord[]> {
+    const snapshot = await this.readSnapshot();
+    ensurePromotionCollections(snapshot);
+    return [...(snapshot.promotions || [])].sort((left, right) => right.id.localeCompare(left.id));
+  }
+
+  async createAdminPromotion(input: AdminPromotionInput): Promise<AdminPromotionRecord> {
+    return this.mutate(async (snapshot) => {
+      ensurePromotionCollections(snapshot);
+      const created: AdminPromotionRecord = {
+        ...input,
+        id: createId('promotion'),
+        status: input.status,
+        usages: [],
+        logs: [],
+      };
+      snapshot.promotions?.unshift(created);
+      return created;
+    });
+  }
+
+  async updateAdminPromotion(id: string, input: AdminPromotionInput): Promise<AdminPromotionRecord> {
+    return this.mutate(async (snapshot) => {
+      ensurePromotionCollections(snapshot);
+      const index = snapshot.promotions?.findIndex((campaign) => campaign.id === id) ?? -1;
+      if (index < 0 || !snapshot.promotions) {
+        throw new Error('Campanha nao encontrada.');
+      }
+      const updated: AdminPromotionRecord = {
+        ...snapshot.promotions[index],
+        ...input,
+        status: input.status,
+      };
+      snapshot.promotions[index] = updated;
+      return updated;
+    });
+  }
+
+  async setAdminPromotionStatus(id: string, status: AdminPromotionStatus): Promise<AdminPromotionRecord> {
+    return this.mutate(async (snapshot) => {
+      ensurePromotionCollections(snapshot);
+      const campaign = snapshot.promotions?.find((item) => item.id === id);
+      if (!campaign) {
+        throw new Error('Campanha nao encontrada.');
+      }
+      campaign.status = status;
+      return campaign;
+    });
+  }
+
+  async deleteAdminPromotion(id: string): Promise<{ archived: boolean }> {
+    return this.mutate(async (snapshot) => {
+      ensurePromotionCollections(snapshot);
+      const campaign = snapshot.promotions?.find((item) => item.id === id);
+      if (campaign?.usages.length) {
+        campaign.status = 'Arquivada';
+        return { archived: true };
+      }
+      snapshot.promotions = snapshot.promotions?.filter((item) => item.id !== id) || [];
+      return { archived: false };
     });
   }
 

@@ -565,7 +565,7 @@ function PaymentsTab({
                   <h4 className="text-3xl font-serif font-bold tracking-tight text-neutral-900">Stripe Checkout</h4>
                   <p className="max-w-3xl text-[13px] leading-relaxed text-neutral-500">
                     Configure o gateway, o modo operacional e os retornos do checkout em uma sequencia mais limpa.
-                    Agora as chaves da Stripe podem ficar salvas em storage privado, sem cair no localStorage nem no codigo do front.
+                    Agora as chaves da Stripe podem ficar salvas em storage privado, sem cair em armazenamento do navegador nem no codigo do front.
                   </p>
                 </div>
               </div>
@@ -827,7 +827,7 @@ function PaymentsTab({
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Como isso funciona</p>
                     <div className="mt-4 space-y-3 text-[12px] leading-relaxed text-neutral-600">
                       <p>
-                        As credenciais ficam fora de <span className="font-semibold text-neutral-900">store_settings</span>, fora do localStorage e fora do bundle da loja.
+                        As credenciais ficam fora de <span className="font-semibold text-neutral-900">store_settings</span>, fora do armazenamento do navegador e fora do bundle da loja.
                       </p>
                       <p>
                         O painel recebe somente status, ambiente ativo e valores mascarados para confirmar qual chave ja foi cadastrada.

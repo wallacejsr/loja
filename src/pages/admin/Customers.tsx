@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Phone,
   Search,
+  RefreshCw,
   ShoppingBag,
   User,
   X,
@@ -133,39 +134,28 @@ export function Customers() {
   const [actionMenu, setActionMenu] = useState<ActionMenuState | null>(null);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [isReloading, setIsReloading] = useState(false);
   const normalizedSearchTerm = useDeferredSearchTerm(searchTerm);
+  const loadCustomers = React.useCallback(async () => {
+    setLoadingCustomers(true);
+    setLoadingError(null);
+
+    try {
+      const nextCustomers = await fetchAdminCustomers();
+      setCustomers(nextCustomers);
+    } catch (error) {
+      console.error('Falha ao carregar clientes do painel', error);
+      setLoadingError(error instanceof Error ? error.message : 'Nao foi possivel carregar os clientes.');
+      setCustomers([]);
+    } finally {
+      setLoadingCustomers(false);
+      setIsReloading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let mounted = true;
-
-    async function loadCustomers() {
-      setLoadingCustomers(true);
-      setLoadingError(null);
-
-      try {
-        const nextCustomers = await fetchAdminCustomers();
-        if (mounted) {
-          setCustomers(nextCustomers);
-        }
-      } catch (error) {
-        console.error('Falha ao carregar clientes do painel', error);
-        if (mounted) {
-          setLoadingError(error instanceof Error ? error.message : 'Nao foi possivel carregar os clientes.');
-          setCustomers([]);
-        }
-      } finally {
-        if (mounted) {
-          setLoadingCustomers(false);
-        }
-      }
-    }
-
     void loadCustomers();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  }, [loadCustomers]);
 
   useEffect(() => {
     if (!actionMenu || typeof window === 'undefined') return;
@@ -284,10 +274,8 @@ export function Customers() {
 
   const saveCustomer = async (updatedCustomer: CustomerRecord) => {
     try {
-      const savedCustomer = await persistAdminCustomer(updatedCustomer.id, updatedCustomer);
-      setCustomers((current) =>
-        current.map((customer) => (customer.id === savedCustomer.id ? savedCustomer : customer)),
-      );
+      await persistAdminCustomer(updatedCustomer.id, updatedCustomer);
+      await loadCustomers();
       setEditingCustomerId(null);
       showToast('Cliente atualizado com sucesso.');
     } catch (error) {
@@ -303,6 +291,18 @@ export function Customers() {
           <h2 className="text-3xl font-serif text-neutral-900 tracking-tight">Clientes</h2>
           <p className="text-neutral-500 text-[13px]">Mini CRM do painel com visão 360º, histórico de pedidos e auditoria.</p>
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            setIsReloading(true);
+            void loadCustomers();
+          }}
+          disabled={loadingCustomers || isReloading}
+          className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-neutral-700 hover:bg-neutral-50 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          <RefreshCw className={`w-4 h-4 ${loadingCustomers || isReloading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

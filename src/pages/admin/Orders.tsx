@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { showToast } from '../../lib/adminUtils';
 import { type AddressCountryCode, getAdminTaxIdLabel, getPhoneDisplay, getWhatsAppUrl } from '../../lib/customerForm';
+import { useAdminSession } from '../../context/AdminSessionContext';
 import { useAdminCurrency } from '../../hooks/useAdminCurrency';
 import { useDeferredSearchTerm } from '../../hooks/useDeferredSearchTerm';
 import {
@@ -125,8 +126,6 @@ const shortDateFormatter = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
 });
 
-const adminUserName = 'Admin Loja';
-
 function normalizeStatusKey(value: string) {
   return value
     .normalize('NFD')
@@ -159,6 +158,7 @@ function mapServerOrders(serverOrders: StripeTrackedAdminOrder[]): AdminOrder[] 
 
 export function Orders() {
   const { formatCurrency } = useAdminCurrency();
+  const { user } = useAdminSession();
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -169,6 +169,7 @@ export function Orders() {
   const [ordersError, setOrdersError] = useState('');
   const [trackingBackend, setTrackingBackend] = useState<'file' | 'supabase' | 'mariadb' | null>(null);
   const normalizedSearchTerm = useDeferredSearchTerm(searchTerm);
+  const adminUserName = user?.fullName || user?.email || 'Administrador';
 
   const loadOrders = React.useCallback(async () => {
     setOrdersLoading(true);
@@ -250,6 +251,7 @@ export function Orders() {
             : currentOrder,
         ),
       );
+      await loadOrders();
       showToast(`Status atualizado para ${nextStatus}.`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Nao foi possivel atualizar o status deste pedido.');

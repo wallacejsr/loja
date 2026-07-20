@@ -6,7 +6,7 @@ import { ProductModal } from '../../components/admin/ProductModal';
 import { useStoreActions, useStoreProducts } from '../../hooks/useStoreData';
 import { useAdminCurrency } from '../../hooks/useAdminCurrency';
 import { useDeferredSearchTerm } from '../../hooks/useDeferredSearchTerm';
-import { Product } from '../../data/mockData';
+import type { StoreProduct as Product } from '../../types/store';
 
 export function Products() {
   const [searchTerm, setSearchTerm] = useState('');

@@ -1,4 +1,4 @@
-import type { Product } from '../../src/data/mockData.ts';
+import type { StoreProduct as Product } from '../../src/types/store';
 import type {
   CustomerAddressInput,
   CustomerProfileUpdateInput,
@@ -195,6 +195,43 @@ export type StoredCustomerSession = {
   userAgent: string;
 };
 
+export type StoredCartStatus = 'active' | 'converted' | 'abandoned';
+
+export type StoredCartRecord = {
+  appliedBenefitId: string | null;
+  appliedCouponId: string | null;
+  convertedAt: string | null;
+  convertedOrderId: string | null;
+  createdAt: string;
+  currency: string;
+  customerId: string;
+  discount: number;
+  id: string;
+  shipping: number;
+  shippingMethod: string;
+  shippingQuoteSnapshot: string | null;
+  status: StoredCartStatus;
+  subtotal: number;
+  tax: number;
+  total: number;
+  updatedAt: string;
+};
+
+export type StoredCartItemRecord = {
+  cartId: string;
+  colorLabel: string;
+  createdAt: string;
+  id: string;
+  metadata: Record<string, unknown> | null;
+  productId: string;
+  productNameSnapshot: string;
+  quantity: number;
+  sizeLabel: string;
+  skuSnapshot: string;
+  unitPriceSnapshot: number;
+  updatedAt: string;
+};
+
 export interface StoreSnapshot {
   auditLogs?: AuditLogRecord[];
   adminPasswordResets?: Array<{
@@ -224,6 +261,8 @@ export interface StoreSnapshot {
   banners: Banner[];
   categories: StoreCategory[];
   contactMessages: ContactMessage[];
+  carts?: StoredCartRecord[];
+  cartItems?: StoredCartItemRecord[];
   customerSessions?: StoredCustomerSession[];
   customers?: StoredCustomerProfile[];
   homeCards: HomeCard[];
@@ -231,6 +270,7 @@ export interface StoreSnapshot {
   instagramFeed: StoredInstagramPost[];
   newsletterSubscribers: NewsletterSubscriber[];
   products: StoredProduct[];
+  promotions?: AdminPromotionRecord[];
   raffles: Raffle[];
   settings: StoreSettings;
   stripeCredentials?: Partial<Record<StripeMode, StoredStripeCredentialSet>>;
@@ -292,6 +332,53 @@ export type AdminDashboardSummary = {
   recentOrders: AdminDashboardRecentOrder[];
 };
 
+export type AdminPromotionStatus = 'Ativo' | 'Pausado' | 'Finalizado' | 'Arquivada';
+export type AdminPromotionDiscountType = 'percentual' | 'valor_fixo';
+export type AdminPromotionApplicationType = 'todos' | 'categorias' | 'produtos';
+
+export type AdminPromotionInput = {
+  name: string;
+  description: string;
+  promoCode: string;
+  discountType: AdminPromotionDiscountType;
+  discountValue: number;
+  minOrderValue: number;
+  totalUseLimit: number;
+  useLimitPerCustomer: number;
+  startsAt: string;
+  expiresAt: string;
+  applicationType: AdminPromotionApplicationType;
+  categoryNames: string[];
+  productIds: string[];
+  status: Exclude<AdminPromotionStatus, 'Arquivada'>;
+  audienceSize: number;
+};
+
+export type AdminPromotionUsage = {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  dateTime: string;
+  orderNumber: string;
+  orderValue: number;
+  discountApplied: number;
+};
+
+export type AdminPromotionLog = {
+  id: string;
+  user: string;
+  dateTime: string;
+  ip: string;
+  action: string;
+};
+
+export type AdminPromotionRecord = AdminPromotionInput & {
+  id: string;
+  status: AdminPromotionStatus;
+  usages: AdminPromotionUsage[];
+  logs: AdminPromotionLog[];
+};
+
 export type AdminCustomerAddress = {
   country?: AddressCountryCode;
   cep: string;
@@ -316,7 +403,7 @@ export type AdminCustomerOrder = {
   id: string;
   orderNumber: string;
   date: string;
-  status: 'Aguardando Pagamento' | 'Pago' | 'Em Separacao' | 'Em Separação' | 'Em SeparaÃ§Ã£o' | 'Enviado' | 'Entregue' | 'Cancelado';
+  status: 'Aguardando Pagamento' | 'Pago' | 'Em Separacao' | 'Em Separação' | 'Em Separação' | 'Enviado' | 'Entregue' | 'Cancelado';
   itemsCount: number;
   total: number;
   paymentMethod: string;
@@ -371,10 +458,49 @@ export type CustomerProfileUpdateResult = CustomerSessionPayload;
 export type CustomerAddressMutationResult = CustomerSessionPayload;
 export type CustomerBenefitMutationResult = CustomerSessionPayload;
 
+export type CustomerCartItem = {
+  color: string;
+  id: string;
+  product: Product;
+  productId: string;
+  quantity: number;
+  size: string;
+};
+
+export type CustomerCartPayload = {
+  appliedBenefitId: string | null;
+  appliedCouponId: string | null;
+  currency: string;
+  discount: number;
+  items: CustomerCartItem[];
+  shipping: number;
+  shippingMethod: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+  updatedAt: string;
+};
+
+export type CustomerCartSaveInput = {
+  appliedBenefitId?: string | null;
+  appliedCouponId?: string | null;
+  currency?: string;
+  discount?: number;
+  items: Array<Omit<CustomerCartItem, 'id'>>;
+  shipping?: number;
+  shippingMethod?: string;
+  tax?: number;
+};
+
 export interface StoreRepository {
   getAdminCustomers(): Promise<AdminCustomerRecord[]>;
   getAdminCustomer(customerId: string): Promise<AdminCustomerRecord | null>;
   updateAdminCustomer(customerId: string, input: AdminCustomerRecord): Promise<AdminCustomerRecord>;
+  getAdminPromotions(): Promise<AdminPromotionRecord[]>;
+  createAdminPromotion(input: AdminPromotionInput): Promise<AdminPromotionRecord>;
+  updateAdminPromotion(id: string, input: AdminPromotionInput): Promise<AdminPromotionRecord>;
+  setAdminPromotionStatus(id: string, status: AdminPromotionStatus): Promise<AdminPromotionRecord>;
+  deleteAdminPromotion(id: string): Promise<{ archived: boolean }>;
   createBanner(input: Pick<Banner, 'title' | 'desktop' | 'mobile' | 'link'>): Promise<Banner>;
   createCategory(input: CategoryInput): Promise<StoreCategory>;
   createContactMessage(input: ContactMessageInput): Promise<ContactMessage>;
@@ -406,6 +532,7 @@ export interface StoreRepository {
   getBanners(options?: ListOptions): Promise<Banner[]>;
   getCategories(): Promise<StoreCategory[]>;
   getContactMessages(): Promise<ContactMessage[]>;
+  getCustomerCart(customerId: string): Promise<CustomerCartPayload>;
   getCustomerSessionByTokenHash(tokenHash: string): Promise<CustomerSessionLookup | null>;
   getCustomerSessionPayload(customerId: string): Promise<CustomerSessionPayload | null>;
   getHomeCards(options?: ListOptions): Promise<HomeCard[]>;
@@ -421,6 +548,8 @@ export interface StoreRepository {
   markAdminPasswordResetTokenUsed(id: string): Promise<void>;
   recordAdminLoginFailure(adminUserId: string, failedAttempts: number, lockedUntil: string | null): Promise<void>;
   activateNewsletterBenefitForCustomer(customerId: string): Promise<CustomerBenefitMutationResult>;
+  saveCustomerCart(customerId: string, input: CustomerCartSaveInput): Promise<CustomerCartPayload>;
+  clearCustomerCart(customerId: string): Promise<CustomerCartPayload>;
   revokeAdminSession(sessionId: string): Promise<void>;
   revokeAdminSessionsByUserId(adminUserId: string): Promise<void>;
   revokeCustomerSession(sessionId: string): Promise<void>;

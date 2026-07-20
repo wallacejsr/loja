@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import type { StoreApiConfig } from '../config';
-import type { CustomerAddressInput, CustomerProfileUpdateInput, CustomerRegisterInput } from '../../src/lib/storeCustomerApi.ts';
+import type { CustomerAddressInput, CustomerCartSaveInput, CustomerProfileUpdateInput, CustomerRegisterInput } from '../../src/lib/storeCustomerApi.ts';
 import { hashPassword, verifyPassword } from './password';
 import {
   buildExpiredSessionCookieHeader,
@@ -142,6 +142,31 @@ function sanitizeAddressInput(body: Partial<CustomerAddressInput>, forcedId?: st
     city: String(body.city || '').trim(),
     region: String(body.region || '').trim(),
     isPrimary: body.isPrimary !== false,
+  };
+}
+
+function sanitizeCartInput(body: Partial<CustomerCartSaveInput>): CustomerCartSaveInput {
+  const items = Array.isArray(body.items)
+    ? body.items
+        .map((item) => ({
+          productId: String(item?.productId || item?.product?.id || '').trim(),
+          product: item?.product,
+          quantity: Number(item?.quantity || 1),
+          size: String(item?.size || '').trim(),
+          color: String(item?.color || '').trim(),
+        }))
+        .filter((item) => Boolean(item.productId) && Boolean(item.product?.id))
+    : [];
+
+  return {
+    appliedBenefitId: body.appliedBenefitId ? String(body.appliedBenefitId).trim() : null,
+    appliedCouponId: body.appliedCouponId ? String(body.appliedCouponId).trim() : null,
+    currency: body.currency ? String(body.currency).trim() : 'USD',
+    discount: Number(body.discount || 0),
+    items,
+    shipping: Number(body.shipping || 0),
+    shippingMethod: body.shippingMethod ? String(body.shippingMethod).trim() : '',
+    tax: Number(body.tax || 0),
   };
 }
 
@@ -412,6 +437,60 @@ export function registerCustomerAuthRoutes(repository: StoreRepository, config: 
         orderNumber,
       );
       response.json(payload);
+    } catch (error) {
+      handleAccountError(response, error);
+    }
+  });
+
+  router.get('/cart', async (request, response) => {
+    try {
+      const resolved = await resolveAuthenticatedCustomer(request, response, repository, config);
+      if (!resolved) {
+        handleAccountError(response, new Error('You need to sign in before continuing.'), 401, 'UNAUTHORIZED');
+        return;
+      }
+
+      if (!requireAuthenticatedCustomer(request, response)) {
+        return;
+      }
+
+      response.json(await repository.getCustomerCart(request.currentCustomerId));
+    } catch (error) {
+      handleAccountError(response, error);
+    }
+  });
+
+  router.put('/cart', async (request, response) => {
+    try {
+      const resolved = await resolveAuthenticatedCustomer(request, response, repository, config);
+      if (!resolved) {
+        handleAccountError(response, new Error('You need to sign in before continuing.'), 401, 'UNAUTHORIZED');
+        return;
+      }
+
+      if (!requireAuthenticatedCustomer(request, response)) {
+        return;
+      }
+
+      response.json(await repository.saveCustomerCart(request.currentCustomerId, sanitizeCartInput(request.body || {})));
+    } catch (error) {
+      handleAccountError(response, error);
+    }
+  });
+
+  router.post('/cart/clear', async (request, response) => {
+    try {
+      const resolved = await resolveAuthenticatedCustomer(request, response, repository, config);
+      if (!resolved) {
+        handleAccountError(response, new Error('You need to sign in before continuing.'), 401, 'UNAUTHORIZED');
+        return;
+      }
+
+      if (!requireAuthenticatedCustomer(request, response)) {
+        return;
+      }
+
+      response.json(await repository.clearCustomerCart(request.currentCustomerId));
     } catch (error) {
       handleAccountError(response, error);
     }

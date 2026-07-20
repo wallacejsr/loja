@@ -32,7 +32,7 @@ import { clearCartPromotionDraft } from '../lib/welcomeBenefit';
 
 export type { StoreCustomerAddress, StoreCustomerProfile } from '../lib/storeCustomerApi';
 
-const GUEST_SHIPPING_DRAFT_STORAGE_KEY = '@App:guest-shipping-draft';
+let guestShippingDraftMemory: GuestShippingDraft | null = null;
 
 export type GuestShippingDraft = {
   country: AddressCountryCode;
@@ -82,29 +82,6 @@ const EMPTY_SESSION_PAYLOAD: CustomerSessionPayload = {
   primaryAddress: null,
 };
 
-function readStorageValue<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-
-  try {
-    const rawValue = window.localStorage.getItem(key);
-    if (!rawValue) return fallback;
-    return JSON.parse(rawValue) as T;
-  } catch (error) {
-    console.error(`Falha ao ler ${key}`, error);
-    return fallback;
-  }
-}
-
-function writeStorageValue<T>(key: string, value: T) {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.error(`Falha ao salvar ${key}`, error);
-  }
-}
-
 function resolveAuthErrorCode(error: unknown, fallback: LoginError | RegisterCustomerError) {
   if (error instanceof AccountApiError) {
     if (error.code === 'EMAIL_EXISTS') {
@@ -126,13 +103,7 @@ function resolveAuthErrorCode(error: unknown, fallback: LoginError | RegisterCus
 export function CustomerSessionProvider({ children }: { children: ReactNode }) {
   const [sessionPayload, setSessionPayload] = useState<CustomerSessionPayload>(EMPTY_SESSION_PAYLOAD);
   const [isSessionLoading, setIsSessionLoading] = useState(true);
-  const [guestShippingDraft, setGuestShippingDraft] = useState<GuestShippingDraft | null>(() =>
-    readStorageValue<GuestShippingDraft | null>(GUEST_SHIPPING_DRAFT_STORAGE_KEY, null),
-  );
-
-  useEffect(() => {
-    writeStorageValue(GUEST_SHIPPING_DRAFT_STORAGE_KEY, guestShippingDraft);
-  }, [guestShippingDraft]);
+  const [guestShippingDraft, setGuestShippingDraft] = useState<GuestShippingDraft | null>(guestShippingDraftMemory);
 
   const refreshSession = useCallback(async () => {
     setIsSessionLoading(true);
@@ -245,7 +216,7 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
   }, [currentCustomer]);
 
   const saveGuestShippingDraft = useCallback((draft: GuestShippingDraft) => {
-    setGuestShippingDraft({
+    const nextDraft = {
       country: draft.country,
       postalCode: draft.postalCode,
       street: draft.street.trim(),
@@ -254,10 +225,14 @@ export function CustomerSessionProvider({ children }: { children: ReactNode }) {
       neighborhood: draft.neighborhood.trim(),
       city: draft.city.trim(),
       region: draft.region.trim(),
-    });
+    };
+
+    guestShippingDraftMemory = nextDraft;
+    setGuestShippingDraft(nextDraft);
   }, []);
 
   const clearGuestShippingDraft = useCallback(() => {
+    guestShippingDraftMemory = null;
     setGuestShippingDraft(null);
   }, []);
 

@@ -2,8 +2,6 @@ import React, { createContext, ReactNode, useCallback, useContext, useEffect, us
 import { getStoreSettings, saveStoreSettings } from '../lib/storeApi';
 import { defaultSettings, normalizeStoreSettings, StoreSettings } from '../types/settings';
 
-const SETTINGS_KEY = 'zenv_store_settings';
-
 export type { StoreSettings };
 
 const SettingsContext = createContext<{
@@ -27,19 +25,14 @@ function adjustColorIntensity(hex: string, amount: number): string {
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const hasCachedSettings = Boolean(localStorage.getItem(SETTINGS_KEY));
-  const [settings, setSettings] = useState<StoreSettings>(() => {
-    const saved = localStorage.getItem(SETTINGS_KEY);
-    return saved ? normalizeStoreSettings({ ...defaultSettings, ...JSON.parse(saved) }) : defaultSettings;
-  });
-  const [loading, setLoading] = useState(!hasCachedSettings);
+  const [settings, setSettings] = useState<StoreSettings>(() => normalizeStoreSettings(defaultSettings));
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getStoreSettings()
       .then((remoteSettings) => {
         const normalizedSettings = normalizeStoreSettings(remoteSettings);
         setSettings(normalizedSettings);
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalizedSettings));
         setLoading(false);
 
         if (normalizedSettings.storeCurrency !== remoteSettings.storeCurrency) {
@@ -49,7 +42,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => {
-        // Keep the local copy when Supabase is not configured or temporarily unavailable.
         setLoading(false);
       });
   }, []);
@@ -58,16 +50,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     document.documentElement.style.setProperty('--theme-primary', settings.primaryColor);
     document.documentElement.style.setProperty('--theme-primary-dark', adjustColorIntensity(settings.primaryColor, -20));
     document.documentElement.style.setProperty('--theme-secondary', settings.secondaryColor);
-    if (loading && !hasCachedSettings) return;
+    if (loading) return;
     document.title = settings.siteTitle || settings.storeName;
-  }, [hasCachedSettings, loading, settings.primaryColor, settings.secondaryColor, settings.siteTitle, settings.storeName]);
+  }, [loading, settings.primaryColor, settings.secondaryColor, settings.siteTitle, settings.storeName]);
 
   const updateSettings = useCallback((newSettings: Partial<StoreSettings>) => {
     setSettings((prev) => {
       const updated = normalizeStoreSettings({ ...prev, ...newSettings });
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
       saveStoreSettings(updated).catch(() => {
-        // Local state remains updated; the next save can retry the remote write.
+        getStoreSettings()
+          .then((remoteSettings) => setSettings(normalizeStoreSettings(remoteSettings)))
+          .catch(() => undefined);
       });
       return updated;
     });

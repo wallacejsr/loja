@@ -189,6 +189,14 @@ type TrackingFileStore = {
   webhookLogs: StripeWebhookLogRecord[];
 };
 
+type OfficialOrderStatus =
+  | 'pending_payment'
+  | 'paid'
+  | 'processing'
+  | 'shipped'
+  | 'delivered'
+  | 'cancelled';
+
 const TRACKING_FILE_PATH = path.resolve(process.cwd(), 'storage', 'stripe-tracking.json');
 const FILE_STORE_TEMPLATE: TrackingFileStore = {
   orders: [],
@@ -609,6 +617,197 @@ function applyAdminStatusToOrder(
   };
 }
 
+function toOfficialOrderStatus(status: TrackedOrderStatus): OfficialOrderStatus {
+  switch (normalizeStatusKey(status)) {
+    case 'pago':
+      return 'paid';
+    case 'em separacao':
+      return 'processing';
+    case 'enviado':
+      return 'shipped';
+    case 'entregue':
+      return 'delivered';
+    case 'cancelado':
+      return 'cancelled';
+    default:
+      return 'pending_payment';
+  }
+}
+
+function buildOfficialOrderId(orderNumber: string) {
+  return `order-${orderNumber.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}`;
+}
+
+function getTrackedCustomerEmail(record: TrackedStripeOrderRecord) {
+  return safeString((record.customer as CheckoutCustomerPayload | undefined)?.email).trim().toLowerCase();
+}
+
+async function resolveMariaDbCustomerId(connection: any, email: string) {
+  if (!email) {
+    return null;
+  }
+
+  const [rows] = await connection.query(
+    'SELECT id FROM customers WHERE email = ? LIMIT 1',
+    [email],
+  );
+  const row = (rows as any[])[0];
+  return row?.id ? String(row.id) : null;
+}
+
+async function persistOfficialOrderInMariaDb(record: TrackedStripeOrderRecord) {
+  const pool = await getMariaDbPool();
+  const orderId = buildOfficialOrderId(record.orderNumber);
+  const now = record.updatedAt || new Date().toISOString();
+  const placedAt = record.paidAt || record.createdAt || now;
+  const status = toOfficialOrderStatus(record.orderStatus);
+  const shippingAddressSnapshot = record.shippingAddress || {};
+  const billingAddressSnapshot = record.shippingAddress || {};
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    const customerId = await resolveMariaDbCustomerId(connection, getTrackedCustomerEmail(record));
+
+    await connection.query(
+      `
+        INSERT INTO orders (
+          id, order_number, customer_id, cart_id, source, status, payment_provider,
+          payment_method, payment_reference, currency, subtotal, discount, shipping, tax,
+          total, coupon_id, customer_benefit_id, customer_snapshot, billing_address_snapshot,
+          shipping_address_snapshot, metadata, placed_at, paid_at, shipped_at, delivered_at,
+          cancelled_at, created_at, updated_at
+        ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          source = VALUES(source),
+          status = VALUES(status),
+          payment_provider = VALUES(payment_provider),
+          payment_method = VALUES(payment_method),
+          payment_reference = VALUES(payment_reference),
+          currency = VALUES(currency),
+          subtotal = VALUES(subtotal),
+          discount = VALUES(discount),
+          shipping = VALUES(shipping),
+          tax = VALUES(tax),
+          total = VALUES(total),
+          customer_snapshot = VALUES(customer_snapshot),
+          billing_address_snapshot = VALUES(billing_address_snapshot),
+          shipping_address_snapshot = VALUES(shipping_address_snapshot),
+          metadata = VALUES(metadata),
+          placed_at = VALUES(placed_at),
+          paid_at = VALUES(paid_at),
+          shipped_at = VALUES(shipped_at),
+          delivered_at = VALUES(delivered_at),
+          cancelled_at = VALUES(cancelled_at),
+          updated_at = VALUES(updated_at)
+      `,
+      [
+        orderId,
+        record.orderNumber,
+        customerId,
+        record.source || 'stripe_checkout',
+        status,
+        'stripe',
+        record.paymentMethod || 'Stripe Checkout',
+        record.stripeSessionId || record.stripePaymentIntentId || '',
+        normalizeCurrency(record.currency),
+        Number(record.subtotal || 0),
+        Number(record.discount || 0),
+        Number(record.shipping || 0),
+        0,
+        Number(record.total || 0),
+        JSON.stringify(record.customer || {}),
+        JSON.stringify(billingAddressSnapshot),
+        JSON.stringify(shippingAddressSnapshot),
+        JSON.stringify({
+          mode: record.mode,
+          source: record.source,
+          status: record.orderStatus,
+          paymentStatus: record.paymentStatus,
+          sessionStatus: record.sessionStatus,
+          lastEventId: record.lastEventId,
+          lastEventType: record.lastEventType,
+        }),
+        toSqlDateTime(placedAt),
+        toSqlDateTime(record.paidAt || null),
+        toSqlDateTime(record.shippedAt || null),
+        toSqlDateTime(record.deliveredAt || null),
+        toSqlDateTime(normalizeStatusKey(record.orderStatus) === 'cancelado' ? record.updatedAt : null),
+        toSqlDateTime(record.createdAt),
+        toSqlDateTime(now),
+      ],
+    );
+
+    await connection.query('DELETE FROM order_items WHERE order_id = ?', [orderId]);
+    for (const item of Array.isArray(record.items) ? record.items : []) {
+      await connection.query(
+        `
+          INSERT INTO order_items (
+            id, order_id, product_id, product_name_snapshot, sku_snapshot,
+            unit_price, quantity, subtotal, size_label, color_label, metadata,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          randomUUID(),
+          orderId,
+          item.id,
+          item.name,
+          buildItemSku(item),
+          Number(item.unitPrice || 0),
+          Number(item.quantity || 0),
+          Number(item.unitPrice || 0) * Number(item.quantity || 0),
+          item.size || '',
+          item.color || '',
+          JSON.stringify({
+            source: record.source,
+            stripeOrderNumber: record.orderNumber,
+          }),
+          toSqlDateTime(record.createdAt),
+          toSqlDateTime(now),
+        ],
+      );
+    }
+
+    await connection.query('DELETE FROM order_status_logs WHERE order_id = ?', [orderId]);
+    for (const log of Array.isArray(record.logs) ? record.logs : []) {
+      await connection.query(
+        `
+          INSERT INTO order_status_logs (
+            id, order_id, status, actor_type, actor_id, actor_name, ip_address, message, metadata, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          log.id || randomUUID(),
+          orderId,
+          status,
+          normalizeStatusKey(log.user) === 'stripe webhook' || normalizeStatusKey(log.user) === 'stripe checkout' || normalizeStatusKey(log.user) === 'sistema'
+            ? 'system'
+            : 'admin',
+          '',
+          log.user || 'System',
+          log.ip || '',
+          log.action || '',
+          JSON.stringify({
+            source: record.source,
+            paymentStatus: record.paymentStatus,
+            sessionStatus: record.sessionStatus,
+          }),
+          toSqlDateTime(log.dateTime),
+        ],
+      );
+    }
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 function mapOrderRow(row: any): TrackedStripeOrderRecord {
   return ensureTrackedOrderDefaults({
     provider: 'stripe',
@@ -1001,6 +1200,7 @@ export async function persistStripeCheckoutDraft(draft: StripeTrackedCheckoutDra
 
   if (backend === 'mariadb') {
     await persistOrderInMariaDb(record);
+    await persistOfficialOrderInMariaDb(record);
     return;
   }
 
@@ -1021,6 +1221,27 @@ export async function persistStripeCheckoutDraft(draft: StripeTrackedCheckoutDra
     ...store,
     orders: nextOrders,
   });
+}
+
+export async function getTrackedStripeOrderByLookup(orderNumber: string, sessionId = '') {
+  const backend = resolveTrackingBackend();
+
+  if (backend === 'mariadb') {
+    const current = await getMariaDbOrderByLookup(orderNumber, sessionId);
+    return current ? toTrackedAdminOrder(current) : null;
+  }
+
+  if (backend === 'supabase') {
+    const current = await getSupabaseOrderByLookup(orderNumber, sessionId);
+    return current ? toTrackedAdminOrder(current) : null;
+  }
+
+  const store = await readFileStore();
+  const current = store.orders.find(
+    (item) => item.orderNumber === orderNumber || item.stripeSessionId === sessionId,
+  ) || null;
+
+  return current ? toTrackedAdminOrder(ensureTrackedOrderDefaults(current)) : null;
 }
 
 export async function persistStripeWebhookLog(record: StripeWebhookLogRecord) {
@@ -1055,6 +1276,7 @@ export async function applyStripeWebhookSessionSnapshot(snapshot: StripeWebhookS
     const current = await getMariaDbOrderByLookup(snapshot.orderNumber, snapshot.sessionId);
     const next = applySessionSnapshotToOrder(current, snapshot);
     await persistOrderInMariaDb(next);
+    await persistOfficialOrderInMariaDb(next);
     return next;
   }
 
@@ -1118,6 +1340,7 @@ export async function updateTrackedStripeOrderStatus(
 
     const next = applyAdminStatusToOrder(current, nextStatus, user, ip);
     await persistOrderInMariaDb(next);
+    await persistOfficialOrderInMariaDb(next);
     return toTrackedAdminOrder(next);
   }
 

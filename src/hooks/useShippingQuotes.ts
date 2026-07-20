@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { Product } from '../data/mockData';
+import type { StoreProduct as Product } from '../types/store';
 import type { AddressCountryCode } from '../lib/customerForm';
 import { createShippingQuoteRequest, requestShippingQuotes, type ShippingQuote } from '../lib/shipping';
 import type { StoreSettings } from './useSettings';

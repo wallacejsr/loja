@@ -17,7 +17,7 @@ import {
 import { useCanHover } from '../hooks/useCanHover';
 import { StoreImage } from '../components/StoreImage';
 import { StorefrontErrorNotice } from '../components/StorefrontFeedback';
-import { Product } from '../data/mockData';
+import type { StoreProduct as Product } from '../types/store';
 import { HomeCard, HomeSection as HomeSectionConfig, Raffle } from '../lib/storeApi';
 
 const HOME_FEATURED_SECTION_DOMAINS = ['homeSections', 'products'] as const;

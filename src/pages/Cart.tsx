@@ -19,12 +19,8 @@ import {
   type AddressCountryCode,
 } from '../lib/customerForm';
 import {
-  clearCartPromotionDraft,
-  createCartPromotionDraft,
+  calculateWelcomeBenefitDiscount,
   normalizeCouponCode,
-  readCartPromotionDraft,
-  resolveActiveWelcomePromotion,
-  saveCartPromotionDraft,
 } from '../lib/welcomeBenefit';
 import { StoreImage } from '../components/StoreImage';
 
@@ -43,7 +39,7 @@ const EMPTY_GUEST_SHIPPING_ADDRESS: GuestShippingDraft = {
 };
 
 export function Cart() {
-  const { cart, removeFromCart, updateQuantity, cartTotal } = useCart();
+  const { cart, removeFromCart, updateQuantity, cartTotal, appliedBenefitId, setAppliedBenefitId } = useCart();
   const navigate = useNavigate();
   const { settings } = useSettings();
   const { locale, t, formatCurrency } = useStorefront();
@@ -53,28 +49,22 @@ export function Cart() {
     primaryAddress,
     isLoggedIn,
     availableWelcomeBenefit,
-    guestShippingDraft,
-    saveGuestShippingDraft,
-    clearGuestShippingDraft,
   } = useCustomerSession();
   const [coupon, setCoupon] = useState('');
-  const [promotionDraft, setPromotionDraft] = useState(() => readCartPromotionDraft());
   const [guestShippingAddress, setGuestShippingAddress] = useState<GuestShippingDraft>(
-    () => guestShippingDraft || EMPTY_GUEST_SHIPPING_ADDRESS,
+    () => EMPTY_GUEST_SHIPPING_ADDRESS,
   );
   const [shippingPostalTone, setShippingPostalTone] = useState<ShippingPostalTone>(
-    guestShippingDraft?.postalCode ? 'success' : 'idle',
+    'idle',
   );
-  const [isGuestAddressUnlocked, setIsGuestAddressUnlocked] = useState(
-    () => Boolean(guestShippingDraft?.postalCode),
-  );
+  const [isGuestAddressUnlocked, setIsGuestAddressUnlocked] = useState(false);
   const [lastGuestQuotedSubtotal, setLastGuestQuotedSubtotal] = useState<number | null>(null);
   const addressLabels = getAddressLabels(CART_COUNTRY, locale);
-  const activePromotion = useMemo(
-    () => resolveActiveWelcomePromotion(promotionDraft, currentCustomer?.id, availableWelcomeBenefit, cartTotal),
-    [availableWelcomeBenefit, cartTotal, currentCustomer?.id, promotionDraft],
+  const activeBenefit = useMemo(
+    () => currentCustomer?.welcomeBenefits.find((benefit) => benefit.id === appliedBenefitId && benefit.status === 'available') || null,
+    [appliedBenefitId, currentCustomer?.welcomeBenefits],
   );
-  const couponDiscount = activePromotion?.discountAmount ?? 0;
+  const couponDiscount = activeBenefit ? calculateWelcomeBenefitDiscount(cartTotal, activeBenefit) : 0;
   const discountedSubtotal = Math.max(0, cartTotal - couponDiscount);
   const { quotes, selectedQuote, setSelectedQuoteId, loadQuotes, mode, status, error, resetQuotes } = useShippingQuotes(
     cart,
@@ -108,45 +98,17 @@ export function Cart() {
   );
 
   useEffect(() => {
-    const storedDraft = readCartPromotionDraft();
-    const resolvedPromotion = resolveActiveWelcomePromotion(
-      storedDraft,
-      currentCustomer?.id,
-      availableWelcomeBenefit,
-      cartTotal,
-    );
-
-    if (!resolvedPromotion) {
-      if (storedDraft) {
-        clearCartPromotionDraft();
-      }
-
-      setPromotionDraft(null);
-      return;
-    }
-
-    setPromotionDraft(storedDraft);
-    setCoupon((previousValue) => previousValue || storedDraft?.couponCode || '');
-  }, [availableWelcomeBenefit, cartTotal, currentCustomer?.id]);
-
-  useEffect(() => {
     if (usingSavedAddress) {
       setShippingPostalTone(activeSavedAddressReady ? 'success' : 'warning');
       return;
     }
 
     if (guestDraftIsEmpty) {
-      clearGuestShippingDraft();
       return;
     }
-
-    saveGuestShippingDraft(guestShippingAddress);
   }, [
     activeSavedAddressReady,
-    clearGuestShippingDraft,
     guestDraftIsEmpty,
-    guestShippingAddress,
-    saveGuestShippingDraft,
     usingSavedAddress,
   ]);
 
@@ -241,9 +203,7 @@ export function Cart() {
       return;
     }
 
-    const nextDraft = createCartPromotionDraft(currentCustomer.id, availableWelcomeBenefit);
-    saveCartPromotionDraft(nextDraft);
-    setPromotionDraft(nextDraft);
+    setAppliedBenefitId(availableWelcomeBenefit.id);
     setCoupon(availableWelcomeBenefit.couponCode);
     showToast({
       tone: 'success',
@@ -253,8 +213,7 @@ export function Cart() {
   };
 
   const removeCoupon = () => {
-    clearCartPromotionDraft();
-    setPromotionDraft(null);
+    setAppliedBenefitId(null);
     setCoupon('');
     showToast({
       tone: 'info',
@@ -598,7 +557,7 @@ export function Cart() {
 
             <div className="mb-8 border-t border-neutral-200 pt-6">
               <label className="block text-xs font-bold uppercase tracking-wider text-secondary mb-2">{t('discountCoupon')}</label>
-              {isLoggedIn && availableWelcomeBenefit && !activePromotion ? (
+              {isLoggedIn && availableWelcomeBenefit && !activeBenefit ? (
                 <div className="mb-3 rounded-sm border border-emerald-200 bg-emerald-50 px-4 py-3">
                   <p className="text-xs font-semibold text-emerald-700">
                     {t('newsletterBenefitAvailable', {
@@ -627,7 +586,7 @@ export function Cart() {
                   {t('apply')}
                 </button>
               </div>
-              {activePromotion ? (
+              {activeBenefit ? (
                 <button
                   type="button"
                   onClick={removeCoupon}

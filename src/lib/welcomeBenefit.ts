@@ -41,7 +41,7 @@ export type ActiveWelcomePromotion = {
   discountAmount: number;
 };
 
-const CART_PROMOTION_DRAFT_STORAGE_KEY = '@App:cart-promotion-draft';
+let cartPromotionDraftMemory: CartPromotionDraft | null = null;
 
 function roundCurrencyAmount(value: number) {
   return Math.round(value * 100) / 100;
@@ -122,55 +122,15 @@ export function createCartPromotionDraft(customerId: string, benefit: StoreCusto
 }
 
 export function readCartPromotionDraft(): CartPromotionDraft | null {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const raw = window.localStorage.getItem(CART_PROMOTION_DRAFT_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<CartPromotionDraft>;
-
-    if (
-      parsed?.type !== 'newsletter-welcome'
-      || !parsed.benefitId
-      || !parsed.customerId
-      || !parsed.couponCode
-    ) {
-      return null;
-    }
-
-    return {
-      type: 'newsletter-welcome',
-      benefitId: parsed.benefitId,
-      customerId: parsed.customerId,
-      couponCode: parsed.couponCode,
-      discountType: 'percentage',
-      discountValue: Number(parsed.discountValue || 10),
-      savedAt: parsed.savedAt || new Date().toISOString(),
-    };
-  } catch (error) {
-    console.error('Falha ao ler o rascunho de promocao do carrinho', error);
-    return null;
-  }
+  return cartPromotionDraftMemory;
 }
 
 export function saveCartPromotionDraft(draft: CartPromotionDraft) {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(CART_PROMOTION_DRAFT_STORAGE_KEY, JSON.stringify(draft));
-  } catch (error) {
-    console.error('Falha ao salvar o rascunho de promocao do carrinho', error);
-  }
+  cartPromotionDraftMemory = draft;
 }
 
 export function clearCartPromotionDraft() {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.removeItem(CART_PROMOTION_DRAFT_STORAGE_KEY);
-  } catch (error) {
-    console.error('Falha ao limpar o rascunho de promocao do carrinho', error);
-  }
+  cartPromotionDraftMemory = null;
 }
 
 export function isCartPromotionDraftValid(

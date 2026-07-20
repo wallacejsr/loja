@@ -8,7 +8,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Product } from '../data/mockData';
+import type { StoreProduct as Product } from '../types/store';
 import {
   Banner,
   CategoryInput,
@@ -67,10 +67,6 @@ interface StoreDataMap {
   instagramFeed: InstagramPost[];
 }
 
-interface StoreDataSnapshot extends StoreDataMap {
-  cachedAt: string;
-}
-
 type DomainLoadingState = Record<StoreDomain, boolean>;
 type DomainErrorState = Record<StoreDomain, string | null>;
 
@@ -125,8 +121,6 @@ const InstagramFeedContext = createContext<InstagramPost[] | null>(null);
 const StoreStatusContext = createContext<StoreStatusContextValue | null>(null);
 const StoreActionsContext = createContext<StoreActionsContextValue | null>(null);
 
-const STORE_DATA_CACHE_KEY = 'zenv_store_snapshot_v1';
-const STORE_DATA_CACHE_TTL_MS = 5 * 60 * 1000;
 const STORE_DATA_REVALIDATE_INTERVAL_MS = 60 * 1000;
 const STORE_DATA_REVALIDATE_THROTTLE_MS = 15 * 1000;
 const STORE_DOMAINS: StoreDomain[] = [
@@ -144,7 +138,7 @@ function isSameData<T>(current: T, next: T) {
   return JSON.stringify(current) === JSON.stringify(next);
 }
 
-function createEmptySnapshot(): StoreDataSnapshot {
+function createEmptySnapshot() {
   return {
     products: [],
     categories: [],
@@ -181,66 +175,16 @@ function createDomainErrorState(): DomainErrorState {
   };
 }
 
-function getSnapshotTimestamp(snapshot: Pick<StoreDataSnapshot, 'cachedAt'> | null | undefined) {
+function getSnapshotTimestamp(snapshot: Pick<ReturnType<typeof createEmptySnapshot>, 'cachedAt'> | null | undefined) {
   if (!snapshot?.cachedAt) return 0;
   const timestamp = Date.parse(snapshot.cachedAt);
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function isSnapshotStale(snapshot: Pick<StoreDataSnapshot, 'cachedAt'> | null | undefined, now = Date.now()) {
+function isSnapshotStale(snapshot: Pick<ReturnType<typeof createEmptySnapshot>, 'cachedAt'> | null | undefined, now = Date.now()) {
   const timestamp = getSnapshotTimestamp(snapshot);
   if (!timestamp) return true;
-  return now - timestamp >= STORE_DATA_CACHE_TTL_MS;
-}
-
-function isSnapshotNewer(nextSnapshot: Pick<StoreDataSnapshot, 'cachedAt'>, currentSnapshot: Pick<StoreDataSnapshot, 'cachedAt'> | null | undefined) {
-  return getSnapshotTimestamp(nextSnapshot) > getSnapshotTimestamp(currentSnapshot);
-}
-
-function readCachedStoreSnapshot(): StoreDataSnapshot | null {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const raw = window.localStorage.getItem(STORE_DATA_CACHE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as Partial<StoreDataSnapshot>;
-    if (
-      !parsed
-      || !Array.isArray(parsed.products)
-      || !Array.isArray(parsed.categories)
-      || !Array.isArray(parsed.banners)
-      || !Array.isArray(parsed.homeSections)
-      || !Array.isArray(parsed.homeCards)
-      || !Array.isArray(parsed.raffles)
-      || !Array.isArray(parsed.instagramFeed)
-    ) {
-      return null;
-    }
-
-    return {
-      products: parsed.products,
-      categories: parsed.categories,
-      banners: parsed.banners,
-      homeSections: parsed.homeSections,
-      homeCards: parsed.homeCards,
-      raffles: parsed.raffles,
-      instagramFeed: parsed.instagramFeed,
-      cachedAt: typeof parsed.cachedAt === 'string' ? parsed.cachedAt : new Date(0).toISOString(),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedStoreSnapshot(snapshot: StoreDataSnapshot) {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(STORE_DATA_CACHE_KEY, JSON.stringify(snapshot));
-  } catch {
-    // Ignore quota/storage failures and keep the in-memory state alive.
-  }
+  return now - timestamp >= STORE_DATA_REVALIDATE_INTERVAL_MS;
 }
 
 async function loadStoreDomain<K extends StoreDomain>(domain: K): Promise<StoreDataMap[K]> {
@@ -273,30 +217,26 @@ function useRequiredContext<T>(context: React.Context<T | null>, hookName: strin
 }
 
 export function StoreDataProvider({ children }: { children: ReactNode }) {
-  const initialSnapshotRef = useRef<StoreDataSnapshot | null>(readCachedStoreSnapshot());
-  const snapshotRef = useRef<StoreDataSnapshot>(initialSnapshotRef.current ?? createEmptySnapshot());
+  const snapshotRef = useRef(createEmptySnapshot());
   const refreshPromisesRef = useRef<Partial<Record<StoreDomain, Promise<void>>>>({});
   const lastRevalidationAttemptAtRef = useRef(0);
-  const hasCacheSyncStartedRef = useRef(Boolean(initialSnapshotRef.current));
-  const hasBootstrappedRef = useRef(Boolean(initialSnapshotRef.current));
-  const initialSnapshot = initialSnapshotRef.current;
+  const hasBootstrappedRef = useRef(false);
 
-  const [products, setProducts] = useState<Product[]>(() => initialSnapshot?.products || []);
-  const [categories, setCategories] = useState<StoreCategory[]>(() => initialSnapshot?.categories || []);
-  const [banners, setBanners] = useState<Banner[]>(() => initialSnapshot?.banners || []);
-  const [homeSections, setHomeSections] = useState<HomeSection[]>(() => initialSnapshot?.homeSections || []);
-  const [homeCards, setHomeCards] = useState<HomeCard[]>(() => initialSnapshot?.homeCards || []);
-  const [raffles, setRaffles] = useState<Raffle[]>(() => initialSnapshot?.raffles || []);
-  const [instagramFeed, setInstagramFeed] = useState<InstagramPost[]>(() => initialSnapshot?.instagramFeed || []);
-  const [loading, setLoading] = useState(() => !initialSnapshot);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<StoreCategory[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [homeSections, setHomeSections] = useState<HomeSection[]>([]);
+  const [homeCards, setHomeCards] = useState<HomeCard[]>([]);
+  const [raffles, setRaffles] = useState<Raffle[]>([]);
+  const [instagramFeed, setInstagramFeed] = useState<InstagramPost[]>([]);
+  const [loading, setLoading] = useState(true);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [domainLoading, setDomainLoading] = useState<DomainLoadingState>(() => createDomainLoadingState(false));
   const [domainErrors, setDomainErrors] = useState<DomainErrorState>(() => createDomainErrorState());
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(() => initialSnapshot?.cachedAt || null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
   const touchCache = useCallback(() => {
     const nextCachedAt = new Date().toISOString();
-    hasCacheSyncStartedRef.current = true;
     snapshotRef.current = {
       ...snapshotRef.current,
       cachedAt: nextCachedAt,
@@ -304,54 +244,7 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
     setLastUpdatedAt(nextCachedAt);
   }, []);
 
-  useEffect(() => {
-    if (!hasCacheSyncStartedRef.current) return;
-
-    const cachedAt = lastUpdatedAt ?? new Date().toISOString();
-    const nextSnapshot: StoreDataSnapshot = {
-      products,
-      categories,
-      banners,
-      homeSections,
-      homeCards,
-      raffles,
-      instagramFeed,
-      cachedAt,
-    };
-
-    snapshotRef.current = nextSnapshot;
-    writeCachedStoreSnapshot(nextSnapshot);
-  }, [
-    banners,
-    categories,
-    homeCards,
-    homeSections,
-    instagramFeed,
-    lastUpdatedAt,
-    products,
-    raffles,
-  ]);
-
-  const applySnapshot = useCallback((snapshot: StoreDataSnapshot) => {
-    hasCacheSyncStartedRef.current = true;
-    snapshotRef.current = snapshot;
-    setGlobalError(null);
-    setDomainErrors((current) => {
-      const hasAnyError = Object.values(current).some(Boolean);
-      return hasAnyError ? createDomainErrorState() : current;
-    });
-    setLastUpdatedAt(snapshot.cachedAt);
-    setProducts((current) => (isSameData(current, snapshot.products) ? current : snapshot.products));
-    setCategories((current) => (isSameData(current, snapshot.categories) ? current : snapshot.categories));
-    setBanners((current) => (isSameData(current, snapshot.banners) ? current : snapshot.banners));
-    setHomeSections((current) => (isSameData(current, snapshot.homeSections) ? current : snapshot.homeSections));
-    setHomeCards((current) => (isSameData(current, snapshot.homeCards) ? current : snapshot.homeCards));
-    setRaffles((current) => (isSameData(current, snapshot.raffles) ? current : snapshot.raffles));
-    setInstagramFeed((current) => (isSameData(current, snapshot.instagramFeed) ? current : snapshot.instagramFeed));
-  }, []);
-
   const applyDomainData = useCallback(<K extends StoreDomain>(domain: K, nextValue: StoreDataMap[K], cachedAt = new Date().toISOString()) => {
-    hasCacheSyncStartedRef.current = true;
     snapshotRef.current = {
       ...snapshotRef.current,
       [domain]: nextValue,
@@ -423,7 +316,7 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
   }, [applyDomainData]);
 
   const refresh = useCallback(async () => {
-    const shouldShowBootstrapLoader = !hasBootstrappedRef.current && !initialSnapshotRef.current;
+    const shouldShowBootstrapLoader = !hasBootstrappedRef.current;
     if (shouldShowBootstrapLoader) {
       setLoading(true);
     }
@@ -437,13 +330,6 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
   }, [refreshDomain]);
 
   useEffect(() => {
-    const cachedSnapshot = initialSnapshotRef.current;
-    if (cachedSnapshot && !isSnapshotStale(cachedSnapshot)) {
-      hasBootstrappedRef.current = true;
-      setLoading(false);
-      return;
-    }
-
     void refresh();
   }, [refresh]);
 
@@ -496,49 +382,6 @@ export function StoreDataProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('focus', handleFocus);
     };
   }, [revalidateIfStale]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== STORE_DATA_CACHE_KEY) return;
-
-      if (!event.newValue) {
-        void refresh();
-        return;
-      }
-
-      try {
-        const nextSnapshot = JSON.parse(event.newValue) as StoreDataSnapshot;
-        if (
-          !Array.isArray(nextSnapshot.products)
-          || !Array.isArray(nextSnapshot.categories)
-          || !Array.isArray(nextSnapshot.banners)
-          || !Array.isArray(nextSnapshot.homeSections)
-          || !Array.isArray(nextSnapshot.homeCards)
-          || !Array.isArray(nextSnapshot.raffles)
-          || !Array.isArray(nextSnapshot.instagramFeed)
-        ) {
-          void refresh();
-          return;
-        }
-
-        if (isSnapshotNewer(nextSnapshot, snapshotRef.current)) {
-          applySnapshot(nextSnapshot);
-          return;
-        }
-
-        if (isSnapshotStale(snapshotRef.current)) {
-          void revalidateIfStale();
-        }
-      } catch {
-        void refresh();
-      }
-    };
-
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, [applySnapshot, refresh, revalidateIfStale]);
 
   const refreshProducts = useCallback(() => refreshDomain('products'), [refreshDomain]);
   const refreshCategories = useCallback(() => refreshDomain('categories'), [refreshDomain]);

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getPhoneE164 } from '../../src/lib/customerForm.ts';
-import type { Product } from '../../src/data/mockData.ts';
+import type { StoreProduct as Product } from '../../src/types/store';
 import type {
   CustomerAddressInput,
   CustomerProfileUpdateInput,
@@ -11,6 +11,7 @@ import type {
 } from '../../src/lib/storeCustomerApi.ts';
 import {
   createWelcomeBenefitFromSubscriber,
+  calculateWelcomeBenefitDiscount,
   getAvailableWelcomeBenefit,
   type StoreCustomerWelcomeBenefit,
 } from '../../src/lib/welcomeBenefit.ts';
@@ -48,9 +49,15 @@ import {
 } from '../integrations/stripeCredentials';
 import { getAdminRolePermissions, type AdminRole } from '../auth/adminPermissions';
 import { createDefaultStoreSnapshot, createId } from './defaultData';
+import { createInitialStoreSnapshot } from './initialSeed';
 import type {
   AdminDashboardRecentOrder,
   AdminDashboardSummary,
+  AdminPromotionInput,
+  AdminPromotionRecord,
+  AdminPromotionStatus,
+  CustomerCartPayload,
+  CustomerCartSaveInput,
   AdminCustomerActivity,
   AdminCustomerAddress,
   AdminCustomerAuditLog,
@@ -76,6 +83,7 @@ import type {
   EnsureAdminUserInput,
   ListOptions,
   StoreRepository,
+  StoreSnapshot,
   StoredStripeCredentialSet,
   StripeCredentialInput,
 } from './types';
@@ -245,13 +253,115 @@ function parseDashboardCustomerName(value: unknown) {
 function mapAdminCustomerAddress(row: any): AdminCustomerAddress {
   return {
     country: row.country || 'US',
-    cep: row.postal_code || '',
+    cep: row.postal_code || row.postalCode || row.cep || '',
     street: row.street || '',
     number: row.number || '',
     complement: row.complement || '',
-    district: row.neighborhood || '',
+    district: row.neighborhood || row.district || '',
     city: row.city || '',
-    state: row.region || '',
+    state: row.region || row.state || '',
+  };
+}
+
+function buildEmptyCustomerCartPayload(): CustomerCartPayload {
+  return {
+    appliedBenefitId: null,
+    appliedCouponId: null,
+    currency: 'USD',
+    discount: 0,
+    items: [],
+    shipping: 0,
+    shippingMethod: '',
+    subtotal: 0,
+    tax: 0,
+    total: 0,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function resolveCartProduct(row: any): Product {
+  const metadata = parseJsonValue<Record<string, unknown>>(row.metadata, {});
+  const product = metadata.product as Product | undefined;
+
+  if (product?.id) {
+    return product;
+  }
+
+  return {
+    id: String(row.product_id || ''),
+    nome: row.product_name_snapshot || '',
+    preco: toNumber(row.unit_price_snapshot),
+    precoPromocional: undefined,
+    categoria: 'Acessórios' as Product['categoria'],
+    subcategoria: '',
+    imagens: [],
+    descricao: '',
+    composicao: '',
+    tamanhos: [],
+    cores: [],
+    avaliacoes: [],
+    estoque: toNumber(row.quantity, 1),
+    shippingWeightGrams: 500,
+  };
+}
+
+function buildCustomerCartPayload(cartRow: any | null, cartItemRows: any[]): CustomerCartPayload {
+  if (!cartRow) {
+    return buildEmptyCustomerCartPayload();
+  }
+
+  return {
+    appliedBenefitId: cartRow.applied_benefit_id || null,
+    appliedCouponId: cartRow.applied_coupon_id || null,
+    currency: cartRow.currency || 'USD',
+    discount: toNumber(cartRow.discount),
+    items: cartItemRows.map((row) => ({
+      id: String(row.id),
+      productId: String(row.product_id),
+      product: resolveCartProduct(row),
+      quantity: toNumber(row.quantity, 1),
+      size: row.size_label || '',
+      color: row.color_label || '',
+    })),
+    shipping: toNumber(cartRow.shipping),
+    shippingMethod: cartRow.shipping_method || '',
+    subtotal: toNumber(cartRow.subtotal),
+    tax: toNumber(cartRow.tax),
+    total: toNumber(cartRow.total),
+    updatedAt: toIsoDateTime(cartRow.updated_at || cartRow.created_at),
+  };
+}
+
+function normalizeCartInputItems(input: CustomerCartSaveInput) {
+  const items = (input.items || [])
+    .filter((item) => item.product?.id && Number(item.quantity) > 0)
+    .map((item) => ({
+      id: createId('cart-item'),
+      productId: item.product.id,
+      productNameSnapshot: item.product.nome || '',
+      skuSnapshot: String((item.product as Product & { sku?: string }).sku || ''),
+      unitPriceSnapshot: item.product.precoPromocional || item.product.preco || 0,
+      quantity: Math.max(1, Math.trunc(Number(item.quantity) || 1)),
+      sizeLabel: item.size || '',
+      colorLabel: item.color || '',
+      metadata: { product: item.product },
+    }));
+
+  const subtotal = items.reduce((sum, item) => sum + item.unitPriceSnapshot * item.quantity, 0);
+  const discount = Math.max(0, Number(input.discount || 0));
+  const shipping = Math.max(0, Number(input.shipping || 0));
+  const tax = Math.max(0, Number(input.tax || 0));
+  const total = Math.max(0, subtotal - discount + shipping + tax);
+
+  return {
+    currency: (input.currency || 'USD').toUpperCase(),
+    discount,
+    items,
+    shipping,
+    shippingMethod: String(input.shippingMethod || ''),
+    subtotal,
+    tax,
+    total,
   };
 }
 
@@ -364,10 +474,11 @@ export class MariaDbStoreRepository implements StoreRepository {
   }
 
   private async seedDefaultsIfEmpty() {
-    const snapshot = createDefaultStoreSnapshot();
+    const snapshot = createInitialStoreSnapshot();
     const [[{ totalProducts }]] = await this.pool.query('SELECT COUNT(*) AS totalProducts FROM products');
 
     if (toNumber(totalProducts) > 0) {
+      await this.seedMissingHomeSections(snapshot.homeSections);
       return;
     }
 
@@ -564,6 +675,46 @@ export class MariaDbStoreRepository implements StoreRepository {
     }
   }
 
+  private async seedMissingHomeSections(sections: StoreSnapshot['homeSections']) {
+    if (sections.length === 0) {
+      return;
+    }
+
+    const connection = await this.pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      for (const section of sections) {
+        await connection.query(
+          `
+            INSERT INTO home_sections (
+              id, title, source_type, category_name, limit_count, link, position, status, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ON DUPLICATE KEY UPDATE id = id
+          `,
+          [
+            section.id,
+            section.title,
+            section.sourceType,
+            section.categoryName,
+            section.limitCount,
+            section.link,
+            section.position,
+            section.status,
+          ],
+        );
+      }
+
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   private async queryRows<T = any>(sql: string, params: unknown[] = []) {
     const [rows] = await this.pool.query(sql, params);
     return rows as T[];
@@ -709,6 +860,106 @@ export class MariaDbStoreRepository implements StoreRepository {
     };
   }
 
+  private async mapAdminPromotion(row: any): Promise<AdminPromotionRecord> {
+    const payload = parseJsonValue<{ categoryNames?: string[]; productIds?: string[]; audienceSize?: number }>(
+      row.applies_to_payload,
+      {},
+    );
+    const usages = await this.queryRows(
+      `
+        SELECT
+          o.id,
+          o.order_number,
+          o.total,
+          o.discount,
+          o.created_at,
+          o.customer_snapshot,
+          c.name AS customer_name,
+          c.email AS customer_email
+        FROM orders o
+        LEFT JOIN customers c ON c.id = o.customer_id
+        WHERE o.coupon_id = ?
+        ORDER BY o.created_at DESC
+      `,
+      [row.id],
+    );
+    const logs = await this.queryRows(
+      `
+        SELECT * FROM audit_logs
+        WHERE entity_type = 'promotion' AND entity_id = ?
+        ORDER BY created_at DESC
+        LIMIT 100
+      `,
+      [row.id],
+    );
+
+    return {
+      id: String(row.id),
+      name: String(row.title || ''),
+      description: String(row.description || ''),
+      promoCode: String(row.code || ''),
+      discountType: row.coupon_type === 'fixed_amount' ? 'valor_fixo' : 'percentual',
+      discountValue: toNumber(row.coupon_value),
+      minOrderValue: toNumber(row.min_order_value),
+      totalUseLimit: Number(row.usage_limit_total || 0),
+      useLimitPerCustomer: Number(row.usage_limit_per_customer || 0),
+      startsAt: row.starts_at ? toIsoDateTime(row.starts_at).slice(0, 16) : '',
+      expiresAt: row.expires_at ? toIsoDateTime(row.expires_at).slice(0, 16) : '',
+      applicationType: row.applies_to_scope === 'categories' ? 'categorias' : row.applies_to_scope === 'products' ? 'produtos' : 'todos',
+      categoryNames: Array.isArray(payload.categoryNames) ? payload.categoryNames : [],
+      productIds: Array.isArray(payload.productIds) ? payload.productIds : [],
+      status: row.status === 'paused'
+        ? 'Pausado'
+        : row.status === 'finished'
+          ? 'Finalizado'
+          : row.status === 'archived'
+            ? 'Arquivada'
+            : 'Ativo',
+      audienceSize: Number(payload.audienceSize || 0),
+      usages: usages.map((usage) => {
+        const snapshot = parseJsonValue<Record<string, unknown>>(usage.customer_snapshot, {});
+        return {
+          id: String(usage.id),
+          customerName: String(usage.customer_name || snapshot.name || snapshot.fullName || 'Cliente'),
+          customerEmail: String(usage.customer_email || snapshot.email || ''),
+          dateTime: toIsoDateTime(usage.created_at),
+          orderNumber: String(usage.order_number || ''),
+          orderValue: toNumber(usage.total),
+          discountApplied: toNumber(usage.discount),
+        };
+      }),
+      logs: logs.map((log) => ({
+        id: String(log.id),
+        user: String(log.actor_email || log.actor_id || 'Sistema'),
+        dateTime: toIsoDateTime(log.created_at),
+        ip: String(log.ip_address || ''),
+        action: String(log.action || ''),
+      })),
+    };
+  }
+
+  private toCouponPayload(input: AdminPromotionInput) {
+    return {
+      code: input.promoCode.trim().toUpperCase(),
+      title: input.name.trim(),
+      description: input.description.trim(),
+      couponType: input.discountType === 'valor_fixo' ? 'fixed_amount' : 'percentage',
+      couponValue: Number(input.discountValue || 0),
+      minOrderValue: Number(input.minOrderValue || 0),
+      usageLimitTotal: Number(input.totalUseLimit || 0),
+      usageLimitPerCustomer: Number(input.useLimitPerCustomer || 0),
+      startsAt: toSqlDateTime(input.startsAt),
+      expiresAt: toSqlDateTime(input.expiresAt),
+      status: input.status === 'Pausado' ? 'paused' : input.status === 'Finalizado' ? 'finished' : 'active',
+      appliesToScope: input.applicationType === 'categorias' ? 'categories' : input.applicationType === 'produtos' ? 'products' : 'all',
+      appliesToPayload: JSON.stringify({
+        audienceSize: Number(input.audienceSize || 0),
+        categoryNames: input.categoryNames || [],
+        productIds: input.productIds || [],
+      }),
+    };
+  }
+
   private mapCustomerAddress(row: any): StoreCustomerAddress {
     return {
       id: String(row.id),
@@ -817,11 +1068,28 @@ export class MariaDbStoreRepository implements StoreRepository {
     };
   }
 
-  private async loadAdminCustomerOrders(customerId: string, executor: MariaDbPool | MariaDbConnection = this.pool): Promise<AdminCustomerOrder[]> {
+  private async loadAdminCustomerOrders(
+    customerId: string,
+    customerEmail = '',
+    executor: MariaDbPool | MariaDbConnection = this.pool,
+  ): Promise<AdminCustomerOrder[]> {
+    const normalizedEmail = normalizeNewsletterEmail(customerEmail);
     const orders = await this.queryRowsWithExecutor(
       executor,
-      'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
-      [customerId],
+      `
+        SELECT *
+        FROM orders
+        WHERE customer_id = ?
+          OR (
+            ? <> ''
+            AND (
+              LOWER(JSON_UNQUOTE(JSON_EXTRACT(customer_snapshot, '$.email'))) = ?
+              OR LOWER(JSON_UNQUOTE(JSON_EXTRACT(customer_snapshot, '$.customer.email'))) = ?
+            )
+          )
+        ORDER BY created_at DESC
+      `,
+      [customerId, normalizedEmail, normalizedEmail, normalizedEmail],
     );
 
     if (!orders.length) {
@@ -949,7 +1217,7 @@ export class MariaDbStoreRepository implements StoreRepository {
     const [addresses, welcomeBenefits, orders] = await Promise.all([
       this.loadCustomerAddresses(customerId, executor),
       this.loadCustomerBenefits(customerId, executor),
-      this.loadAdminCustomerOrders(customerId, executor),
+      this.loadAdminCustomerOrders(customerId, row.email || '', executor),
     ]);
 
     const shippingAddress = addresses[0] || null;
@@ -2696,6 +2964,310 @@ export class MariaDbStoreRepository implements StoreRepository {
 
     const profile = await this.loadCustomerProfile(customerId);
     return this.buildCustomerSessionPayload(profile);
+  }
+
+  async getCustomerCart(customerId: string): Promise<CustomerCartPayload> {
+    const [cartRows] = await Promise.all([
+      this.queryRows(
+        `SELECT * FROM carts WHERE customer_id = ? AND status = 'active' ORDER BY updated_at DESC, created_at DESC LIMIT 1`,
+        [customerId],
+      ),
+    ]);
+
+    const cartRow = cartRows[0] || null;
+    if (!cartRow) {
+      return buildEmptyCustomerCartPayload();
+    }
+
+    const cartItems = await this.queryRows(
+      'SELECT * FROM cart_items WHERE cart_id = ? ORDER BY created_at ASC',
+      [String(cartRow.id)],
+    );
+
+    return buildCustomerCartPayload(cartRow, cartItems);
+  }
+
+  async saveCustomerCart(customerId: string, input: CustomerCartSaveInput): Promise<CustomerCartPayload> {
+    const connection = await this.pool.getConnection();
+
+    try {
+      await connection.beginTransaction();
+
+      const customerRows = await this.queryRowsWithExecutor(
+        connection,
+        'SELECT id FROM customers WHERE id = ? LIMIT 1',
+        [customerId],
+      );
+
+      if (!customerRows.length) {
+        throw new Error('Customer account not found.');
+      }
+
+      const customerBenefits = await this.loadCustomerBenefits(customerId, connection);
+      const availableBenefit = getAvailableWelcomeBenefit(customerBenefits);
+      const normalized = normalizeCartInputItems(input);
+      const [existingCart] = await this.queryRowsWithExecutor(
+        connection,
+        `SELECT * FROM carts WHERE customer_id = ? AND status = 'active' ORDER BY updated_at DESC, created_at DESC LIMIT 1`,
+        [customerId],
+      );
+
+      if (!normalized.items.length) {
+        if (existingCart) {
+          await connection.query('DELETE FROM cart_items WHERE cart_id = ?', [existingCart.id]);
+          await connection.query('DELETE FROM carts WHERE id = ?', [existingCart.id]);
+        }
+
+        await connection.commit();
+        return buildEmptyCustomerCartPayload();
+      }
+
+      const requestedBenefitId = String(input.appliedBenefitId || '').trim();
+      const resolvedBenefit =
+        (requestedBenefitId
+          ? customerBenefits.find((benefit) => benefit.id === requestedBenefitId && benefit.status === 'available') || null
+          : null)
+        || availableBenefit;
+
+      let appliedBenefitId: string | null = null;
+      if (resolvedBenefit && (Number(input.discount || 0) > 0 || requestedBenefitId)) {
+        const expectedDiscount = calculateWelcomeBenefitDiscount(normalized.subtotal, resolvedBenefit);
+        if (Math.abs(expectedDiscount - Number(input.discount || 0)) > 0.01 && Number(input.discount || 0) > 0) {
+          throw new Error('The discount amount does not match the customer benefit.');
+        }
+
+        normalized.discount = expectedDiscount;
+        appliedBenefitId = resolvedBenefit.id;
+      }
+
+      const timestamp = new Date().toISOString();
+      const cartId = existingCart?.id || createId('cart');
+
+      if (existingCart) {
+        await connection.query(
+          `
+            UPDATE carts
+            SET currency = ?,
+                subtotal = ?,
+                discount = ?,
+                shipping = ?,
+                tax = ?,
+                total = ?,
+                shipping_method = ?,
+                applied_coupon_id = ?,
+                applied_benefit_id = ?,
+                updated_at = ?
+            WHERE id = ?
+          `,
+          [
+            normalized.currency,
+            normalized.subtotal,
+            normalized.discount,
+            normalized.shipping,
+            normalized.tax,
+            normalized.total,
+            normalized.shippingMethod,
+            input.appliedCouponId ? String(input.appliedCouponId).trim() || null : null,
+            appliedBenefitId,
+            toSqlDateTime(timestamp),
+            cartId,
+          ],
+        );
+      } else {
+        await connection.query(
+          `
+            INSERT INTO carts (
+              id, customer_id, status, currency, subtotal, discount, shipping, tax, total,
+              shipping_method, shipping_quote_snapshot, applied_coupon_id, applied_benefit_id,
+              converted_order_id, created_at, updated_at, converted_at
+            ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?, ?, NULL)
+          `,
+          [
+            cartId,
+            customerId,
+            normalized.currency,
+            normalized.subtotal,
+            normalized.discount,
+            normalized.shipping,
+            normalized.tax,
+            normalized.total,
+            normalized.shippingMethod,
+            input.appliedCouponId ? String(input.appliedCouponId).trim() || null : null,
+            appliedBenefitId,
+            toSqlDateTime(timestamp),
+            toSqlDateTime(timestamp),
+          ],
+        );
+      }
+
+      await connection.query('DELETE FROM cart_items WHERE cart_id = ?', [cartId]);
+
+      for (const item of normalized.items) {
+        await connection.query(
+          `
+            INSERT INTO cart_items (
+              id, cart_id, product_id, product_name_snapshot, sku_snapshot, unit_price_snapshot,
+              quantity, size_label, color_label, metadata, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `,
+          [
+            item.id,
+            cartId,
+            item.productId,
+            item.productNameSnapshot,
+            item.skuSnapshot,
+            item.unitPriceSnapshot,
+            item.quantity,
+            item.sizeLabel,
+            item.colorLabel,
+            JSON.stringify(item.metadata || {}),
+            toSqlDateTime(timestamp),
+            toSqlDateTime(timestamp),
+          ],
+        );
+      }
+
+      await connection.commit();
+
+      const savedCartRows = await this.queryRows('SELECT * FROM carts WHERE id = ? LIMIT 1', [cartId]);
+      const savedCart = savedCartRows[0] || null;
+      const savedCartItems = savedCart ? await this.queryRows('SELECT * FROM cart_items WHERE cart_id = ? ORDER BY created_at ASC', [cartId]) : [];
+      return buildCustomerCartPayload(savedCart, savedCartItems);
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async clearCustomerCart(customerId: string): Promise<CustomerCartPayload> {
+    return this.saveCustomerCart(customerId, { items: [] });
+  }
+
+  async getAdminPromotions(): Promise<AdminPromotionRecord[]> {
+    const rows = await this.queryRows('SELECT * FROM coupons ORDER BY updated_at DESC, created_at DESC');
+    return Promise.all(rows.map((row) => this.mapAdminPromotion(row)));
+  }
+
+  async createAdminPromotion(input: AdminPromotionInput): Promise<AdminPromotionRecord> {
+    const id = createId('promotion');
+    const payload = this.toCouponPayload(input);
+
+    await this.pool.query(
+      `
+        INSERT INTO coupons (
+          id, code, title, description, coupon_type, coupon_value,
+          min_order_value, usage_limit_total, usage_limit_per_customer,
+          starts_at, expires_at, status, applies_to_scope, applies_to_payload,
+          created_at, updated_at, archived_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), NULL)
+      `,
+      [
+        id,
+        payload.code,
+        payload.title,
+        payload.description,
+        payload.couponType,
+        payload.couponValue,
+        payload.minOrderValue,
+        payload.usageLimitTotal,
+        payload.usageLimitPerCustomer,
+        payload.startsAt,
+        payload.expiresAt,
+        payload.status,
+        payload.appliesToScope,
+        payload.appliesToPayload,
+      ],
+    );
+
+    const [created] = await this.queryRows('SELECT * FROM coupons WHERE id = ? LIMIT 1', [id]);
+    return this.mapAdminPromotion(created);
+  }
+
+  async updateAdminPromotion(id: string, input: AdminPromotionInput): Promise<AdminPromotionRecord> {
+    const payload = this.toCouponPayload(input);
+
+    await this.pool.query(
+      `
+        UPDATE coupons
+        SET code = ?,
+            title = ?,
+            description = ?,
+            coupon_type = ?,
+            coupon_value = ?,
+            min_order_value = ?,
+            usage_limit_total = ?,
+            usage_limit_per_customer = ?,
+            starts_at = ?,
+            expires_at = ?,
+            status = ?,
+            applies_to_scope = ?,
+            applies_to_payload = ?,
+            archived_at = CASE WHEN ? = 'archived' THEN COALESCE(archived_at, NOW()) ELSE NULL END,
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [
+        payload.code,
+        payload.title,
+        payload.description,
+        payload.couponType,
+        payload.couponValue,
+        payload.minOrderValue,
+        payload.usageLimitTotal,
+        payload.usageLimitPerCustomer,
+        payload.startsAt,
+        payload.expiresAt,
+        payload.status,
+        payload.appliesToScope,
+        payload.appliesToPayload,
+        payload.status,
+        id,
+      ],
+    );
+
+    const [updated] = await this.queryRows('SELECT * FROM coupons WHERE id = ? LIMIT 1', [id]);
+    if (!updated) throw new Error('Campanha nao encontrada.');
+    return this.mapAdminPromotion(updated);
+  }
+
+  async setAdminPromotionStatus(id: string, status: AdminPromotionStatus): Promise<AdminPromotionRecord> {
+    const databaseStatus = status === 'Pausado'
+      ? 'paused'
+      : status === 'Finalizado'
+        ? 'finished'
+        : status === 'Arquivada'
+          ? 'archived'
+          : 'active';
+
+    await this.pool.query(
+      `
+        UPDATE coupons
+        SET status = ?,
+            archived_at = CASE WHEN ? = 'archived' THEN COALESCE(archived_at, NOW()) ELSE NULL END,
+            updated_at = NOW()
+        WHERE id = ?
+      `,
+      [databaseStatus, databaseStatus, id],
+    );
+
+    const [updated] = await this.queryRows('SELECT * FROM coupons WHERE id = ? LIMIT 1', [id]);
+    if (!updated) throw new Error('Campanha nao encontrada.');
+    return this.mapAdminPromotion(updated);
+  }
+
+  async deleteAdminPromotion(id: string): Promise<{ archived: boolean }> {
+    const [{ total = 0 } = {}] = await this.queryRows('SELECT COUNT(*) AS total FROM orders WHERE coupon_id = ?', [id]);
+    const hasHistory = Number(total || 0) > 0;
+
+    if (hasHistory) {
+      await this.setAdminPromotionStatus(id, 'Arquivada');
+      return { archived: true };
+    }
+
+    await this.pool.query('DELETE FROM coupons WHERE id = ?', [id]);
+    return { archived: false };
   }
 
   async getContactMessages() {
