@@ -239,7 +239,19 @@ const ProductTableRow = React.memo(function ProductTableRow({
           )}
         </div>
         <div>
-          <div className="font-medium text-[13px] text-neutral-900 group-hover:text-blue-600 transition-colors">{product.nome}</div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="font-medium text-[13px] text-neutral-900 group-hover:text-blue-600 transition-colors">{product.nome}</div>
+            {product.lancamento && (
+              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-blue-700">
+                Lançamento
+              </span>
+            )}
+            {product.maisVendido && (
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-700">
+                Mais vendido
+              </span>
+            )}
+          </div>
           <div className="text-[11px] font-medium text-neutral-400 mt-0.5 tracking-wide">REF: {product.id}</div>
         </div>
       </td>
@@ -247,11 +259,26 @@ const ProductTableRow = React.memo(function ProductTableRow({
         {product.categoria}
       </td>
       <td className="py-4 px-6 text-[13px] font-medium text-neutral-900">
-        {formatCurrency(product.preco)}
+        {product.precoPromocional ? (
+          <div className="flex flex-col gap-0.5">
+            <span>{formatCurrency(product.precoPromocional)}</span>
+            <span className="text-[11px] font-normal text-neutral-400 line-through">{formatCurrency(product.preco)}</span>
+          </div>
+        ) : formatCurrency(product.preco)}
       </td>
       <td className="py-4 px-6">
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600">
-          Em estoque
+        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+          product.estoque <= 0
+            ? 'bg-red-50 text-red-600'
+            : product.estoque <= 5
+              ? 'bg-amber-50 text-amber-700'
+              : 'bg-emerald-50 text-emerald-600'
+        }`}>
+          {product.estoque <= 0
+            ? 'Esgotado'
+            : product.estoque <= 5
+              ? `${product.estoque} em estoque - baixo`
+              : `${product.estoque} em estoque`}
         </span>
       </td>
       <td className="py-4 px-6 text-right">
