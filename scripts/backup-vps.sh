@@ -70,6 +70,7 @@ load_dotenv "$ENV_FILE"
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/zenv-store}"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
 UPLOADS_DIR="${BACKUP_UPLOADS_DIR:-${APP_DIR}/storage/uploads}"
+REMOTE_ROOT="${BACKUP_REMOTE_ROOT:-}"
 LOCK_FILE="${BACKUP_LOCK_FILE:-/var/lock/zenv-store-backup.lock}"
 TIMESTAMP="$(date -u '+%Y%m%dT%H%M%SZ')"
 HOST_LABEL="$(hostname -s 2>/dev/null || hostname)"
@@ -80,6 +81,12 @@ TEMP_DIR="${BACKUP_ROOT}/.${TIMESTAMP}.tmp"
 [[ "$RETENTION_DAYS" -ge 1 ]] || fail "BACKUP_RETENTION_DAYS deve ser maior ou igual a 1."
 [[ "$BACKUP_ROOT" == /* ]] || fail "BACKUP_ROOT deve ser um caminho absoluto."
 [[ "$BACKUP_ROOT" != "/" ]] || fail "BACKUP_ROOT nao pode apontar para a raiz do sistema."
+
+if [[ -n "$REMOTE_ROOT" ]]; then
+  require_command rclone
+  [[ "$REMOTE_ROOT" == *:* ]] || fail "BACKUP_REMOTE_ROOT deve apontar para um remote rclone."
+  REMOTE_ROOT="${REMOTE_ROOT%/}"
+fi
 
 trap cleanup EXIT
 
@@ -169,6 +176,19 @@ find "$BACKUP_ROOT" \
   -name '20??????T??????Z' \
   -mtime "+${RETENTION_DAYS}" \
   -exec rm -rf -- {} +
+
+if [[ -n "$REMOTE_ROOT" ]]; then
+  REMOTE_DIR="${REMOTE_ROOT}/${TIMESTAMP}"
+  log "Enviando copia criptografada para ${REMOTE_DIR}"
+  rclone copy "$FINAL_DIR" "$REMOTE_DIR" \
+    --checkers 4 \
+    --transfers 2 \
+    --retries 3 \
+    --low-level-retries 10
+
+  log "Validando copia externa"
+  rclone check "$FINAL_DIR" "$REMOTE_DIR" --one-way --download
+fi
 
 log "Backup concluido: ${FINAL_DIR}"
 du -sh "$FINAL_DIR"
