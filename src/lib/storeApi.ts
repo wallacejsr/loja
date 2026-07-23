@@ -20,7 +20,7 @@ import type {
   RaffleInput,
   StoreCategory,
   PromotionCampaign,
-} from './storeApiSupabase';
+} from '../types/storeApi';
 
 export type {
   Banner,
@@ -42,7 +42,7 @@ export type {
   RaffleInput,
   StoreCategory,
   PromotionCampaign,
-} from './storeApiSupabase';
+} from '../types/storeApi';
 
 type StoreApiModule = {
   createBanner: (input: Pick<Banner, 'title' | 'desktop' | 'mobile' | 'link'>) => Promise<Banner>;
@@ -86,14 +86,8 @@ let activeBackendName: StoreBackend | null = null;
 let activeModulePromise: Promise<StoreApiModule> | null = null;
 
 async function loadStoreApiModule(backend: StoreBackend): Promise<StoreApiModule> {
-  switch (backend) {
-    case 'rest':
-      return import('./storeApiRest') as Promise<StoreApiModule>;
-    case 'supabase':
-    case 'local':
-    default:
-      return import('./storeApiSupabase') as Promise<StoreApiModule>;
-  }
+  void backend;
+  return import('./storeApiRest') as Promise<StoreApiModule>;
 }
 
 async function getStoreApiModule() {

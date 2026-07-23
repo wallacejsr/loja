@@ -167,7 +167,7 @@ export function Orders() {
   const [statusMenuOrderId, setStatusMenuOrderId] = useState<string | null>(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState('');
-  const [trackingBackend, setTrackingBackend] = useState<'file' | 'supabase' | 'mariadb' | null>(null);
+  const [trackingBackend, setTrackingBackend] = useState<'mariadb' | null>(null);
   const normalizedSearchTerm = useDeferredSearchTerm(searchTerm);
   const adminUserName = user?.fullName || user?.email || 'Administrador';
 

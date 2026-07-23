@@ -1,7 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+﻿import { randomUUID } from 'node:crypto';
 import type { StripeMode } from '../../../src/types/settings.ts';
 
 type AddressCountryCode = string;
@@ -39,8 +36,8 @@ export type TrackedOrderStatus =
   | 'Aguardando Pagamento'
   | 'Pago'
   | 'Em Separacao'
-  | 'Em Separação'
   | 'Em SeparaÃ§Ã£o'
+  | 'Em SeparaÃƒÂ§ÃƒÂ£o'
   | 'Enviado'
   | 'Entregue'
   | 'Cancelado';
@@ -143,7 +140,7 @@ export type StripeWebhookLogRecord = {
   stripeSessionId: string;
 };
 
-export type StripeTrackingBackend = 'file' | 'supabase' | 'mariadb';
+export type StripeTrackingBackend = 'mariadb';
 
 type TrackedOrderLog = {
   action: string;
@@ -184,11 +181,6 @@ type TrackedStripeOrderRecord = {
   updatedAt: string;
 };
 
-type TrackingFileStore = {
-  orders: TrackedStripeOrderRecord[];
-  webhookLogs: StripeWebhookLogRecord[];
-};
-
 type OfficialOrderStatus =
   | 'pending_payment'
   | 'paid'
@@ -197,58 +189,11 @@ type OfficialOrderStatus =
   | 'delivered'
   | 'cancelled';
 
-const TRACKING_FILE_PATH = path.resolve(process.cwd(), 'storage', 'stripe-tracking.json');
-const FILE_STORE_TEMPLATE: TrackingFileStore = {
-  orders: [],
-  webhookLogs: [],
-};
-
-let cachedSupabaseClient: SupabaseClient | null = null;
 let cachedMariaDbPool: any = null;
 
-function hasValue(value: unknown) {
-  return typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
-}
-
-function getConfiguredStoreDataDriver() {
-  const driver = String(process.env.STORE_DATA_DRIVER || '').trim().toLowerCase();
-  return driver === 'mariadb' || driver === 'file' ? driver : '';
-}
-
-function getSupabaseUrl() {
-  return (
-    process.env.SUPABASE_URL?.trim()
-    || process.env.VITE_SUPABASE_URL?.trim()
-    || ''
-  );
-}
-
-function getSupabaseServiceRoleKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || '';
-}
-
 export function resolveTrackingBackend(): StripeTrackingBackend {
-  const configuredDriver = getConfiguredStoreDataDriver();
-
-  if (configuredDriver === 'mariadb') {
-    return 'mariadb';
-  }
-
-  if (configuredDriver === 'file') {
-    return 'file';
-  }
-
-  if (hasValue(process.env.MARIADB_DATABASE) || hasValue(process.env.MARIADB_HOST) || hasValue(process.env.MARIADB_USER)) {
-    return 'mariadb';
-  }
-
-  if (getSupabaseUrl() && getSupabaseServiceRoleKey()) {
-    return 'supabase';
-  }
-
-  return 'file';
+  return 'mariadb';
 }
-
 async function loadMariaDbModule() {
   const moduleName = 'mysql2/promise';
 
@@ -267,13 +212,20 @@ async function getMariaDbPool() {
     return cachedMariaDbPool;
   }
 
+  const requiredVariables = ['MARIADB_HOST', 'MARIADB_DATABASE', 'MARIADB_USER', 'MARIADB_PASSWORD'];
+  const missingVariables = requiredVariables.filter((name) => !process.env[name]?.trim());
+
+  if (missingVariables.length > 0) {
+    throw new Error(`MariaDB Stripe tracking is missing: ${missingVariables.join(', ')}.`);
+  }
+
   const mysql = await loadMariaDbModule();
   cachedMariaDbPool = mysql.createPool({
-    host: process.env.MARIADB_HOST || '127.0.0.1',
+    host: process.env.MARIADB_HOST,
     port: Number(process.env.MARIADB_PORT || 3306),
-    user: process.env.MARIADB_USER || 'root',
-    password: process.env.MARIADB_PASSWORD || '',
-    database: process.env.MARIADB_DATABASE || 'loja',
+    user: process.env.MARIADB_USER,
+    password: process.env.MARIADB_PASSWORD,
+    database: process.env.MARIADB_DATABASE,
     connectionLimit: Number(process.env.MARIADB_CONNECTION_LIMIT || 10),
     charset: 'utf8mb4',
     namedPlaceholders: false,
@@ -281,28 +233,6 @@ async function getMariaDbPool() {
   });
 
   return cachedMariaDbPool;
-}
-
-function getSupabaseServerClient() {
-  if (cachedSupabaseClient) {
-    return cachedSupabaseClient;
-  }
-
-  const url = getSupabaseUrl();
-  const key = getSupabaseServiceRoleKey();
-
-  if (!url || !key) {
-    throw new Error('Supabase server envs are missing for Stripe tracking.');
-  }
-
-  cachedSupabaseClient = createClient(url, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-
-  return cachedSupabaseClient;
 }
 
 function normalizeCurrency(value: string) {
@@ -393,6 +323,19 @@ function safeString(value: unknown) {
   return typeof value === 'string' ? value : '';
 }
 
+function toSqlDateTime(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 function parseJsonValue<T>(value: unknown, fallback: T): T {
   if (value === null || value === undefined || value === '') {
     return fallback;
@@ -407,32 +350,6 @@ function parseJsonValue<T>(value: unknown, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-async function readFileStore() {
-  await mkdir(path.dirname(TRACKING_FILE_PATH), { recursive: true });
-
-  try {
-    const raw = await readFile(TRACKING_FILE_PATH, 'utf8');
-    const parsed = JSON.parse(raw) as TrackingFileStore;
-
-    return {
-      orders: Array.isArray(parsed.orders) ? parsed.orders : [],
-      webhookLogs: Array.isArray(parsed.webhookLogs) ? parsed.webhookLogs : [],
-    } satisfies TrackingFileStore;
-  } catch {
-    await writeFile(TRACKING_FILE_PATH, JSON.stringify(FILE_STORE_TEMPLATE, null, 2), 'utf8');
-    return {
-      ...FILE_STORE_TEMPLATE,
-      orders: [],
-      webhookLogs: [],
-    };
-  }
-}
-
-async function writeFileStore(store: TrackingFileStore) {
-  await mkdir(path.dirname(TRACKING_FILE_PATH), { recursive: true });
-  await writeFile(TRACKING_FILE_PATH, JSON.stringify(store, null, 2), 'utf8');
 }
 
 function ensureTrackedOrderDefaults(record: Partial<TrackedStripeOrderRecord>): TrackedStripeOrderRecord {
@@ -841,101 +758,6 @@ function mapOrderRow(row: any): TrackedStripeOrderRecord {
   });
 }
 
-async function persistOrderInSupabase(record: TrackedStripeOrderRecord) {
-  const supabase = getSupabaseServerClient();
-  const { error } = await supabase
-    .from('stripe_checkout_orders')
-    .upsert(
-      {
-        order_number: record.orderNumber,
-        stripe_session_id: record.stripeSessionId,
-        stripe_payment_intent_id: record.stripePaymentIntentId,
-        provider: record.provider,
-        mode: record.mode,
-        session_status: record.sessionStatus,
-        payment_status: record.paymentStatus,
-        order_status: record.orderStatus,
-        currency: record.currency,
-        subtotal: record.subtotal,
-        shipping: record.shipping,
-        discount: record.discount,
-        total: record.total,
-        shipping_method: record.shippingMethod,
-        payment_method: record.paymentMethod,
-        customer: record.customer,
-        shipping_address: record.shippingAddress,
-        items: record.items,
-        source: record.source,
-        metadata: record.metadata,
-        created_at: record.createdAt,
-        updated_at: record.updatedAt,
-        paid_at: record.paidAt,
-        shipped_at: record.shippedAt,
-        delivered_at: record.deliveredAt,
-        last_event_id: record.lastEventId,
-        last_event_type: record.lastEventType,
-        logs: record.logs,
-      },
-      {
-        onConflict: 'order_number',
-      },
-    );
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
-async function getSupabaseOrderByLookup(orderNumber: string, sessionId: string) {
-  const supabase = getSupabaseServerClient();
-
-  if (orderNumber) {
-    const { data, error } = await supabase
-      .from('stripe_checkout_orders')
-      .select('*')
-      .eq('order_number', orderNumber)
-      .maybeSingle();
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    if (data) {
-      return mapOrderRow(data);
-    }
-  }
-
-  if (!sessionId) {
-    return null;
-  }
-
-  const { data, error } = await supabase
-    .from('stripe_checkout_orders')
-    .select('*')
-    .eq('stripe_session_id', sessionId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data ? mapOrderRow(data) : null;
-}
-
-async function listSupabaseTrackedOrders() {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('stripe_checkout_orders')
-    .select('*')
-    .order('updated_at', { ascending: false });
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data || []).map(mapOrderRow);
-}
-
 async function persistOrderInMariaDb(record: TrackedStripeOrderRecord) {
   const pool = await getMariaDbPool();
   await pool.query(
@@ -1066,32 +888,6 @@ async function listMariaDbTrackedOrders() {
   return (rows as any[]).map(mapOrderRow);
 }
 
-async function persistWebhookLogInSupabase(record: StripeWebhookLogRecord) {
-  const supabase = getSupabaseServerClient();
-  const { error } = await supabase
-    .from('stripe_webhook_logs')
-    .upsert(
-      {
-        event_id: record.eventId,
-        event_type: record.eventType,
-        order_number: record.orderNumber,
-        stripe_session_id: record.stripeSessionId,
-        livemode: record.livemode,
-        status: record.status,
-        message: record.message,
-        payload: record.payload,
-        processed_at: record.processedAt,
-      },
-      {
-        onConflict: 'event_id',
-      },
-    );
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}
-
 async function persistWebhookLogInMariaDb(record: StripeWebhookLogRecord) {
   const pool = await getMariaDbPool();
   await pool.query(
@@ -1127,14 +923,6 @@ async function persistWebhookLogInMariaDb(record: StripeWebhookLogRecord) {
       record.processedAt,
     ],
   );
-}
-
-function sortTrackedOrders(records: TrackedStripeOrderRecord[]) {
-  return [...records].sort((left, right) => {
-    const leftTime = new Date(left.updatedAt || left.createdAt).getTime();
-    const rightTime = new Date(right.updatedAt || right.createdAt).getTime();
-    return rightTime - leftTime;
-  });
 }
 
 function toTrackedAdminOrder(record: TrackedStripeOrderRecord): StripeTrackedAdminOrder {
@@ -1196,124 +984,30 @@ function toTrackedAdminOrder(record: TrackedStripeOrderRecord): StripeTrackedAdm
 
 export async function persistStripeCheckoutDraft(draft: StripeTrackedCheckoutDraft) {
   const record = toOrderRecordFromDraft(draft);
-  const backend = resolveTrackingBackend();
-
-  if (backend === 'mariadb') {
-    await persistOrderInMariaDb(record);
-    await persistOfficialOrderInMariaDb(record);
-    return;
-  }
-
-  if (backend === 'supabase') {
-    await persistOrderInSupabase(record);
-    return;
-  }
-
-  const store = await readFileStore();
-  const nextOrders = [
-    record,
-    ...store.orders.filter(
-      (item) => item.orderNumber !== record.orderNumber && item.stripeSessionId !== record.stripeSessionId,
-    ),
-  ];
-
-  await writeFileStore({
-    ...store,
-    orders: nextOrders,
-  });
+  await persistOrderInMariaDb(record);
+  await persistOfficialOrderInMariaDb(record);
 }
 
 export async function getTrackedStripeOrderByLookup(orderNumber: string, sessionId = '') {
-  const backend = resolveTrackingBackend();
-
-  if (backend === 'mariadb') {
-    const current = await getMariaDbOrderByLookup(orderNumber, sessionId);
-    return current ? toTrackedAdminOrder(current) : null;
-  }
-
-  if (backend === 'supabase') {
-    const current = await getSupabaseOrderByLookup(orderNumber, sessionId);
-    return current ? toTrackedAdminOrder(current) : null;
-  }
-
-  const store = await readFileStore();
-  const current = store.orders.find(
-    (item) => item.orderNumber === orderNumber || item.stripeSessionId === sessionId,
-  ) || null;
-
-  return current ? toTrackedAdminOrder(ensureTrackedOrderDefaults(current)) : null;
+  const current = await getMariaDbOrderByLookup(orderNumber, sessionId);
+  return current ? toTrackedAdminOrder(current) : null;
 }
 
 export async function persistStripeWebhookLog(record: StripeWebhookLogRecord) {
-  const backend = resolveTrackingBackend();
-
-  if (backend === 'mariadb') {
-    await persistWebhookLogInMariaDb(record);
-    return;
-  }
-
-  if (backend === 'supabase') {
-    await persistWebhookLogInSupabase(record);
-    return;
-  }
-
-  const store = await readFileStore();
-  const nextLogs = [
-    record,
-    ...store.webhookLogs.filter((item) => item.eventId !== record.eventId),
-  ].slice(0, 200);
-
-  await writeFileStore({
-    ...store,
-    webhookLogs: nextLogs,
-  });
+  await persistWebhookLogInMariaDb(record);
 }
 
 export async function applyStripeWebhookSessionSnapshot(snapshot: StripeWebhookSessionSnapshot) {
-  const backend = resolveTrackingBackend();
-
-  if (backend === 'mariadb') {
-    const current = await getMariaDbOrderByLookup(snapshot.orderNumber, snapshot.sessionId);
-    const next = applySessionSnapshotToOrder(current, snapshot);
-    await persistOrderInMariaDb(next);
-    await persistOfficialOrderInMariaDb(next);
-    return next;
-  }
-
-  if (backend === 'supabase') {
-    const current = await getSupabaseOrderByLookup(snapshot.orderNumber, snapshot.sessionId);
-    const next = applySessionSnapshotToOrder(current, snapshot);
-    await persistOrderInSupabase(next);
-    return next;
-  }
-
-  const store = await readFileStore();
-  const current = store.orders.find(
-    (item) => item.orderNumber === snapshot.orderNumber || item.stripeSessionId === snapshot.sessionId,
-  ) || null;
+  const current = await getMariaDbOrderByLookup(snapshot.orderNumber, snapshot.sessionId);
   const next = applySessionSnapshotToOrder(current, snapshot);
-  const nextOrders = [
-    next,
-    ...store.orders.filter(
-      (item) => item.orderNumber !== next.orderNumber && item.stripeSessionId !== next.stripeSessionId,
-    ),
-  ];
-
-  await writeFileStore({
-    ...store,
-    orders: nextOrders,
-  });
-
+  await persistOrderInMariaDb(next);
+  await persistOfficialOrderInMariaDb(next);
   return next;
 }
 
 export async function listTrackedStripeAdminOrders() {
   const backend = resolveTrackingBackend();
-  const records = backend === 'mariadb'
-    ? await listMariaDbTrackedOrders()
-    : backend === 'supabase'
-      ? await listSupabaseTrackedOrders()
-      : sortTrackedOrders((await readFileStore()).orders.map((record) => ensureTrackedOrderDefaults(record)));
+  const records = await listMariaDbTrackedOrders();
 
   return {
     backend,
@@ -1329,50 +1023,14 @@ export async function updateTrackedStripeOrderStatus(
   user: string,
   ip: string,
 ) {
-  const backend = resolveTrackingBackend();
-
-  if (backend === 'mariadb') {
-    const current = await getMariaDbOrderByLookup(orderNumber, '');
-
-    if (!current) {
-      throw new Error('Pedido Stripe nao encontrado.');
-    }
-
-    const next = applyAdminStatusToOrder(current, nextStatus, user, ip);
-    await persistOrderInMariaDb(next);
-    await persistOfficialOrderInMariaDb(next);
-    return toTrackedAdminOrder(next);
-  }
-
-  if (backend === 'supabase') {
-    const current = await getSupabaseOrderByLookup(orderNumber, '');
-
-    if (!current) {
-      throw new Error('Pedido Stripe nao encontrado.');
-    }
-
-    const next = applyAdminStatusToOrder(current, nextStatus, user, ip);
-    await persistOrderInSupabase(next);
-    return toTrackedAdminOrder(next);
-  }
-
-  const store = await readFileStore();
-  const current = store.orders.find((item) => item.orderNumber === orderNumber) || null;
+  const current = await getMariaDbOrderByLookup(orderNumber, '');
 
   if (!current) {
     throw new Error('Pedido Stripe nao encontrado.');
   }
 
   const next = applyAdminStatusToOrder(current, nextStatus, user, ip);
-  const nextOrders = [
-    next,
-    ...store.orders.filter((item) => item.orderNumber !== orderNumber),
-  ];
-
-  await writeFileStore({
-    ...store,
-    orders: nextOrders,
-  });
-
+  await persistOrderInMariaDb(next);
+  await persistOfficialOrderInMariaDb(next);
   return toTrackedAdminOrder(next);
 }

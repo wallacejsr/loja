@@ -28,7 +28,7 @@ import type {
   Raffle,
   RaffleInput,
   StoreCategory,
-} from '../../src/lib/storeApiSupabase.ts';
+} from '../../src/types/storeApi.ts';
 
 export type StoredStatus = 'Ativo' | 'Inativo';
 
@@ -372,7 +372,7 @@ export type AdminPromotionLog = {
   action: string;
 };
 
-export type AdminPromotionRecord = AdminPromotionInput & {
+export type AdminPromotionRecord = Omit<AdminPromotionInput, 'status'> & {
   id: string;
   status: AdminPromotionStatus;
   usages: AdminPromotionUsage[];

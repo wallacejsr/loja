@@ -1,23 +1,11 @@
-export type StoreBackend = 'local' | 'rest' | 'supabase';
-
-const VALID_BACKENDS: StoreBackend[] = ['local', 'rest', 'supabase'];
+export type StoreBackend = 'rest';
 
 function normalizeUrlWithoutTrailingSlash(value: string) {
   return value.replace(/\/+$/, '');
 }
 
 export function getConfiguredStoreBackend(): StoreBackend {
-  const explicitBackend = import.meta.env.VITE_STORE_BACKEND;
-
-  if (VALID_BACKENDS.includes(explicitBackend as StoreBackend)) {
-    return explicitBackend as StoreBackend;
-  }
-
-  if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
-    return 'supabase';
-  }
-
-  return 'local';
+  return 'rest';
 }
 
 export function getStoreApiBaseUrl() {

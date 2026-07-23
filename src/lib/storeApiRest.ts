@@ -20,12 +20,12 @@ import type {
   RaffleInput,
   StoreCategory,
   PromotionCampaign,
-} from './storeApiSupabase';
+} from '../types/storeApi';
 
 export type {
   ContactMessage,
   ContactMessageStatus,
-} from './storeApiSupabase';
+} from '../types/storeApi';
 
 type RequestOptions = {
   body?: BodyInit | null;
@@ -98,7 +98,7 @@ export type AdminPromotionLog = {
   action: string;
 };
 
-export type AdminPromotionRecord = AdminPromotionInput & {
+export type AdminPromotionRecord = Omit<AdminPromotionInput, 'status'> & {
   id: string;
   status: AdminPromotionStatus;
   usages: AdminPromotionUsage[];

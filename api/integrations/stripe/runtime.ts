@@ -1,7 +1,6 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { StripeMode } from '../../../src/types/settings.ts';
+﻿import type { StripeMode } from '../../../src/types/settings.ts';
 
-type ResolvedStripeStorageBackend = 'repository' | 'supabase';
+type ResolvedStripeStorageBackend = 'repository';
 
 type StoredStripeCredentialSet = {
   publishableKeyEncrypted: string;
@@ -88,12 +87,10 @@ export type StripeConnectionTestPayload = {
 };
 
 let cachedRepositoryPromise: Promise<StoreRepositoryLike> | null = null;
-let cachedSupabaseClient: SupabaseClient | null = null;
 
 function hasValue(value: string | undefined) {
   return Boolean(value?.trim());
 }
-
 const ENCRYPTION_VERSION = 'v1';
 
 function buildModePresence(status: Omit<StripeModePresence, 'ready'>): StripeModePresence {
@@ -319,80 +316,6 @@ async function decodeStoredStripeCredentials(
   };
 }
 
-function getConfiguredSupabaseUrl() {
-  return (
-    process.env.SUPABASE_URL?.trim()
-    || process.env.VITE_SUPABASE_URL?.trim()
-    || ''
-  );
-}
-
-function getConfiguredSupabaseServiceRoleKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || '';
-}
-
-function getConfiguredStoreBackend() {
-  const backend = (process.env.STORE_DATA_BACKEND?.trim()
-    || process.env.VITE_STORE_BACKEND?.trim()
-    || '')
-    .toLowerCase();
-
-  return backend === 'rest' || backend === 'supabase' || backend === 'local'
-    ? backend
-    : '';
-}
-
-function resolveStripeStorageBackend(): ResolvedStripeStorageBackend {
-  const explicitBackend = getConfiguredStoreBackend();
-
-  if (explicitBackend === 'rest' || explicitBackend === 'local') {
-    return 'repository';
-  }
-
-  if (explicitBackend === 'supabase') {
-    return 'supabase';
-  }
-
-  if (
-    hasValue(process.env.STORE_DATA_DRIVER)
-    || hasValue(process.env.STORE_DATA_FILE_PATH)
-    || hasValue(process.env.MARIADB_DATABASE)
-    || hasValue(process.env.MARIADB_HOST)
-  ) {
-    return 'repository';
-  }
-
-  if (hasValue(getConfiguredSupabaseUrl())) {
-    return 'supabase';
-  }
-
-  return 'repository';
-}
-
-function getSupabaseServerClient() {
-  if (cachedSupabaseClient) {
-    return cachedSupabaseClient;
-  }
-
-  const url = getConfiguredSupabaseUrl();
-  const key = getConfiguredSupabaseServiceRoleKey();
-
-  if (!url || !key) {
-    throw new Error(
-      'Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY para ler credenciais privadas da Stripe no Supabase.',
-    );
-  }
-
-  cachedSupabaseClient = createClient(url, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-
-  return cachedSupabaseClient;
-}
-
 function readEnvironmentModeStatus(mode: StripeMode): StripeModePresence {
   const prefix = `STRIPE_${mode.toUpperCase()}`;
 
@@ -404,86 +327,6 @@ function readEnvironmentModeStatus(mode: StripeMode): StripeModePresence {
     secretKey: hasValue(process.env[`${prefix}_SECRET_KEY`]) || hasValue(process.env.STRIPE_SECRET_KEY),
     webhookSecret: hasValue(process.env[`${prefix}_WEBHOOK_SECRET`]) || hasValue(process.env.STRIPE_WEBHOOK_SECRET),
   });
-}
-
-function mapSupabaseStoredCredentialSet(row: any): StoredStripeCredentialSet {
-  return {
-    publishableKeyEncrypted: row?.publishable_key_encrypted || '',
-    secretKeyEncrypted: row?.secret_key_encrypted || '',
-    webhookSecretEncrypted: row?.webhook_secret_encrypted || '',
-    updatedAt: row?.updated_at || null,
-  };
-}
-
-async function getSupabaseStoredStripeCredentialSet(mode: StripeMode) {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('payment_gateway_credentials')
-    .select('publishable_key_encrypted, secret_key_encrypted, webhook_secret_encrypted, updated_at')
-    .eq('provider', 'stripe')
-    .eq('mode', mode)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data
-    ? mapSupabaseStoredCredentialSet(data)
-    : createEmptyStoredStripeCredentialSet();
-}
-
-async function listSupabaseStoredStripeCredentialSets() {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('payment_gateway_credentials')
-    .select('mode, publishable_key_encrypted, secret_key_encrypted, webhook_secret_encrypted, updated_at')
-    .eq('provider', 'stripe')
-    .in('mode', ['test', 'live']);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const mapped = {
-    test: createEmptyStoredStripeCredentialSet(),
-    live: createEmptyStoredStripeCredentialSet(),
-  } satisfies Record<StripeMode, StoredStripeCredentialSet>;
-
-  for (const row of data || []) {
-    const mode = row.mode === 'live' ? 'live' : 'test';
-    mapped[mode] = mapSupabaseStoredCredentialSet(row);
-  }
-
-  return mapped;
-}
-
-async function saveSupabaseStripeCredentials(input: StripeCredentialInput) {
-  const current = await getSupabaseStoredStripeCredentialSet(input.mode);
-  const next = await applyStripeCredentialInput(current, input);
-  const supabase = getSupabaseServerClient();
-
-  const { error } = await supabase
-    .from('payment_gateway_credentials')
-    .upsert(
-      {
-        provider: 'stripe',
-        mode: input.mode,
-        publishable_key_encrypted: next.publishableKeyEncrypted,
-        secret_key_encrypted: next.secretKeyEncrypted,
-        webhook_secret_encrypted: next.webhookSecretEncrypted,
-        updated_at: next.updatedAt || new Date().toISOString(),
-      },
-      {
-        onConflict: 'provider,mode',
-      },
-    );
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return buildStripeCredentialSummary(input.mode, next);
 }
 
 function buildEffectiveStatus(stored: StripeCredentialSummary, environment: StripeModePresence): EffectiveStripeModePresence {
@@ -514,21 +357,13 @@ function buildEffectiveStatus(stored: StripeCredentialSummary, environment: Stri
 }
 
 export async function getStripeStatusPayload(): Promise<StripeStatusPayload> {
-  const backend = resolveStripeStorageBackend();
+  const backend: ResolvedStripeStorageBackend = 'repository';
   let storageError: string | null = null;
   let storedModes: Record<StripeMode, StripeCredentialSummary>;
 
   try {
-    if (backend === 'repository') {
-      const repository = await getStoreRepository();
-      storedModes = await repository.listStripeCredentialSummaries();
-    } else {
-      const stored = await listSupabaseStoredStripeCredentialSets();
-      storedModes = {
-        test: await buildStripeCredentialSummary('test', stored.test),
-        live: await buildStripeCredentialSummary('live', stored.live),
-      };
-    }
+    const repository = await getStoreRepository();
+    storedModes = await repository.listStripeCredentialSummaries();
   } catch (error) {
     storageError = error instanceof Error ? error.message : 'Nao foi possivel ler as credenciais privadas da Stripe.';
     storedModes = {
@@ -563,25 +398,13 @@ export async function getStripeStatusPayload(): Promise<StripeStatusPayload> {
 }
 
 export async function saveStripeCredentialsToActiveStorage(input: StripeCredentialInput) {
-  const backend = resolveStripeStorageBackend();
-
-  if (backend === 'repository') {
-    const repository = await getStoreRepository();
-    return repository.saveStripeCredentials(input);
-  }
-
-  return saveSupabaseStripeCredentials(input);
+  const repository = await getStoreRepository();
+  return repository.saveStripeCredentials(input);
 }
 
 export async function getStoredStripeCredentials(mode: StripeMode) {
-  const backend = resolveStripeStorageBackend();
-
-  if (backend === 'repository') {
-    const repository = await getStoreRepository();
-    return repository.getStripeCredentials(mode);
-  }
-
-  return decodeStoredStripeCredentials(mode, await getSupabaseStoredStripeCredentialSet(mode));
+  const repository = await getStoreRepository();
+  return repository.getStripeCredentials(mode);
 }
 
 export async function resolveStripeSecretKey(mode: StripeMode) {

@@ -1,4 +1,3 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { resolveStripeSecretKey as resolveStoredStripeSecretKey } from './runtime.js';
 import { persistStripeCheckoutDraft } from './tracking.js';
 
@@ -82,8 +81,6 @@ type VercelResponseLike = {
   status: (code: number) => VercelResponseLike;
 };
 
-let cachedSupabaseClient: SupabaseClient | null = null;
-
 function getHeaderValue(headers: VercelRequestLike['headers'], key: string) {
   const value = headers?.[key] ?? headers?.[key.toLowerCase()];
 
@@ -106,21 +103,6 @@ function getRequestOrigin(request: VercelRequestLike) {
   return 'http://127.0.0.1:3000';
 }
 
-function resolveStoreBackend() {
-  const explicitBackend = process.env.STORE_DATA_BACKEND?.trim()
-    || process.env.VITE_STORE_BACKEND?.trim();
-
-  if (explicitBackend === 'rest' || explicitBackend === 'supabase' || explicitBackend === 'local') {
-    return explicitBackend;
-  }
-
-  if (process.env.SUPABASE_URL?.trim() || process.env.VITE_SUPABASE_URL?.trim()) {
-    return 'supabase';
-  }
-
-  return 'local';
-}
-
 function getStoreApiBaseUrl(request: VercelRequestLike) {
   const configuredBaseUrl = process.env.STORE_API_URL?.trim()
     || process.env.STORE_API_BASE_URL?.trim()
@@ -131,41 +113,6 @@ function getStoreApiBaseUrl(request: VercelRequestLike) {
   }
 
   return `${getRequestOrigin(request)}/api/store`;
-}
-
-function getSupabaseUrl() {
-  return process.env.SUPABASE_URL?.trim()
-    || process.env.VITE_SUPABASE_URL?.trim()
-    || '';
-}
-
-function getSupabaseKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
-    || process.env.SUPABASE_ANON_KEY?.trim()
-    || process.env.VITE_SUPABASE_ANON_KEY?.trim()
-    || '';
-}
-
-function getSupabaseServerClient() {
-  if (cachedSupabaseClient) {
-    return cachedSupabaseClient;
-  }
-
-  const url = getSupabaseUrl();
-  const key = getSupabaseKey();
-
-  if (!url || !key) {
-    throw new Error('Supabase server envs are missing for Stripe checkout product lookup.');
-  }
-
-  cachedSupabaseClient = createClient(url, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-
-  return cachedSupabaseClient;
 }
 
 function resolvePublicImageUrl(origin: string, image: string | undefined) {
@@ -269,54 +216,16 @@ async function fetchProductsFromRest(request: VercelRequestLike, ids: string[]):
     }));
 }
 
-async function fetchProductsFromSupabase(ids: string[]): Promise<StoreProductRecord[]> {
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from('products')
-    .select('id, nome, preco, preco_promocional, imagens, status')
-    .eq('status', 'Ativo')
-    .in('id', ids);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data || []).map((product: any) => ({
-    id: String(product.id),
-    name: product.nome,
-    unitPrice: Number(product.preco_promocional ?? product.preco ?? 0),
-    images: Array.isArray(product.imagens) ? product.imagens : [],
-  }));
-}
-
 async function resolveServerProducts(request: VercelRequestLike, items: CheckoutItemPayload[]) {
   const ids = [...new Set(items.map((item) => String(item.id).trim()).filter(Boolean))];
-  const backend = resolveStoreBackend();
 
   if (ids.length === 0) {
-    return {
-      source: 'client' as const,
-      products: [] as StoreProductRecord[],
-    };
-  }
-
-  if (backend === 'rest') {
-    return {
-      source: 'rest' as const,
-      products: await fetchProductsFromRest(request, ids),
-    };
-  }
-
-  if (backend === 'supabase') {
-    return {
-      source: 'supabase' as const,
-      products: await fetchProductsFromSupabase(ids),
-    };
+    throw new Error('Checkout items are required.');
   }
 
   return {
-    source: 'client' as const,
-    products: [],
+    source: 'rest' as const,
+    products: await fetchProductsFromRest(request, ids),
   };
 }
 

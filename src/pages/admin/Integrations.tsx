@@ -546,7 +546,7 @@ function PaymentsTab({
     }
   };
 
-  const backendLabel = stripeStatus?.backend === 'supabase' ? 'Supabase privado' : 'Repositorio privado';
+  const backendLabel = 'MariaDB privado';
   const storageAlert = statusError || stripeStatus?.storageError || '';
   const currentConnectionResult = connectionResult?.mode === draft.stripeMode ? connectionResult : null;
 

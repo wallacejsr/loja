@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+﻿import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { getPhoneE164 } from '../../src/lib/customerForm.ts';
 import type { StoreProduct as Product } from '../../src/types/store';
@@ -40,7 +41,7 @@ import type {
   Raffle,
   RaffleInput,
   StoreCategory,
-} from '../../src/lib/storeApiSupabase.ts';
+} from '../../src/types/storeApi.ts';
 import {
   applyStripeCredentialInput,
   buildStripeCredentialSummary,
@@ -48,8 +49,7 @@ import {
   decodeStoredStripeCredentials,
 } from '../integrations/stripeCredentials';
 import { getAdminRolePermissions, type AdminRole } from '../auth/adminPermissions';
-import { createDefaultStoreSnapshot, createId } from './defaultData';
-import { createInitialStoreSnapshot } from './initialSeed';
+
 import type {
   AdminDashboardRecentOrder,
   AdminDashboardSummary,
@@ -92,6 +92,10 @@ const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
 
 type MariaDbPool = any;
 type MariaDbConnection = any;
+
+function createId(prefix?: string) {
+  return prefix ? `${prefix}-${randomUUID()}` : randomUUID();
+}
 
 function parseJsonValue<T>(value: unknown, fallback: T): T {
   if (value === null || value === undefined || value === '') {
@@ -221,7 +225,7 @@ function normalizeDashboardOrderStatus(value: unknown) {
       return 'Pago';
     case 'processing':
     case 'em separacao':
-    case 'em separação':
+    case 'em separaÃ§Ã£o':
       return 'Em Separacao';
     case 'shipped':
     case 'enviado':
@@ -292,7 +296,7 @@ function resolveCartProduct(row: any): Product {
     nome: row.product_name_snapshot || '',
     preco: toNumber(row.unit_price_snapshot),
     precoPromocional: undefined,
-    categoria: 'Acessórios' as Product['categoria'],
+    categoria: 'AcessÃ³rios' as Product['categoria'],
     subcategoria: '',
     imagens: [],
     descricao: '',
@@ -378,7 +382,7 @@ function normalizeAdminCustomerOrderStatus(value: unknown) {
       return 'Pago';
     case 'processing':
     case 'em separacao':
-    case 'em separação':
+    case 'em separaÃ§Ã£o':
       return 'Em Separação';
     case 'shipped':
     case 'enviado':
@@ -459,12 +463,6 @@ export class MariaDbStoreRepository implements StoreRepository {
 
   private async bootstrap() {
     await this.ensureSchema();
-
-    if (process.env.STORE_SKIP_DEFAULT_SEED === '1' || process.env.STORE_SKIP_DEFAULT_SEED === 'true') {
-      return;
-    }
-
-    await this.seedDefaultsIfEmpty();
   }
 
   private async ensureSchema() {
@@ -473,254 +471,16 @@ export class MariaDbStoreRepository implements StoreRepository {
     await this.pool.query(sql);
   }
 
-  private async seedDefaultsIfEmpty() {
-    const snapshot = createInitialStoreSnapshot();
-    const [[{ totalProducts }]] = await this.pool.query('SELECT COUNT(*) AS totalProducts FROM products');
-
-    if (toNumber(totalProducts) > 0) {
-      await this.seedMissingHomeSections(snapshot.homeSections);
-      return;
-    }
-
-    const connection = await this.pool.getConnection();
-
-    try {
-      await connection.beginTransaction();
-
-      for (const product of snapshot.products) {
-        await connection.query(
-          `
-            INSERT INTO products (
-              id, nome, preco, preco_promocional, categoria, subcategoria, imagens, descricao,
-              composicao, tamanhos, cores, avaliacoes, mais_vendido, lancamento, estoque,
-              shipping_weight_grams, status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `,
-          [
-            product.id,
-            product.nome,
-            product.preco,
-            product.precoPromocional ?? null,
-            product.categoria,
-            product.subcategoria || '',
-            JSON.stringify(product.imagens),
-            product.descricao || '',
-            product.composicao || '',
-            JSON.stringify(product.tamanhos || []),
-            JSON.stringify(product.cores || []),
-            JSON.stringify(product.avaliacoes || []),
-            product.maisVendido ? 1 : 0,
-            product.lancamento ? 1 : 0,
-            product.estoque,
-            product.shippingWeightGrams ?? 500,
-            product.status,
-            toSqlDateTime(product.createdAt) || toSqlDateTime(new Date()),
-            toSqlDateTime(product.updatedAt) || toSqlDateTime(new Date()),
-          ],
-        );
-      }
-
-      for (const category of snapshot.categories) {
-        await connection.query(
-          `
-            INSERT INTO categories (
-              id, nome, slug, imagem, subcategories, status, show_in_menu, menu_order,
-              show_on_home, home_section_title, home_section_order, home_section_limit,
-              home_section_filter, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-          `,
-          [
-            category.id,
-            category.nome,
-            category.slug,
-            category.imagem || '',
-            JSON.stringify(category.subcategories || []),
-            category.status,
-            category.showInMenu ? 1 : 0,
-            category.menuOrder,
-            category.showOnHome ? 1 : 0,
-            category.homeSectionTitle || category.nome,
-            category.homeSectionOrder,
-            category.homeSectionLimit,
-            category.homeSectionFilter,
-          ],
-        );
-      }
-
-      for (const banner of snapshot.banners) {
-        await connection.query(
-          'INSERT INTO banners (id, title, desktop_image, mobile_image, link, status, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
-          [banner.id, banner.title, banner.desktop, banner.mobile, banner.link, banner.status, banner.position],
-        );
-      }
-
-      for (const section of snapshot.homeSections) {
-        await connection.query(
-          'INSERT INTO home_sections (id, title, source_type, category_name, limit_count, link, position, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-          [section.id, section.title, section.sourceType, section.categoryName, section.limitCount, section.link, section.position, section.status],
-        );
-      }
-
-      for (const card of snapshot.homeCards) {
-        await connection.query(
-          'INSERT INTO home_cards (id, title, image, link, cta_label, position, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
-          [card.id, card.title, card.image, card.link, card.ctaLabel, card.position, card.status],
-        );
-      }
-
-      for (const raffle of snapshot.raffles) {
-        await connection.query(
-          `
-            INSERT INTO raffles (
-              id, title, prize, description, image, product_id, points_per_ticket, draw_date,
-              cta_label, cta_link, total_participants, total_tickets, status, position, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-          `,
-          [
-            raffle.id,
-            raffle.title,
-            raffle.prize,
-            raffle.description,
-            raffle.image,
-            raffle.productId || null,
-            raffle.pointsPerTicket,
-            raffle.drawDate || null,
-            raffle.ctaLabel,
-            raffle.ctaLink,
-            raffle.totalParticipants,
-            raffle.totalTickets,
-            raffle.status,
-            raffle.position,
-          ],
-        );
-      }
-
-      for (const post of snapshot.instagramFeed) {
-        await connection.query(
-          'INSERT INTO instagram_posts (id, image, link, position, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
-          [post.id, post.image, post.link || '', post.position, post.status],
-        );
-      }
-
-      await connection.query(
-        `
-          INSERT INTO store_settings (
-            id, store_name, site_title, admin_panel_name, site_language, allow_business_registration,
-            store_currency, logo_url, email, phone, phone_country, instagram, facebook, tiktok,
-            description, primary_color, secondary_color, points_per_real, support_sales_phone,
-          support_sales_phone_country, support_sac_phone, support_sac_phone_country, support_email,
-          support_week_hours, support_saturday_hours, shipping_origin_country,
-          shipping_origin_postal_code, shipping_origin_city, shipping_origin_region,
-          shipping_origin_street, shipping_origin_number, shipping_free_threshold,
-          shipping_default_product_weight_grams, shipping_package_length_cm,
-          shipping_package_width_cm, shipping_package_height_cm, stripe_enabled, stripe_mode,
-          stripe_currency, stripe_allow_card, stripe_allow_apple_pay, stripe_allow_google_pay,
-          stripe_success_url, stripe_cancel_url, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-        `,
-        [
-          1,
-          snapshot.settings.storeName,
-          snapshot.settings.siteTitle,
-          snapshot.settings.adminPanelName,
-          snapshot.settings.siteLanguage,
-          snapshot.settings.allowBusinessRegistration ? 1 : 0,
-          snapshot.settings.storeCurrency,
-          snapshot.settings.logoUrl,
-          snapshot.settings.email,
-          snapshot.settings.phone,
-          snapshot.settings.phoneCountry,
-          snapshot.settings.instagram,
-          snapshot.settings.facebook,
-          snapshot.settings.tiktok,
-          snapshot.settings.description,
-          snapshot.settings.primaryColor,
-          snapshot.settings.secondaryColor,
-          snapshot.settings.pointsPerReal,
-          snapshot.settings.supportSalesPhone,
-          snapshot.settings.supportSalesPhoneCountry,
-          snapshot.settings.supportSacPhone,
-          snapshot.settings.supportSacPhoneCountry,
-          snapshot.settings.supportEmail,
-          snapshot.settings.supportWeekHours,
-          snapshot.settings.supportSaturdayHours,
-          snapshot.settings.shippingOriginCountry,
-          snapshot.settings.shippingOriginPostalCode,
-          snapshot.settings.shippingOriginCity,
-          snapshot.settings.shippingOriginRegion,
-          snapshot.settings.shippingOriginStreet,
-          snapshot.settings.shippingOriginNumber,
-          snapshot.settings.shippingFreeThreshold,
-          snapshot.settings.shippingDefaultProductWeightGrams,
-          snapshot.settings.shippingPackageLengthCm,
-          snapshot.settings.shippingPackageWidthCm,
-          snapshot.settings.shippingPackageHeightCm,
-          snapshot.settings.stripeEnabled ? 1 : 0,
-          snapshot.settings.stripeMode,
-          snapshot.settings.stripeCurrency,
-          snapshot.settings.stripeAllowCard ? 1 : 0,
-          snapshot.settings.stripeAllowApplePay ? 1 : 0,
-          snapshot.settings.stripeAllowGooglePay ? 1 : 0,
-          snapshot.settings.stripeSuccessUrl,
-          snapshot.settings.stripeCancelUrl,
-        ],
-      );
-
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-  }
-
-  private async seedMissingHomeSections(sections: StoreSnapshot['homeSections']) {
-    if (sections.length === 0) {
-      return;
-    }
-
-    const connection = await this.pool.getConnection();
-
-    try {
-      await connection.beginTransaction();
-
-      for (const section of sections) {
-        await connection.query(
-          `
-            INSERT INTO home_sections (
-              id, title, source_type, category_name, limit_count, link, position, status, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
-            ON DUPLICATE KEY UPDATE id = id
-          `,
-          [
-            section.id,
-            section.title,
-            section.sourceType,
-            section.categoryName,
-            section.limitCount,
-            section.link,
-            section.position,
-            section.status,
-          ],
-        );
-      }
-
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-  }
-
   private async queryRows<T = any>(sql: string, params: unknown[] = []) {
     const [rows] = await this.pool.query(sql, params);
     return rows as T[];
   }
 
-  private async queryRowsWithExecutor<T = any>(executor: MariaDbPool | MariaDbConnection, sql: string, params: unknown[] = []) {
+  private async queryRowsWithExecutor<T = any>(
+    executor: MariaDbPool | MariaDbConnection,
+    sql: string,
+    params: unknown[] = [],
+  ) {
     const [rows] = await executor.query(sql, params);
     return rows as T[];
   }
@@ -1192,7 +952,7 @@ export class MariaDbStoreRepository implements StoreRepository {
       const diff = parseJsonValue<Record<string, unknown>>(row.diff_json, {});
       const previousValue = diff.previous !== undefined ? String(diff.previous) : diff.before !== undefined ? String(diff.before) : '';
       const nextValue = diff.next !== undefined ? String(diff.next) : diff.after !== undefined ? String(diff.after) : '';
-      const field = diff.field ? String(diff.field) : row.action || 'Alteração';
+      const field = diff.field ? String(diff.field) : row.action || 'AlteraÃ§Ã£o';
 
       return {
         id: String(row.id),
@@ -1790,7 +1550,11 @@ export class MariaDbStoreRepository implements StoreRepository {
 
   async getStoreSettings() {
     const [settingsRow] = await this.queryRows('SELECT * FROM store_settings WHERE id = 1 LIMIT 1');
-    return settingsRow ? this.mapSettings(settingsRow) : createDefaultStoreSnapshot().settings;
+    if (!settingsRow) {
+      throw new Error('Store settings are missing from MariaDB.');
+    }
+
+    return this.mapSettings(settingsRow);
   }
 
   async getStripeCredentialSummary(mode: StripeMode) {
@@ -2441,7 +2205,7 @@ export class MariaDbStoreRepository implements StoreRepository {
 
       const addresses = [
         { label: 'Entrega', address: input.shippingAddress, primary: true },
-        { label: 'Cobrança', address: input.billingAddress, primary: false },
+        { label: 'CobranÃ§a', address: input.billingAddress, primary: false },
       ];
 
       for (const item of addresses) {

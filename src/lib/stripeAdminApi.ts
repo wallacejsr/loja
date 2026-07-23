@@ -29,7 +29,7 @@ export type StripeModeCredentialState = {
 };
 
 export type StripeStatusResponse = {
-  backend: 'repository' | 'supabase';
+  backend: 'repository';
   encryptionReady: boolean;
   modes: Record<StripeMode, StripeModeCredentialState>;
   provider: 'stripe';
@@ -130,7 +130,7 @@ export type StripeTrackedAdminOrder = {
 };
 
 export type StripeTrackedOrdersResponse = {
-  backend: 'file' | 'supabase' | 'mariadb';
+  backend: 'mariadb';
   orders: StripeTrackedAdminOrder[];
   success: true;
   timestamp: string;

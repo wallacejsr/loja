@@ -1,25 +1,20 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# ZENV Apparel
 
-# Run and deploy your AI Studio app
+React 19 + Vite storefront with an Express API and MariaDB persistence.
 
-This contains everything you need to run your app locally.
+## Local development
 
-View your app in AI Studio: https://ai.studio/apps/8e3a6148-971a-4b5f-a2ff-9d593baf8c8c
+1. Install dependencies with `npm install`.
+2. Copy `.env.example` to `.env` and configure MariaDB.
+3. Apply `server/store/mariadb-schema.sql` to the database.
+4. Start the API with `npm run api:dev`.
+5. Start Vite with `npm run dev`.
 
-## Run Locally
+The storefront always consumes the REST API. MariaDB is the only supported
+data driver; the application intentionally fails when its database
+configuration is missing instead of falling back to browser or file data.
 
-**Prerequisites:**  Node.js
+## Production
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Set Supabase variables in `.env.local`:
-   `VITE_SUPABASE_URL=https://seu-projeto.supabase.co`
-   `VITE_SUPABASE_ANON_KEY=sua-chave-anon-publica`
-4. Run `supabase/schema.sql` in the Supabase SQL editor to create the store tables.
-5. Optional: run `supabase/seed.sql` to start with example categories, banners, products and settings.
-6. Run the app:
-   `npm run dev`
+Build with `npm run build`, run the API with `npm run api:start`, and serve the
+generated `dist` directory through the web server. See `docs/deploy-vps.md`.

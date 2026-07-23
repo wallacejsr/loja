@@ -12,15 +12,10 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "security:smoke": "tsx scripts/security-smoke-test.ts",
-    "migrate:supabase:mariadb": "tsx scripts/migrate-supabase-to-mariadb.ts --execute --replace-target",
-    "migrate:supabase:mariadb:dry": "tsx scripts/migrate-supabase-to-mariadb.ts",
-    "migrate:product-images": "tsx scripts/migrate-product-images-to-vps.ts --execute",
-    "migrate:product-images:dry": "tsx scripts/migrate-product-images-to-vps.ts"
+    "security:smoke": "tsx scripts/security-smoke-test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
-    "@supabase/supabase-js": "^2.105.3",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "clsx": "^2.1.1",
