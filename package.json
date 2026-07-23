@@ -14,7 +14,9 @@
     "lint": "tsc --noEmit",
     "security:smoke": "tsx scripts/security-smoke-test.ts",
     "migrate:supabase:mariadb": "tsx scripts/migrate-supabase-to-mariadb.ts --execute --replace-target",
-    "migrate:supabase:mariadb:dry": "tsx scripts/migrate-supabase-to-mariadb.ts"
+    "migrate:supabase:mariadb:dry": "tsx scripts/migrate-supabase-to-mariadb.ts",
+    "migrate:product-images": "tsx scripts/migrate-product-images-to-vps.ts --execute",
+    "migrate:product-images:dry": "tsx scripts/migrate-product-images-to-vps.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
