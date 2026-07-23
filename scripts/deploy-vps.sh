@@ -98,14 +98,35 @@ if [[ "$RUN_SCHEMA_SYNC" == "1" ]]; then
   require_command mysql
   [[ -n "$SCHEMA_DATABASE" ]] || fail "MARIADB_DATABASE/DEPLOY_SCHEMA_DATABASE nao configurado."
   [[ -n "$SCHEMA_USER" ]] || fail "MARIADB_USER/DEPLOY_SCHEMA_USER nao configurado."
+  [[ -n "$SCHEMA_PASSWORD" ]] || fail "MARIADB_PASSWORD/DEPLOY_SCHEMA_PASSWORD nao configurado."
 
   log "Sincronizando schema MariaDB"
-  MYSQL_PWD="$SCHEMA_PASSWORD" mysql \
-    -h "$SCHEMA_HOST" \
-    -P "$SCHEMA_PORT" \
-    -u "$SCHEMA_USER" \
+  SCHEMA_CREDENTIALS_FILE="$(mktemp /tmp/zenv-schema-client.XXXXXX.cnf)"
+  trap 'rm -f -- "${SCHEMA_CREDENTIALS_FILE:-}"' EXIT
+
+  ESCAPED_SCHEMA_HOST="${SCHEMA_HOST//\\/\\\\}"
+  ESCAPED_SCHEMA_HOST="${ESCAPED_SCHEMA_HOST//\"/\\\"}"
+  ESCAPED_SCHEMA_USER="${SCHEMA_USER//\\/\\\\}"
+  ESCAPED_SCHEMA_USER="${ESCAPED_SCHEMA_USER//\"/\\\"}"
+  ESCAPED_SCHEMA_PASSWORD="${SCHEMA_PASSWORD//\\/\\\\}"
+  ESCAPED_SCHEMA_PASSWORD="${ESCAPED_SCHEMA_PASSWORD//\"/\\\"}"
+
+  cat > "$SCHEMA_CREDENTIALS_FILE" <<EOF
+[client]
+host="${ESCAPED_SCHEMA_HOST}"
+port=${SCHEMA_PORT}
+user="${ESCAPED_SCHEMA_USER}"
+password="${ESCAPED_SCHEMA_PASSWORD}"
+EOF
+  chmod 600 "$SCHEMA_CREDENTIALS_FILE"
+
+  mysql \
+    --defaults-extra-file="$SCHEMA_CREDENTIALS_FILE" \
     "$SCHEMA_DATABASE" \
     < "$APP_DIR/server/store/mariadb-schema.sql"
+
+  rm -f -- "$SCHEMA_CREDENTIALS_FILE"
+  trap - EXIT
 fi
 
 if [[ "$RUN_LINT" == "1" ]]; then
