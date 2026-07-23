@@ -94,7 +94,7 @@ export function ProductDetails() {
                 onClick={() => setMainImage(img)}
                 className={cn('relative aspect-[3/4] w-20 sm:w-full overflow-hidden bg-neutral-100', mainImage === img ? 'ring-1 ring-primary' : 'opacity-70 hover:opacity-100 transition-opacity')}
               >
-                <StoreImage src={img} alt={`Thumb ${idx}`} className="absolute inset-0 w-full h-full object-cover" sizes="96px" />
+                <StoreImage src={img} alt={`Thumb ${idx}`} className="absolute inset-0 h-full w-full bg-white object-contain p-1" sizes="96px" />
               </button>
             ))}
           </div>
@@ -102,7 +102,7 @@ export function ProductDetails() {
             <StoreImage
               src={mainImage || product.imagens[0]}
               alt={product.nome}
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 h-full w-full bg-white object-contain"
               sizes="(min-width: 1024px) 50vw, 100vw"
               loading="eager"
               fetchPriority="high"
