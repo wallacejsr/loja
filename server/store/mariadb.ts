@@ -113,6 +113,14 @@ function parseJsonValue<T>(value: unknown, fallback: T): T {
   }
 }
 
+function normalizeTextList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => String(item || '').trim().slice(0, 500))
+    .filter(Boolean)
+    .slice(0, 50);
+}
+
 function toBoolean(value: unknown) {
   return value === true || value === 1 || value === '1';
 }
@@ -301,6 +309,10 @@ function resolveCartProduct(row: any): Product {
     imagens: [],
     descricao: '',
     composicao: '',
+    fabricWeight: '',
+    features: [],
+    careInstructions: [],
+    countryOfOrigin: '',
     tamanhos: [],
     cores: [],
     avaliacoes: [],
@@ -496,6 +508,10 @@ export class MariaDbStoreRepository implements StoreRepository {
       imagens: parseJsonValue<string[]>(row.imagens, []),
       descricao: row.descricao || '',
       composicao: row.composicao || '',
+      fabricWeight: row.fabric_weight || '',
+      features: parseJsonValue<string[]>(row.features, []),
+      careInstructions: parseJsonValue<string[]>(row.care_instructions, []),
+      countryOfOrigin: row.country_of_origin || '',
       tamanhos: parseJsonValue<string[]>(row.tamanhos, []),
       cores: parseJsonValue<{ hex: string; nome: string }[]>(row.cores, []),
       avaliacoes: parseJsonValue<any[]>(row.avaliacoes, []),
@@ -1181,9 +1197,10 @@ export class MariaDbStoreRepository implements StoreRepository {
       `
         INSERT INTO products (
           id, nome, preco, preco_promocional, categoria, subcategoria, imagens, descricao,
-          composicao, tamanhos, cores, avaliacoes, mais_vendido, lancamento, estoque,
+          composicao, fabric_weight, features, care_instructions, country_of_origin,
+          tamanhos, cores, avaliacoes, mais_vendido, lancamento, estoque,
           shipping_weight_grams, status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Ativo', NOW(), NOW())
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Ativo', NOW(), NOW())
       `,
       [
         id,
@@ -1195,6 +1212,10 @@ export class MariaDbStoreRepository implements StoreRepository {
         JSON.stringify(input.imagens),
         input.descricao || '',
         input.composicao || '',
+        String(input.fabricWeight || '').trim().slice(0, 120),
+        JSON.stringify(normalizeTextList(input.features)),
+        JSON.stringify(normalizeTextList(input.careInstructions)),
+        String(input.countryOfOrigin || '').trim().slice(0, 120),
         JSON.stringify(input.tamanhos || []),
         JSON.stringify(input.cores || []),
         JSON.stringify([]),
@@ -1214,7 +1235,8 @@ export class MariaDbStoreRepository implements StoreRepository {
       `
         UPDATE products
         SET nome = ?, preco = ?, preco_promocional = ?, categoria = ?, subcategoria = ?,
-            imagens = ?, descricao = ?, composicao = ?, tamanhos = ?, cores = ?,
+            imagens = ?, descricao = ?, composicao = ?, fabric_weight = ?, features = ?,
+            care_instructions = ?, country_of_origin = ?, tamanhos = ?, cores = ?,
             mais_vendido = ?, lancamento = ?, estoque = ?, shipping_weight_grams = ?, updated_at = NOW()
         WHERE id = ?
       `,
@@ -1227,6 +1249,10 @@ export class MariaDbStoreRepository implements StoreRepository {
         JSON.stringify(input.imagens),
         input.descricao || '',
         input.composicao || '',
+        String(input.fabricWeight || '').trim().slice(0, 120),
+        JSON.stringify(normalizeTextList(input.features)),
+        JSON.stringify(normalizeTextList(input.careInstructions)),
+        String(input.countryOfOrigin || '').trim().slice(0, 120),
         JSON.stringify(input.tamanhos || []),
         JSON.stringify(input.cores || []),
         input.maisVendido ? 1 : 0,

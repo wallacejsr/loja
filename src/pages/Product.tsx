@@ -63,6 +63,11 @@ export function ProductDetails() {
     `Hello! I am interested in ${product.nome} (ID: ${product.id}). Is it available?`,
   );
   const related = products.filter((p) => p.categoria === product.categoria && p.id !== product.id).slice(0, 4);
+  const description = product.descricao.trim();
+  const features = (product.features || []).map((item) => item.trim()).filter(Boolean);
+  const materialDetails = [product.fabricWeight, product.composicao].map((item) => item?.trim()).filter(Boolean) as string[];
+  const careInstructions = (product.careInstructions || []).map((item) => item.trim()).filter(Boolean);
+  const countryOfOrigin = product.countryOfOrigin?.trim() || '';
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -233,16 +238,47 @@ export function ProductDetails() {
             <MessageCircle className="w-5 h-5 mr-2" /> {t('buyViaWhatsapp')}
           </a>
 
-          <div className="prose prose-sm prose-neutral max-w-none">
-            <h4 className="text-sm font-bold uppercase tracking-wider text-neutral-900 mb-2">{t('description')}</h4>
-            <p className="text-neutral-600 font-light leading-relaxed mb-6">{product.descricao}</p>
+          <div className="space-y-6">
+            {description && (
+              <section>
+                <h4 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('description')}</h4>
+                <p className="whitespace-pre-line text-sm font-light leading-relaxed text-neutral-600">{description}</p>
+              </section>
+            )}
 
-            <h4 className="text-sm font-bold uppercase tracking-wider text-neutral-900 mb-2">{t('compositionAndDetails')}</h4>
-            <ul className="text-neutral-600 font-light list-disc pl-5">
-              <li>{product.composicao}</li>
-              <li>{t('madeInBrazil')}</li>
-              <li>{t('handWashRecommended')}</li>
-            </ul>
+            {features.length > 0 && (
+              <section>
+                <h4 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productFeatures')}</h4>
+                <ul className="list-disc space-y-1 pl-5 text-sm font-light text-neutral-600">
+                  {features.map((feature) => <li key={feature}>{feature}</li>)}
+                </ul>
+              </section>
+            )}
+
+            {materialDetails.length > 0 && (
+              <section>
+                <h4 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productMaterial')}</h4>
+                <ul className="list-disc space-y-1 pl-5 text-sm font-light text-neutral-600">
+                  {materialDetails.map((detail) => <li key={detail}>{detail}</li>)}
+                </ul>
+              </section>
+            )}
+
+            {careInstructions.length > 0 && (
+              <section>
+                <h4 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productCareInstructions')}</h4>
+                <ul className="list-disc space-y-1 pl-5 text-sm font-light text-neutral-600">
+                  {careInstructions.map((instruction) => <li key={instruction}>{instruction}</li>)}
+                </ul>
+              </section>
+            )}
+
+            {countryOfOrigin && (
+              <section>
+                <h4 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productCountryOfOrigin')}</h4>
+                <p className="text-sm font-light text-neutral-600">{countryOfOrigin}</p>
+              </section>
+            )}
           </div>
         </div>
       </div>

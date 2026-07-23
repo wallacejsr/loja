@@ -150,6 +150,10 @@ export interface ProductInput {
   imagens: string[];
   descricao?: string;
   composicao?: string;
+  fabricWeight?: string;
+  features?: string[];
+  careInstructions?: string[];
+  countryOfOrigin?: string;
   tamanhos?: string[];
   cores?: { nome: string; hex: string }[];
   estoque: number;

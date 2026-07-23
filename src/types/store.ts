@@ -21,6 +21,10 @@ export interface StoreProduct {
   imagens: string[];
   descricao: string;
   composicao: string;
+  fabricWeight?: string;
+  features?: string[];
+  careInstructions?: string[];
+  countryOfOrigin?: string;
   tamanhos: string[];
   cores: StoreProductColor[];
   avaliacoes: StoreReview[];

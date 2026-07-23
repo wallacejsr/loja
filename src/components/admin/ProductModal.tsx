@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Save, Box, DollarSign, Image as ImageIcon, Info, Plus, Trash2, SwatchBook } from 'lucide-react';
+import { X, Save, Box, DollarSign, Image as ImageIcon, Info, ListChecks, Plus, Trash2, SwatchBook } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { showToast } from '../../lib/adminUtils';
@@ -14,7 +14,7 @@ interface ProductModalProps {
   product?: Product | null;
 }
 
-type TabType = 'info' | 'pricing' | 'variations' | 'media';
+type TabType = 'info' | 'details' | 'pricing' | 'variations' | 'media';
 
 interface PendingImage {
   id: string;
@@ -35,9 +35,16 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
   const [customSize, setCustomSize] = useState('');
   const [colors, setColors] = useState<{ nome: string; hex: string }[]>([]);
   const [colorDraft, setColorDraft] = useState({ nome: '', hex: '#E3CAA5' });
+  const [features, setFeatures] = useState<string[]>([]);
+  const [featureDraft, setFeatureDraft] = useState('');
+  const [careInstructions, setCareInstructions] = useState<string[]>([]);
+  const [careDraft, setCareDraft] = useState('');
   const [formData, setFormData] = useState({
     nome: '',
     descricao: '',
+    composicao: '',
+    fabricWeight: '',
+    countryOfOrigin: '',
     categoria: '',
     subcategoria: '',
     sku: '',
@@ -55,6 +62,7 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
 
   const tabs = [
     { id: 'info', name: 'Informações', icon: Info },
+    { id: 'details', name: 'Detalhes', icon: ListChecks },
     { id: 'pricing', name: 'Preços & Estoque', icon: DollarSign },
     { id: 'variations', name: 'Variações', icon: SwatchBook },
     { id: 'media', name: 'Mídia', icon: ImageIcon },
@@ -79,6 +87,9 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
     setFormData({
       nome: '',
       descricao: '',
+      composicao: '',
+      fabricWeight: '',
+      countryOfOrigin: '',
       categoria: '',
       subcategoria: '',
       sku: '',
@@ -94,6 +105,10 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
     setCustomSize('');
     setColors([]);
     setColorDraft({ nome: '', hex: '#E3CAA5' });
+    setFeatures([]);
+    setFeatureDraft('');
+    setCareInstructions([]);
+    setCareDraft('');
     setActiveTab('info');
   };
 
@@ -106,6 +121,9 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
       setFormData({
         nome: '',
         descricao: '',
+        composicao: '',
+        fabricWeight: '',
+        countryOfOrigin: '',
         categoria: '',
         subcategoria: '',
         sku: '',
@@ -121,6 +139,10 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
       setCustomSize('');
       setColors([]);
       setColorDraft({ nome: '', hex: '#E3CAA5' });
+      setFeatures([]);
+      setFeatureDraft('');
+      setCareInstructions([]);
+      setCareDraft('');
       setActiveTab('info');
       return;
     }
@@ -133,6 +155,9 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
     setFormData({
       nome: product.nome,
       descricao: product.descricao,
+      composicao: product.composicao || '',
+      fabricWeight: product.fabricWeight || '',
+      countryOfOrigin: product.countryOfOrigin || '',
       categoria: product.categoria,
       subcategoria: product.subcategoria || '',
       sku: product.id,
@@ -148,6 +173,10 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
     setCustomSize('');
     setColors(product.cores || []);
     setColorDraft({ nome: '', hex: '#E3CAA5' });
+    setFeatures(product.features || []);
+    setFeatureDraft('');
+    setCareInstructions(product.careInstructions || []);
+    setCareDraft('');
     setActiveTab('info');
   }, [isOpen, product?.id]);
 
@@ -205,6 +234,20 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
     setColors((current) => current.filter((_, itemIndex) => itemIndex !== index));
   };
 
+  const addFeature = () => {
+    const value = featureDraft.trim();
+    if (!value) return;
+    setFeatures((current) => (current.includes(value) ? current : [...current, value]));
+    setFeatureDraft('');
+  };
+
+  const addCareInstruction = () => {
+    const value = careDraft.trim();
+    if (!value) return;
+    setCareInstructions((current) => (current.includes(value) ? current : [...current, value]));
+    setCareDraft('');
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -239,7 +282,13 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
         subcategoria: formData.subcategoria,
         imagens: imageUrls,
         descricao: formData.descricao,
-        composicao: '',
+        composicao: formData.composicao,
+        fabricWeight: formData.fabricWeight,
+        features: featureDraft.trim() && !features.includes(featureDraft.trim()) ? [...features, featureDraft.trim()] : features,
+        careInstructions: careDraft.trim() && !careInstructions.includes(careDraft.trim())
+          ? [...careInstructions, careDraft.trim()]
+          : careInstructions,
+        countryOfOrigin: formData.countryOfOrigin,
         tamanhos: sizesToSave,
         cores: colors,
         estoque: Number(formData.estoque),
@@ -299,13 +348,13 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
               </button>
             </div>
 
-            <div className="flex border-b border-neutral-100 px-6">
+            <div className="flex overflow-x-auto border-b border-neutral-100 px-6 hide-scrollbar">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as TabType)}
                   className={cn(
-                    'flex items-center gap-2 px-4 py-4 text-[13px] font-semibold transition-all relative',
+                    'relative flex shrink-0 items-center gap-2 px-3 py-4 text-[13px] font-semibold transition-all',
                     activeTab === tab.id ? 'text-neutral-900' : 'text-neutral-400 hover:text-neutral-600',
                   )}
                 >
@@ -333,12 +382,12 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Descrição Curta</label>
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Descrição completa</label>
                       <textarea
-                        rows={3}
+                        rows={5}
                         value={formData.descricao}
                         onChange={(e) => setFormData((prev) => ({ ...prev, descricao: e.target.value }))}
-                        placeholder="Uma breve descrição para a listagem..."
+                        placeholder="Apresente o produto, seus usos e diferenciais..."
                         className="w-full border border-neutral-200/60 px-4 py-3 bg-neutral-50/50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-all rounded-xl text-[13px] resize-none"
                       />
                     </div>
@@ -390,6 +439,147 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'details' && (
+                <div className="space-y-7 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div className="space-y-2 sm:col-span-2">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Material / Composicao</label>
+                      <textarea
+                        rows={2}
+                        value={formData.composicao}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, composicao: e.target.value }))}
+                        placeholder="Ex: 60% cotton / 40% polyester"
+                        className="w-full resize-none rounded-xl border border-neutral-200/60 bg-neutral-50/50 px-4 py-3 text-[13px] transition-all focus:border-neutral-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Peso do tecido</label>
+                      <input
+                        type="text"
+                        value={formData.fabricWeight}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, fabricWeight: e.target.value }))}
+                        placeholder="Ex: 4.8 oz"
+                        className="w-full rounded-xl border border-neutral-200/60 bg-neutral-50/50 px-4 py-3 text-[13px] transition-all focus:border-neutral-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Pais de fabricacao</label>
+                      <input
+                        type="text"
+                        value={formData.countryOfOrigin}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, countryOfOrigin: e.target.value }))}
+                        placeholder="Conforme etiqueta ou fornecedor"
+                        className="w-full rounded-xl border border-neutral-200/60 bg-neutral-50/50 px-4 py-3 text-[13px] transition-all focus:border-neutral-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900"
+                      />
+                    </div>
+                  </div>
+
+                  <section className="space-y-4 border-t border-neutral-100 pt-6">
+                    <div>
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-neutral-900">Caracteristicas</h4>
+                      <p className="mt-1 text-[12px] text-neutral-500">Adicione um beneficio ou atributo por item.</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={featureDraft}
+                        onChange={(e) => setFeatureDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addFeature();
+                          }
+                        }}
+                        placeholder="Ex: Moisture management"
+                        className="min-w-0 flex-1 rounded-xl border border-neutral-200/60 bg-neutral-50/50 px-4 py-3 text-[13px] transition-all focus:border-neutral-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={addFeature}
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-neutral-950 text-white transition-colors hover:bg-neutral-800"
+                        title="Adicionar caracteristica"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {features.length > 0 ? (
+                      <div className="space-y-2">
+                        {features.map((feature, index) => (
+                          <div key={`${feature}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-neutral-100 bg-neutral-50/60 px-4 py-3">
+                            <span className="text-[13px] text-neutral-800">{feature}</span>
+                            <button
+                              type="button"
+                              onClick={() => setFeatures((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                              className="shrink-0 rounded-lg p-2 text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                              title="Remover caracteristica"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/60 px-4 py-3 text-[12px] text-neutral-500">
+                        Nenhuma caracteristica cadastrada.
+                      </p>
+                    )}
+                  </section>
+
+                  <section className="space-y-4 border-t border-neutral-100 pt-6">
+                    <div>
+                      <h4 className="text-[11px] font-bold uppercase tracking-wider text-neutral-900">Cuidados</h4>
+                      <p className="mt-1 text-[12px] text-neutral-500">Use exatamente as orientacoes da etiqueta do produto.</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={careDraft}
+                        onChange={(e) => setCareDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addCareInstruction();
+                          }
+                        }}
+                        placeholder="Ex: Machine wash cold"
+                        className="min-w-0 flex-1 rounded-xl border border-neutral-200/60 bg-neutral-50/50 px-4 py-3 text-[13px] transition-all focus:border-neutral-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-neutral-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={addCareInstruction}
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-neutral-950 text-white transition-colors hover:bg-neutral-800"
+                        title="Adicionar cuidado"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {careInstructions.length > 0 ? (
+                      <div className="space-y-2">
+                        {careInstructions.map((instruction, index) => (
+                          <div key={`${instruction}-${index}`} className="flex items-center justify-between gap-3 rounded-xl border border-neutral-100 bg-neutral-50/60 px-4 py-3">
+                            <span className="text-[13px] text-neutral-800">{instruction}</span>
+                            <button
+                              type="button"
+                              onClick={() => setCareInstructions((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                              className="shrink-0 rounded-lg p-2 text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                              title="Remover cuidado"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/60 px-4 py-3 text-[12px] text-neutral-500">
+                        Nenhuma instrucao de cuidado cadastrada.
+                      </p>
+                    )}
+                  </section>
                 </div>
               )}
 
