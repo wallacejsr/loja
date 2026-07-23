@@ -103,11 +103,26 @@ DB_PASSWORD="${MARIADB_PASSWORD:-}"
 
 mkdir -p "$TEMP_DIR"
 
+DB_CREDENTIALS_FILE="${TEMP_DIR}/.mariadb-client.cnf"
+ESCAPED_DB_HOST="${DB_HOST//\\/\\\\}"
+ESCAPED_DB_HOST="${ESCAPED_DB_HOST//\"/\\\"}"
+ESCAPED_DB_USER="${DB_USER//\\/\\\\}"
+ESCAPED_DB_USER="${ESCAPED_DB_USER//\"/\\\"}"
+ESCAPED_DB_PASSWORD="${DB_PASSWORD//\\/\\\\}"
+ESCAPED_DB_PASSWORD="${ESCAPED_DB_PASSWORD//\"/\\\"}"
+
+cat > "$DB_CREDENTIALS_FILE" <<EOF
+[client]
+host="${ESCAPED_DB_HOST}"
+port=${DB_PORT}
+user="${ESCAPED_DB_USER}"
+password="${ESCAPED_DB_PASSWORD}"
+EOF
+chmod 600 "$DB_CREDENTIALS_FILE"
+
 log "Criando dump transacional do MariaDB"
-MYSQL_PWD="$DB_PASSWORD" "$DB_DUMP_COMMAND" \
-  --host="$DB_HOST" \
-  --port="$DB_PORT" \
-  --user="$DB_USER" \
+"$DB_DUMP_COMMAND" \
+  --defaults-extra-file="$DB_CREDENTIALS_FILE" \
   --single-transaction \
   --quick \
   --skip-lock-tables \
@@ -116,6 +131,8 @@ MYSQL_PWD="$DB_PASSWORD" "$DB_DUMP_COMMAND" \
   --default-character-set=utf8mb4 \
   "$DB_NAME" \
   | gzip -9 > "${TEMP_DIR}/database.sql.gz"
+
+rm -f -- "$DB_CREDENTIALS_FILE"
 
 [[ -s "${TEMP_DIR}/database.sql.gz" ]] || fail "O dump do banco foi criado vazio."
 gzip -t "${TEMP_DIR}/database.sql.gz"
