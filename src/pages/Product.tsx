@@ -86,7 +86,7 @@ export function ProductDetails() {
       </nav>
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-x-12 xl:gap-x-16">
-        <div className="flex flex-col-reverse sm:flex-row gap-4 mb-8 lg:mb-0">
+        <div className="flex flex-col-reverse items-start gap-4 mb-8 sm:flex-row lg:mb-0">
           <div className="flex sm:flex-col gap-4 overflow-x-auto sm:w-20 md:w-24 shrink-0 hide-scrollbar">
             {product.imagens.map((img, idx) => (
               <button
@@ -98,11 +98,11 @@ export function ProductDetails() {
               </button>
             ))}
           </div>
-          <div className="relative aspect-[3/4] w-full bg-neutral-100 overflow-hidden group cursor-zoom-in">
+          <div className="group relative aspect-square w-full overflow-hidden bg-white cursor-zoom-in">
             <StoreImage
               src={mainImage || product.imagens[0]}
               alt={product.nome}
-              className="absolute inset-0 h-full w-full bg-white object-contain"
+              className="absolute inset-0 h-full w-full bg-white object-contain object-top"
               sizes="(min-width: 1024px) 50vw, 100vw"
               loading="eager"
               fetchPriority="high"
