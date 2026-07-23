@@ -6,6 +6,8 @@
   "scripts": {
     "api:dev": "tsx server/index.ts",
     "api:start": "tsx server/index.ts",
+    "backup:vps": "bash scripts/backup-vps.sh",
+    "backup:verify": "bash scripts/verify-backup.sh",
     "dev": "vite --port=3000 --host=0.0.0.0",
     "deploy:vps": "bash scripts/deploy-vps.sh",
     "build": "vite build",
