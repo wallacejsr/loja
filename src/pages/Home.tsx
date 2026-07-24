@@ -287,7 +287,7 @@ function HomeCardsSection({ cards }: { cards: HomeCard[] }) {
                 <StoreImage
                   src={card.image}
                   alt={card.title}
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  className="absolute inset-0 w-full h-full object-contain transition-transform duration-700 group-hover:scale-105"
                   sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw"
                 />
               ) : (
