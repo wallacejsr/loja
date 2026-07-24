@@ -68,6 +68,11 @@ export function ProductDetails() {
   const materialDetails = [product.fabricWeight, product.composicao].map((item) => item?.trim()).filter(Boolean) as string[];
   const careInstructions = (product.careInstructions || []).map((item) => item.trim()).filter(Boolean);
   const countryOfOrigin = product.countryOfOrigin?.trim() || '';
+  const hasSpecifications = features.length > 0
+    || materialDetails.length > 0
+    || careInstructions.length > 0
+    || Boolean(countryOfOrigin);
+  const hasProductDetails = Boolean(description) || hasSpecifications;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -91,7 +96,7 @@ export function ProductDetails() {
       </nav>
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-x-12 xl:gap-x-16">
-        <div className="flex flex-col-reverse items-start gap-4 mb-8 sm:flex-row lg:mb-0">
+        <div className="mb-8 flex flex-col-reverse items-start gap-4 sm:flex-row lg:sticky lg:top-28 lg:mb-0 lg:self-start">
           <div className="flex sm:flex-col gap-4 overflow-x-auto sm:w-20 md:w-24 shrink-0 hide-scrollbar">
             {product.imagens.map((img, idx) => (
               <button
@@ -238,53 +243,67 @@ export function ProductDetails() {
             <MessageCircle className="w-5 h-5 mr-2" /> {t('buyViaWhatsapp')}
           </a>
 
-          <div className="space-y-6">
-            {description && (
-              <section>
-                <h4 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('description')}</h4>
-                <p className="whitespace-pre-line text-sm font-light leading-relaxed text-neutral-600">{description}</p>
-              </section>
-            )}
-
-            {features.length > 0 && (
-              <section>
-                <h4 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productFeatures')}</h4>
-                <ul className="list-disc space-y-1 pl-5 text-sm font-light text-neutral-600">
-                  {features.map((feature) => <li key={feature}>{feature}</li>)}
-                </ul>
-              </section>
-            )}
-
-            {materialDetails.length > 0 && (
-              <section>
-                <h4 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productMaterial')}</h4>
-                <ul className="list-disc space-y-1 pl-5 text-sm font-light text-neutral-600">
-                  {materialDetails.map((detail) => <li key={detail}>{detail}</li>)}
-                </ul>
-              </section>
-            )}
-
-            {careInstructions.length > 0 && (
-              <section>
-                <h4 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productCareInstructions')}</h4>
-                <ul className="list-disc space-y-1 pl-5 text-sm font-light text-neutral-600">
-                  {careInstructions.map((instruction) => <li key={instruction}>{instruction}</li>)}
-                </ul>
-              </section>
-            )}
-
-            {countryOfOrigin && (
-              <section>
-                <h4 className="mb-2 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productCountryOfOrigin')}</h4>
-                <p className="text-sm font-light text-neutral-600">{countryOfOrigin}</p>
-              </section>
-            )}
-          </div>
         </div>
       </div>
 
+      {hasProductDetails && (
+        <section className="mt-12 border-t border-neutral-200 py-10 lg:mt-16 lg:py-14">
+          <div
+            className={cn(
+              'grid gap-10',
+              description && hasSpecifications && 'lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:gap-16',
+            )}
+          >
+            {description && (
+              <div>
+                <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('description')}</h2>
+                <p className="max-w-3xl whitespace-pre-line text-sm font-light leading-7 text-neutral-600">{description}</p>
+              </div>
+            )}
+
+            {hasSpecifications && (
+              <div className="grid gap-x-10 gap-y-8 sm:grid-cols-2">
+                {features.length > 0 && (
+                  <section>
+                    <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productFeatures')}</h3>
+                    <ul className="list-disc space-y-2 pl-5 text-sm font-light leading-relaxed text-neutral-600">
+                      {features.map((feature) => <li key={feature}>{feature}</li>)}
+                    </ul>
+                  </section>
+                )}
+
+                {materialDetails.length > 0 && (
+                  <section>
+                    <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productMaterial')}</h3>
+                    <ul className="list-disc space-y-2 pl-5 text-sm font-light leading-relaxed text-neutral-600">
+                      {materialDetails.map((detail) => <li key={detail}>{detail}</li>)}
+                    </ul>
+                  </section>
+                )}
+
+                {careInstructions.length > 0 && (
+                  <section>
+                    <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productCareInstructions')}</h3>
+                    <ul className="list-disc space-y-2 pl-5 text-sm font-light leading-relaxed text-neutral-600">
+                      {careInstructions.map((instruction) => <li key={instruction}>{instruction}</li>)}
+                    </ul>
+                  </section>
+                )}
+
+                {countryOfOrigin && (
+                  <section>
+                    <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-900">{t('productCountryOfOrigin')}</h3>
+                    <p className="text-sm font-light leading-relaxed text-neutral-600">{countryOfOrigin}</p>
+                  </section>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {product.avaliacoes.length > 0 && (
-        <section className="py-16 border-t border-neutral-200 mt-16">
+        <section className="border-t border-neutral-200 py-16">
           <h2 className="text-2xl font-serif font-bold text-neutral-900 mb-8">{t('customerReviews')}</h2>
           <div className="grid md:grid-cols-2 gap-8">
             {product.avaliacoes.map((review) => (
