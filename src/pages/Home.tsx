@@ -516,7 +516,7 @@ function ProductSection({ title, products, link }: { title: string; products: Pr
                   src={product.imagens[0]}
                   alt={product.nome}
                   sizes={imageSizes}
-                  className={cn('w-full h-full object-cover transition-opacity duration-500', hasHoverImage && 'group-hover:opacity-0')}
+                  className={cn('w-full h-full object-contain transition-opacity duration-500', hasHoverImage && 'group-hover:opacity-0')}
                 />
                 {hasHoverImage && (
                   <StoreImage
@@ -524,7 +524,7 @@ function ProductSection({ title, products, link }: { title: string; products: Pr
                     alt={`${product.nome} alternate`}
                     sizes={imageSizes}
                     fetchPriority="low"
-                    className="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                    className="absolute inset-0 w-full h-full object-contain opacity-0 transition-opacity duration-500 group-hover:opacity-100"
                   />
                 )}
 
