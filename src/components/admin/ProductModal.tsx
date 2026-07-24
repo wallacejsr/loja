@@ -352,10 +352,14 @@ export function ProductModal({ isOpen, onClose, product }: ProductModalProps) {
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
+                  type="button"
                   onClick={() => setActiveTab(tab.id as TabType)}
+                  aria-selected={activeTab === tab.id}
                   className={cn(
-                    'relative flex shrink-0 items-center gap-2 px-3 py-4 text-[13px] font-semibold transition-all',
-                    activeTab === tab.id ? 'text-neutral-900' : 'text-neutral-400 hover:text-neutral-600',
+                    'relative flex shrink-0 cursor-pointer items-center gap-2 px-3 py-4 text-[13px] font-semibold transition-colors',
+                    activeTab === tab.id
+                      ? 'text-neutral-950'
+                      : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-950',
                   )}
                 >
                   <tab.icon className="w-4 h-4" />
